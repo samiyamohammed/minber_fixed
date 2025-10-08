@@ -1,48 +1,183 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
+import 'package:flutter_timezone/flutter_timezone.dart';
+import 'package:permission_handler/permission_handler.dart';
 import 'package:timezone/timezone.dart' as tz;
 import 'package:timezone/data/latest_all.dart' as tz;
+import 'package:logger/logger.dart';
+
+// --- ADDED IMPORTS FOR LOCATION AND PRAYER CALCULATION ---
+import 'package:geolocator/geolocator.dart';
+import 'package:adhan_dart/adhan_dart.dart';
 
 class NotificationService {
+  static final logger = Logger(
+    printer: PrettyPrinter(
+      methodCount: 1,
+      printTime: true,
+      printEmojis: true,
+      colors: true,
+    ),
+  );
+
   static final FlutterLocalNotificationsPlugin _notifications =
       FlutterLocalNotificationsPlugin();
 
-  // Navigator key to handle navigation from notifications
   static final GlobalKey<NavigatorState> navigatorKey =
       GlobalKey<NavigatorState>();
 
   static Future<void> init() async {
-    tz.initializeTimeZones();
+    try {
+      logger.i("Initializing timezone database...");
+      tz.initializeTimeZones();
+      final String timeZoneName = await FlutterTimezone.getLocalTimezone();
+      tz.setLocalLocation(tz.getLocation(timeZoneName));
+      logger.i("✅ Timezone database initialized for location: $timeZoneName");
+      logger.d("🌍 Current time in local TZ: ${tz.TZDateTime.now(tz.local)}");
+    } catch (e, s) {
+      logger.f(
+        "💀 FATAL: FAILED to initialize timezones. Notifications will NOT work.",
+        error: e,
+        stackTrace: s,
+      );
+      return;
+    }
 
-    const android = AndroidInitializationSettings('@mipmap/ic_launcher');
-    const ios = DarwinInitializationSettings();
+        const android =
+        AndroidInitializationSettings('@drawable/notification_icon');
+    const ios = DarwinInitializationSettings(
+      requestAlertPermission: true,
+      requestBadgePermission: true,
+      requestSoundPermission: true,
+    );
     const settings = InitializationSettings(android: android, iOS: ios);
 
     await _notifications.initialize(
       settings,
       onDidReceiveNotificationResponse: (NotificationResponse response) {
-        // Foreground notification tap
-        debugPrint('Notification tapped: ${response.payload}');
+        logger.i(
+          'Foreground notification tapped with payload: ${response.payload}',
+        );
         _handleNotificationTap(response.payload);
       },
       onDidReceiveBackgroundNotificationResponse: notificationTapBackground,
     );
+
+    if (Platform.isAndroid) {
+      final status = await Permission.notification.request();
+      if (status.isGranted) {
+        logger.i("✅ Standard notification permission granted.");
+        final alarmStatus = await Permission.scheduleExactAlarm.request();
+        if (alarmStatus.isGranted) {
+          logger.i("✅ Exact alarm permission granted.");
+        } else {
+          logger.e(
+            "❌ Exact alarm permission was denied. Scheduled notifications may not work.",
+          );
+        }
+      } else {
+        logger.e("❌ Standard notification permission was denied.");
+      }
+    }
   }
 
-  // Background notification tap handler
+  // --- NEW CENTRAL SCHEDULING FUNCTION ---
+  /// Fetches location and schedules all daily and weekly notifications.
+  static Future<void> scheduleDailyAndWeeklyNotifications() async {
+    logger.i("🚀 Starting daily and weekly notification scheduling process...");
+    try {
+      await scheduleSalawatNotification();
+
+      Position? position = await Geolocator.getLastKnownPosition();
+      position ??= await Geolocator.getCurrentPosition(
+        desiredAccuracy: LocationAccuracy.medium,
+      );
+      logger.d(
+        "📍 Position for scheduling: ${position.latitude}, ${position.longitude}",
+      );
+
+      _scheduleAllPrayerTimesForLocation(position.latitude, position.longitude);
+    } catch (e, s) {
+      logger.e(
+        "❌ Failed to complete the notification scheduling process.",
+        error: e,
+        stackTrace: s,
+      );
+    }
+  }
+
+  // --- NEW PRIVATE HELPER FUNCTION (LOGIC MOVED FROM PRAYER PAGE) ---
+  static void _scheduleAllPrayerTimesForLocation(double lat, double lng) {
+    logger.i(
+      "Calculating and scheduling prayer times for Lat: $lat, Lng: $lng",
+    );
+    final coordinates = Coordinates(lat, lng);
+    final params = CalculationMethod.muslimWorldLeague();
+    params.madhab = Madhab.shafi;
+
+    final prayerTimes = PrayerTimes(
+      coordinates: coordinates,
+      date: DateTime.now(),
+      calculationParameters: params,
+    );
+
+    final fajr = prayerTimes.fajr!.toLocal();
+    final dhuhr = prayerTimes.dhuhr!.toLocal();
+    final asr = prayerTimes.asr!.toLocal();
+    final maghrib = prayerTimes.maghrib!.toLocal();
+    final isha = prayerTimes.isha!.toLocal();
+
+    logger.i("Scheduling all prayer notifications for today...");
+    schedulePrayerNotification(
+      id: "fajr",
+      title: "Fajr Prayer",
+      body:
+          "It is time for Fajr prayer. Begin your day with remembrance of Allah.",
+      scheduledTime: fajr,
+    );
+    schedulePrayerNotification(
+      id: "dhuhr",
+      title: "Dhuhr Prayer",
+      body: "It is time for Dhuhr prayer. Take a moment to remember Allah.",
+      scheduledTime: dhuhr,
+    );
+    schedulePrayerNotification(
+      id: "asr",
+      title: "Asr Prayer",
+      body: "It is time for Asr prayer. Stand for your afternoon prayer.",
+      scheduledTime: asr,
+    );
+    schedulePrayerNotification(
+      id: "maghrib",
+      title: "Maghrib Prayer",
+      body: "It is time for Maghrib prayer. Break your fast and pray.",
+      scheduledTime: maghrib,
+    );
+    schedulePrayerNotification(
+      id: "isha",
+      title: "Isha Prayer",
+      body:
+          "It is time for Isha prayer. End your day with remembrance of Allah.",
+      scheduledTime: isha,
+    );
+  }
+
+  @pragma('vm:entry-point')
   static void notificationTapBackground(NotificationResponse response) {
-    debugPrint('Background notification tapped: ${response.payload}');
+    logger.i(
+      'Background notification tapped with payload: ${response.payload}',
+    );
     _handleNotificationTap(response.payload);
   }
 
-  // Handle notification tap (both foreground & background)
   static void _handleNotificationTap(String? payload) {
+    logger.d("Handling notification tap for payload: $payload");
     if (payload == "salawat") {
       navigatorKey.currentState?.pushNamed('/dua-dhikr');
     }
   }
 
-  /// Daily Prayer Notification
   static Future<void> schedulePrayerNotification({
     required String id,
     required String title,
@@ -50,86 +185,114 @@ class NotificationService {
     required DateTime scheduledTime,
     bool repeatDaily = true,
   }) async {
-    await _notifications.zonedSchedule(
-      id.hashCode, // unique id per prayer
-      title,
-      body,
-      tz.TZDateTime.from(scheduledTime, tz.local),
-      const NotificationDetails(
-        android: AndroidNotificationDetails(
-          'prayer_channel',
-          'Prayer Notifications',
-          channelDescription: 'Reminders for daily prayers',
-          importance: Importance.max,
-          priority: Priority.high,
-        ),
-        iOS: DarwinNotificationDetails(),
-      ),
-      uiLocalNotificationDateInterpretation:
-          UILocalNotificationDateInterpretation.absoluteTime,
-      matchDateTimeComponents: repeatDaily ? DateTimeComponents.time : null,
-      androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
-    );
-  }
-
-  /// Weekly Salawat Askār (Thursday 7PM EAT)
-  static Future<void> scheduleSalawatNotification() async {
-    final location = tz.getLocation('Africa/Nairobi'); // EAT timezone
-    final now = tz.TZDateTime.now(location);
-
-    // Start with today at 7PM
-    tz.TZDateTime scheduledDate = tz.TZDateTime(
-      location,
-      now.year,
-      now.month,
-      now.day,
-      19, // 7PM
+    final tz.TZDateTime scheduledTZTime = tz.TZDateTime.from(
+      scheduledTime,
+      tz.local,
     );
 
-    // If it's not Thursday or already passed, go to next Thursday
-    if (scheduledDate.isBefore(now) ||
-        scheduledDate.weekday != DateTime.thursday) {
-      final daysToAdd = (DateTime.thursday - scheduledDate.weekday + 7) % 7;
-      scheduledDate = scheduledDate.add(Duration(days: daysToAdd));
-      scheduledDate = tz.TZDateTime(
-        location,
-        scheduledDate.year,
-        scheduledDate.month,
-        scheduledDate.day,
-        19,
+    logger.i("--- Scheduling Prayer Notification ---");
+    logger.d({
+      "ID": id,
+      "Title": title,
+      "Device Time": DateTime.now().toIso8601String(),
+      "Scheduled Raw": scheduledTime.toIso8601String(),
+      "Scheduled TZ": scheduledTZTime.toIso8601String(),
+    });
+
+    if (scheduledTZTime.isBefore(tz.TZDateTime.now(tz.local))) {
+      logger.w(
+        "⚠️ Attempting to schedule '$id' for a time that has already passed. It will trigger tomorrow.",
       );
+    } else {
+      logger.i("✅ Schedule time for '$id' is in the future. Looks good!");
     }
 
-    await _notifications.zonedSchedule(
-      777, // unique ID for Salawat
-      "Salawat Reminder",
-      "Join in Salawat Askār this evening at 7PM",
-      scheduledDate,
-      const NotificationDetails(
-        android: AndroidNotificationDetails(
-          'weekly_channel',
-          'Weekly Notifications',
-          channelDescription: 'Reminder for Salawat Askār',
-          importance: Importance.max,
-          priority: Priority.high,
+    try {
+      await _notifications.zonedSchedule(
+        id.hashCode,
+        title,
+        body,
+        scheduledTZTime,
+        const NotificationDetails(
+          android: AndroidNotificationDetails(
+            'prayer_channel',
+            'Prayer Notifications',
+            channelDescription: 'Reminders for daily prayers',
+            importance: Importance.max,
+            priority: Priority.high,
+          ),
+          iOS: DarwinNotificationDetails(),
         ),
-        iOS: DarwinNotificationDetails(),
-      ),
-      payload: "salawat",
-      uiLocalNotificationDateInterpretation:
-          UILocalNotificationDateInterpretation.absoluteTime,
-      matchDateTimeComponents: DateTimeComponents.dayOfWeekAndTime,
-      androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
-    );
+        uiLocalNotificationDateInterpretation:
+            UILocalNotificationDateInterpretation.absoluteTime,
+        matchDateTimeComponents: repeatDaily ? DateTimeComponents.time : null,
+        androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
+      );
+    } catch (e, s) {
+      logger.e(
+        "❌ ERROR scheduling notification with zonedSchedule",
+        error: e,
+        stackTrace: s,
+      );
+    }
   }
 
-  /// Cancel single notification
-  static Future<void> cancelNotification(String id) async {
-    await _notifications.cancel(id.hashCode);
+  static Future<void> scheduleSalawatNotification() async {
+    logger.i("--- Scheduling Weekly Salawat Notification ---");
+    try {
+      final location = tz.getLocation('Africa/Nairobi');
+      final now = tz.TZDateTime.now(location);
+
+      tz.TZDateTime scheduledDate = tz.TZDateTime(
+        location,
+        now.year,
+        now.month,
+        now.day,
+        19,
+      );
+
+      if (scheduledDate.weekday != DateTime.thursday) {
+        scheduledDate = scheduledDate.add(
+          Duration(days: (DateTime.thursday - scheduledDate.weekday + 7) % 7),
+        );
+      } else if (scheduledDate.isBefore(now)) {
+        scheduledDate = scheduledDate.add(const Duration(days: 7));
+      }
+
+      logger.d("Salawat scheduled for: ${scheduledDate.toIso8601String()}");
+
+      await _notifications.zonedSchedule(
+        777,
+        "Salawat Reminder",
+        "Join in Salawat Askār this evening at 7PM",
+        scheduledDate,
+        const NotificationDetails(
+          android: AndroidNotificationDetails(
+            'weekly_channel',
+            'Weekly Notifications',
+            channelDescription: 'Reminder for Salawat Askār',
+            importance: Importance.max,
+            priority: Priority.high,
+          ),
+          iOS: DarwinNotificationDetails(),
+        ),
+        payload: "salawat",
+        uiLocalNotificationDateInterpretation:
+            UILocalNotificationDateInterpretation.absoluteTime,
+        matchDateTimeComponents: DateTimeComponents.dayOfWeekAndTime,
+        androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
+      );
+    } catch (e, s) {
+      logger.e(
+        "❌ ERROR scheduling Salawat notification",
+        error: e,
+        stackTrace: s,
+      );
+    }
   }
 
-  /// Cancel all
   static Future<void> cancelAllNotifications() async {
+    logger.w("Cancelling all scheduled notifications.");
     await _notifications.cancelAll();
   }
 }

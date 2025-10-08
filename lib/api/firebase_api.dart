@@ -1,39 +1,28 @@
-// import 'package:firebase_messaging/firebase_messaging.dart';
-
-// class FirebaseApi {
-//   final _firebaseMessaging = FirebaseMessaging.instance;
-
-//   Future<void> initNotifications() async {
-//     await _firebaseMessaging.requestPermission();
-//     final fcmToken = await _firebaseMessaging.getToken();
-//     print('Token: $fcmToken');
-//   }
-// }
 import 'package:firebase_messaging/firebase_messaging.dart';
+import 'package:flutter/material.dart';
+
+// This function MUST be a top-level function (not inside a class)
+// to be used as the background message handler.
+@pragma('vm:entry-point')
+Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
+  // If you need to initialize other services here, like Firebase core, you can.
+  // await Firebase.initializeApp(); // This is often needed.
+  debugPrint("📲 Handling a background message: ${message.messageId}");
+}
 
 class FirebaseApi {
   final _firebaseMessaging = FirebaseMessaging.instance;
 
   Future<void> initNotifications() async {
-    final settings = await _firebaseMessaging.requestPermission();
-    print('Permission status: ${settings.authorizationStatus}');
-    try {
-      final fcmToken = await _firebaseMessaging.getToken();
-      print('Token: $fcmToken');
-      FirebaseMessaging.onBackgroundMessage(handleBackgroundMessage);
-      if (fcmToken == null) {
-        print(
-          'FCM token is null. Permission may be denied or device not supported.',
-        );
-      }
-    } catch (e) {
-      print('Error getting FCM token: $e');
-    }
-  }
+    // Request permission from the user (for iOS and modern Android)
+    await _firebaseMessaging.requestPermission();
 
-  Future<void> handleBackgroundMessage(RemoteMessage message) async {
-    print('Handling background message: ${message.data}');
-    print('Title: ${message.notification?.title}');
-    print('Body: ${message.notification?.body}');
+    // Fetch the FCM token for this device
+    final fcmToken = await _firebaseMessaging.getToken();
+    debugPrint("📱 FCM Token: $fcmToken");
+
+    // Set up the background message handler.
+    // This is the line that was likely causing the crash.
+    FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
   }
 }

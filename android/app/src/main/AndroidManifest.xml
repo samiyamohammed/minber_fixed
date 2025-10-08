@@ -1,11 +1,18 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     package="com.example.minber_super_app_new_fixed">
 
+    <!-- 💡 NEW LINE: Required for Android 13+ to show *any* notification -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
+    
+    <!-- 💡 NEW LINE: Required for reliable, exact, repeating alarms (like your schedules) -->
+    <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM"/> 
+
     <application
         android:label="minber_super_app_new_fixed"
         android:name="${applicationName}"
-        android:icon="@mipmap/ic_launcher"
-        android:usesCleartextTraffic="true">
+        android:icon="@mipmap/launcher_icon"
+        android:usesCleartextTraffic="true"
+        android:enableOnBackInvokedCallback="true">
 
         <activity
             android:name=".MainActivity"
@@ -27,9 +34,21 @@
             </intent-filter>
         </activity>
 
+        <service
+            android:name="androidx.work.impl.background.systemjob.SystemJobService"
+            android:permission="android.permission.BIND_JOB_SERVICE"
+            android:exported="true"/>
+
         <meta-data
             android:name="flutterEmbedding"
             android:value="2" />
+            
+        <!-- 💡 NEW LINE: Receiver required by flutter_local_notifications for scheduled alarms -->
+        <!-- 💡 REVISED RECEIVERS: Using android:exported="true" for older plugin compatibility with newer Android versions -->
+<receiver android:exported="true" android:name="com.dexterous.flutterlocalnotifications.ScheduledNotificationReceiver" />
+<receiver android:exported="true" android:name="com.dexterous.flutterlocalnotifications.ActionBroadcastReceiver" />
+<receiver android:exported="true" android:name="com.dexterous.flutterlocalnotifications.AlarmBroadcastReceiver" />
+        
     </application>
 
     <queries>

@@ -1,5 +1,10 @@
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:fluttertoast/fluttertoast.dart';
+import 'package:http/http.dart' as http;
+import 'package:provider/provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import '../providers/user_provider.dart'; // Make sure this path is correct
 import '../core/app_colors.dart';
 
 class EditProfilePage extends StatefulWidget {
@@ -11,229 +16,181 @@ class EditProfilePage extends StatefulWidget {
 
 class _EditProfilePageState extends State<EditProfilePage> {
   final _formKey = GlobalKey<FormState>();
-  final TextEditingController _nameController = TextEditingController(
-    text: "Aisha Rahman",
-  );
-  final TextEditingController _emailController = TextEditingController(
-    text: "aisha.i@example.com",
-  );
-  final TextEditingController _phoneController = TextEditingController();
-  final TextEditingController _bioController = TextEditingController();
+  late TextEditingController _nameController;
+  late TextEditingController _emailController;
+  bool _isLoading = false;
 
   @override
   void initState() {
     super.initState();
-    // Initialize with current user data (in a real app, this would come from an API or state management)
-    _nameController.text = "Aisha Rahman";
-    _emailController.text = "aisha.i@example.com";
-  }
-
-  void _saveProfile() {
-    if (_formKey.currentState!.validate()) {
-      // ✅ If validation passes
-      Fluttertoast.showToast(
-        msg: "Profile Updated Successfully 🎉",
-        toastLength: Toast.LENGTH_SHORT,
-        gravity: ToastGravity.BOTTOM,
-        backgroundColor: Colors.green,
-        textColor: Colors.white,
-      );
-
-      // Navigate back
-      Navigator.pop(context);
-    } else {
-      // ❌ If validation fails
-      Fluttertoast.showToast(
-        msg: "Please fix the errors above",
-        toastLength: Toast.LENGTH_SHORT,
-        gravity: ToastGravity.BOTTOM,
-        backgroundColor: Colors.red,
-        textColor: Colors.white,
-      );
-    }
+    // Initialize controllers with the current user's data from the provider
+    final user = Provider.of<UserProvider>(context, listen: false).user;
+    _nameController = TextEditingController(text: user?.username ?? '');
+    _emailController = TextEditingController(text: user?.email ?? '');
   }
 
   @override
+  void dispose() {
+    _nameController.dispose();
+    _emailController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _updateProfile() async {
+    if (!_formKey.currentState!.validate()) {
+      _showToast("Please enter a valid name.", bgColor: Colors.orange);
+      return;
+    }
+
+    setState(() => _isLoading = true);
+
+    final prefs = await SharedPreferences.getInstance();
+    final token = prefs.getString('accessToken');
+    final userId = prefs.getString('userId');
+
+    if (token == null || userId == null) {
+      _showToast("Authentication error. Please log in again.");
+      setState(() => _isLoading = false);
+      return;
+    }
+
+    // From your Swagger docs: PUT /users/{id} with a "name" field in the body
+    final url = Uri.parse('http://msa.merkuz.com:3636/users/$userId');
+    final body = jsonEncode({'name': _nameController.text.trim()});
+
+    try {
+      final response = await http.put(
+        url,
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $token',
+        },
+        body: body,
+      );
+
+      if (response.statusCode == 200 || response.statusCode == 204) {
+        // SUCCESS: Tell the provider to re-fetch the user data. This updates the UI everywhere.
+        await Provider.of<UserProvider>(context, listen: false).fetchUser();
+        _showToast("Profile updated successfully!", bgColor: Colors.green);
+        if (mounted) Navigator.of(context).pop();
+      } else {
+        final responseData = jsonDecode(response.body);
+        _showToast(
+          "Update failed: ${responseData['message'] ?? 'Server error'}",
+        );
+      }
+    } catch (e) {
+      _showToast("An error occurred. Please check your connection.");
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
+    }
+  }
+
+  void _showToast(String message, {Color bgColor = Colors.red}) {
+    Fluttertoast.showToast(
+      msg: message,
+      backgroundColor: bgColor,
+      toastLength: Toast.LENGTH_LONG,
+    );
+  }
+
+  // THIS IS THE BUILD METHOD THAT WAS MISSING
+  @override
   Widget build(BuildContext context) {
     final size = MediaQuery.of(context).size;
+    final user = Provider.of<UserProvider>(context, listen: false).user;
 
     return Scaffold(
       appBar: AppBar(
         title: const Text("Edit Profile"),
         backgroundColor: AppColors.primary,
         foregroundColor: Colors.white,
-        actions: [
-          IconButton(icon: const Icon(Icons.save), onPressed: _saveProfile),
-        ],
       ),
-      body: SafeArea(
-        child: Padding(
-          padding: EdgeInsets.symmetric(horizontal: size.width * 0.04),
-          child: Form(
-            key: _formKey,
-            child: ListView(
-              children: [
-                SizedBox(height: size.height * 0.03),
-
-                // Profile Picture Section
-                Center(
-                  child: Stack(
-                    children: [
-                      CircleAvatar(
-                        radius: size.width * 0.15,
-                        backgroundImage: AssetImage(
-                          'assets/images/profile.jpg',
-                        ),
-                      ),
-                      Positioned(
-                        bottom: 0,
-                        right: 0,
-                        child: Container(
-                          height: size.width * 0.08,
-                          width: size.width * 0.08,
-                          decoration: BoxDecoration(
-                            color: AppColors.primary,
-                            shape: BoxShape.circle,
-                            border: Border.all(color: Colors.white, width: 2),
-                          ),
-                          child: Icon(
-                            Icons.camera_alt,
-                            color: Colors.white,
-                            size: size.width * 0.05,
-                          ),
-                        ),
-                      ),
-                    ],
+      body: Form(
+        key: _formKey,
+        child: ListView(
+          padding: const EdgeInsets.all(24.0),
+          children: [
+            const SizedBox(height: 20),
+            // --- Profile Picture Section ---
+            Center(
+              child: CircleAvatar(
+                radius: size.width * 0.15,
+                backgroundColor: AppColors.primary.withOpacity(0.1),
+                child: Text(
+                  user?.username.isNotEmpty ?? false
+                      ? user!.username[0].toUpperCase()
+                      : '?',
+                  style: TextStyle(
+                    fontSize: 48,
+                    color: AppColors.primary,
+                    fontWeight: FontWeight.bold,
                   ),
                 ),
-                SizedBox(height: size.height * 0.02),
-                Center(
-                  child: TextButton(
-                    onPressed: () {
-                      Fluttertoast.showToast(
-                        msg: "Change Profile Photo",
-                        toastLength: Toast.LENGTH_SHORT,
-                        gravity: ToastGravity.BOTTOM,
-                      );
-                    },
-                    child: Text(
-                      "Change Profile Photo",
-                      style: TextStyle(
-                        color: AppColors.primary,
-                        fontSize: size.width * 0.04,
-                      ),
-                    ),
-                  ),
-                ),
-                SizedBox(height: size.height * 0.03),
-
-                // Name Field
-                TextFormField(
-                  controller: _nameController,
-                  decoration: InputDecoration(
-                    labelText: "Full Name",
-                    prefixIcon: Icon(Icons.person, color: AppColors.primary),
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    contentPadding: EdgeInsets.symmetric(
-                      horizontal: size.width * 0.04,
-                      vertical: size.height * 0.02,
-                    ),
-                  ),
-                  validator: (value) {
-                    if (value == null || value.isEmpty) {
-                      return "Please enter your name";
-                    }
-                    return null;
-                  },
-                ),
-                SizedBox(height: size.height * 0.02),
-
-                // Email Field
-                TextFormField(
-                  controller: _emailController,
-                  decoration: InputDecoration(
-                    labelText: "Email Address",
-                    prefixIcon: Icon(Icons.email, color: AppColors.primary),
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    contentPadding: EdgeInsets.symmetric(
-                      horizontal: size.width * 0.04,
-                      vertical: size.height * 0.02,
-                    ),
-                  ),
-                  validator: (value) {
-                    if (value == null || value.isEmpty) {
-                      return "Please enter your email";
-                    } else if (!value.contains('@')) {
-                      return "Please enter a valid email";
-                    }
-                    return null;
-                  },
-                ),
-                SizedBox(height: size.height * 0.02),
-
-                // Phone Field
-                TextFormField(
-                  controller: _phoneController,
-                  decoration: InputDecoration(
-                    labelText: "Phone Number (Optional)",
-                    prefixIcon: Icon(Icons.phone, color: AppColors.primary),
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    contentPadding: EdgeInsets.symmetric(
-                      horizontal: size.width * 0.04,
-                      vertical: size.height * 0.02,
-                    ),
-                  ),
-                  keyboardType: TextInputType.phone,
-                ),
-                SizedBox(height: size.height * 0.02),
-
-                // Bio Field
-                TextFormField(
-                  controller: _bioController,
-                  maxLines: 3,
-                  decoration: InputDecoration(
-                    labelText: "Bio (Optional)",
-                    alignLabelWithHint: true,
-                    prefixIcon: Icon(Icons.info, color: AppColors.primary),
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    contentPadding: EdgeInsets.symmetric(
-                      horizontal: size.width * 0.04,
-                      vertical: size.height * 0.02,
-                    ),
-                  ),
-                ),
-                SizedBox(height: size.height * 0.03),
-
-                // Save Button
-                SizedBox(
-                  width: double.infinity,
-                  height: size.height * 0.07,
-                  child: ElevatedButton(
-                    onPressed: _saveProfile,
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: AppColors.primary,
-                    ),
-                    child: Text(
-                      "Save Changes",
-                      style: TextStyle(
-                        fontSize: size.width * 0.045,
-                        color: Colors.white,
-                      ),
-                    ),
-                  ),
-                ),
-                SizedBox(height: size.height * 0.02),
-              ],
+              ),
             ),
-          ),
+            const SizedBox(height: 30),
+
+            // --- Name Field ---
+            TextFormField(
+              controller: _nameController,
+              decoration: InputDecoration(
+                labelText: "Username",
+                prefixIcon: const Icon(Icons.person_outline),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+              ),
+              validator: (value) {
+                if (value == null || value.trim().isEmpty) {
+                  return "Username cannot be empty";
+                }
+                return null;
+              },
+            ),
+            const SizedBox(height: 20),
+
+            // --- Email Field (Read-Only) ---
+            TextFormField(
+              controller: _emailController,
+              readOnly: true,
+              decoration: InputDecoration(
+                labelText: "Email Address (cannot be changed)",
+                prefixIcon: const Icon(Icons.email_outlined),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                fillColor: Theme.of(context).disabledColor.withOpacity(0.1),
+                filled: true,
+              ),
+            ),
+            const SizedBox(height: 40),
+
+            // --- Save Button ---
+            SizedBox(
+              width: double.infinity,
+              height: 50,
+              child: ElevatedButton(
+                onPressed: _isLoading ? null : _updateProfile,
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppColors.primary,
+                  foregroundColor: Colors.white,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                ),
+                child: _isLoading
+                    ? const CircularProgressIndicator(color: Colors.white)
+                    : const Text(
+                        "Save Changes",
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+              ),
+            ),
+          ],
         ),
       ),
     );
