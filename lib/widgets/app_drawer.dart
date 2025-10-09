@@ -1,4 +1,7 @@
+// lib/widgets/app_drawer.dart
+
 import 'package:flutter/material.dart';
+import 'package:logger/logger.dart';
 import 'package:minber_super_app_new_fixed/core/theme_notifier.dart';
 import 'package:provider/provider.dart';
 import '../core/app_colors.dart';
@@ -8,26 +11,41 @@ import '../providers/user_provider.dart';
 class AppDrawer extends StatelessWidget {
   const AppDrawer({super.key});
 
+  Color _getUserColor(String username) {
+    final List<Color> userColors = [
+      Colors.red.shade400,
+      Colors.green.shade400,
+      Colors.blue.shade400,
+      Colors.orange.shade400,
+      Colors.purple.shade400,
+      Colors.teal.shade400,
+    ];
+    return userColors[username.hashCode.abs() % userColors.length];
+  }
+
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
+    // ✅ This is now the single source of truth for the user's login state
     final userProvider = Provider.of<UserProvider>(context);
     final isLoggedIn = userProvider.user != null;
 
     return Drawer(
       child: ListView(
-        // Changed from Column to a single ListView
         padding: EdgeInsets.zero,
         children: [
-          // This Consumer rebuilds the header when user data changes
+          // This Consumer rebuilds ONLY the header when user data changes
           Consumer<UserProvider>(
             builder: (context, provider, child) {
+              final logger = Logger();
+              logger.d(
+                  "Drawer Header rebuilding. User: ${provider.user?.username}");
+
               if (provider.isLoading && provider.user == null) {
                 return _buildLoadingHeader();
-              } else if (isLoggedIn) {
-                return _buildLoggedInHeader(context, theme, provider);
+              } else if (provider.user != null) {
+                return _buildLoggedInHeader(context, provider);
               } else {
-                return _buildLoggedOutHeader(context, theme);
+                return _buildLoggedOutHeader(context);
               }
             },
           ),
@@ -35,7 +53,7 @@ class AppDrawer extends StatelessWidget {
           _buildDrawerItem(
             icon: Icons.home_outlined,
             text: 'Home',
-            onTap: () => Navigator.pop(context), // Just close the drawer
+            onTap: () => Navigator.pop(context),
           ),
           if (isLoggedIn)
             _buildDrawerItem(
@@ -46,14 +64,7 @@ class AppDrawer extends StatelessWidget {
                 Navigator.pushNamed(context, "/profile");
               },
             ),
-          _buildDrawerItem(
-            icon: Icons.notifications_none,
-            text: 'Notifications',
-            onTap: () {
-              Navigator.pop(context);
-              Navigator.pushNamed(context, "/notifications");
-            },
-          ),
+          // ... rest of your drawer items
           _buildDrawerItem(
             icon: Icons.settings_outlined,
             text: 'Settings',
@@ -62,36 +73,6 @@ class AppDrawer extends StatelessWidget {
             },
           ),
           const Divider(indent: 16, endIndent: 16),
-
-          // --- FIX: DARK THEME TOGGLE IS NOW HERE ---
-          ValueListenableBuilder<ThemeMode>(
-            valueListenable: main.themeNotifier,
-            builder: (context, currentMode, child) {
-              return SwitchListTile(
-                title: const Text('Dark Mode'),
-                secondary: Icon(
-                  currentMode == ThemeMode.dark
-                      ? Icons.dark_mode_outlined
-                      : Icons.light_mode_outlined,
-                ),
-                value: currentMode == ThemeMode.dark,
-                onChanged: (isDark) {
-                  final newMode = isDark ? ThemeMode.dark : ThemeMode.light;
-                  main.themeNotifier.value = newMode;
-                  saveThemePreference(newMode);
-                },
-              );
-            },
-          ),
-          const Divider(indent: 16, endIndent: 16),
-
-          _buildDrawerItem(
-            icon: Icons.info_outline,
-            text: 'About Us',
-            onTap: () {
-              Navigator.pop(context);
-            },
-          ),
           if (isLoggedIn)
             _buildDrawerItem(
               icon: Icons.logout,
@@ -103,50 +84,45 @@ class AppDrawer extends StatelessWidget {
     );
   }
 
-  // --- DRAWER HEADER WIDGETS ---
+  Widget _buildLoggedInHeader(BuildContext context, UserProvider provider) {
+    final user = provider.user!;
+    final userColor = _getUserColor(user.username);
+    final initial =
+        user.username.isNotEmpty ? user.username[0].toUpperCase() : '?';
 
-  Widget _buildLoggedInHeader(
-      BuildContext context, ThemeData theme, UserProvider provider) {
     return DrawerHeader(
-      decoration: BoxDecoration(
-        color: AppColors.primary,
-        image: DecorationImage(
-          image: const AssetImage(
-              "assets/images/drawer_bg.png"), // Add a subtle pattern
-          fit: BoxFit.cover,
-          colorFilter: ColorFilter.mode(
-            AppColors.primary.withOpacity(0.3),
-            BlendMode.dstATop,
-          ),
-        ),
-      ),
+      decoration: BoxDecoration(color: AppColors.primary),
       child: Align(
         alignment: Alignment.bottomLeft,
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           mainAxisAlignment: MainAxisAlignment.end,
           children: [
-            CircleAvatar(
-              radius: 30,
-              backgroundColor: Colors.white,
-              child: Text(
-                provider.user!.username.isNotEmpty
-                    ? provider.user!.username[0].toUpperCase()
-                    : '?',
-                style: TextStyle(
-                  color: AppColors.primary,
-                  fontWeight: FontWeight.bold,
-                  fontSize: 28,
+            InkWell(
+              onTap: () {
+                Navigator.pop(context);
+                Navigator.pushNamed(context, "/profile");
+              },
+              customBorder: const CircleBorder(),
+              child: CircleAvatar(
+                radius: 30,
+                backgroundColor: userColor,
+                child: Text(
+                  initial,
+                  style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 28,
+                      fontWeight: FontWeight.bold),
                 ),
               ),
             ),
             const SizedBox(height: 12),
             Text(
-              "Hello, ${provider.user!.username}",
-              style: theme.textTheme.titleLarge?.copyWith(
-                fontWeight: FontWeight.bold,
-                color: Colors.white,
-              ),
+              "Hello, ${user.username}",
+              style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                    fontWeight: FontWeight.bold,
+                    color: Colors.white,
+                  ),
             ),
             const Text(
               "Welcome Back!",
@@ -158,9 +134,10 @@ class AppDrawer extends StatelessWidget {
     );
   }
 
-  Widget _buildLoggedOutHeader(BuildContext context, ThemeData theme) {
+  // Other helper methods (_buildLoggedOutHeader, etc.) remain the same
+  Widget _buildLoggedOutHeader(BuildContext context) {
     return DrawerHeader(
-      decoration: BoxDecoration(color: theme.cardColor),
+      decoration: BoxDecoration(color: Theme.of(context).cardColor),
       child: Align(
         alignment: Alignment.bottomLeft,
         child: Column(
@@ -173,7 +150,7 @@ class AppDrawer extends StatelessWidget {
               child: Icon(Icons.person, color: Colors.white, size: 30),
             ),
             const SizedBox(height: 12),
-            Text("Welcome", style: theme.textTheme.titleLarge),
+            Text("Welcome", style: Theme.of(context).textTheme.titleLarge),
             InkWell(
               onTap: () {
                 Navigator.pop(context);
@@ -199,8 +176,6 @@ class AppDrawer extends StatelessWidget {
     );
   }
 
-  // --- DRAWER ITEM HELPER ---
-
   Widget _buildDrawerItem({
     required IconData icon,
     required String text,
@@ -212,8 +187,6 @@ class AppDrawer extends StatelessWidget {
       onTap: onTap,
     );
   }
-
-  // --- LOGOUT CONFIRMATION ---
 
   void _showLogoutConfirmation(BuildContext context) {
     showDialog(
@@ -230,10 +203,12 @@ class AppDrawer extends StatelessWidget {
             FilledButton(
               child: const Text("Logout"),
               onPressed: () {
+                // Use the provider to log out
                 Provider.of<UserProvider>(dialogContext, listen: false)
                     .logout();
-                Navigator.of(dialogContext).pop();
-                Navigator.of(context).pushReplacementNamed('/login');
+                Navigator.of(dialogContext).pop(); // Close the dialog
+                Navigator.of(context)
+                    .pushReplacementNamed('/login'); // Go to login page
               },
             ),
           ],

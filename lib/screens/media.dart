@@ -409,7 +409,7 @@ class _MediaHubPageState extends State<MediaHubPage>
           controller: _tabController,
           labelColor: AppColors.primary,
           unselectedLabelColor: Colors.grey,
-          indicatorColor: AppColors.primary,
+          indicatorColor: const Color.fromARGB(255, 255, 255, 255),
           tabs: const [
             Tab(text: "All Videos"),
             Tab(text: "Playlists"),

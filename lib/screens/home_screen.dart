@@ -941,12 +941,13 @@ class _HomeScreenState extends State<HomeScreen> {
   Map<String, DateTime> _prayerTimes = {};
 
   @override
+  // In your home page file
+
   void initState() {
     super.initState();
     _initializeBannerPlayer();
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      Provider.of<UserProvider>(context, listen: false).fetchUser();
-    });
+    // ✅ The .fetchUser() call is now completely removed.
+    // The UserProvider handles loading data automatically.
     _initializePrayerTimes();
     _timer = Timer.periodic(const Duration(seconds: 1), (_) {
       if (_prayerTimes.isNotEmpty) {

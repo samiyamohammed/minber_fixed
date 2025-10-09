@@ -166,8 +166,7 @@ Future<void> setupFirebasePushNotifications() async {
       );
 
       // We check BOTH the `notification` and `data` payloads.
-      String title =
-          message.notification?.title ??
+      String title = message.notification?.title ??
           message.data['title'] ??
           "New Notification";
       String body = message.notification?.body ?? message.data['body'] ?? "";
@@ -271,7 +270,7 @@ class MyApp extends StatelessWidget {
               '/login': (_) => const LoginPage(),
               '/signup': (_) => const SignUpPage(),
               '/profile': (_) => const ProfilePage(),
-              '/editProfile': (_) => const EditProfilePage(),
+              // '/editProfile': (_) => const EditProfilePage(),
               '/changePassword': (_) => const ChangePasswordPage(),
               '/live': (_) => const LiveStreamPage(),
               '/media': (_) => const MediaHubPage(),

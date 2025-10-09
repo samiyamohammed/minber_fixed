@@ -2,79 +2,98 @@
 
 import 'dart:convert';
 import 'package:flutter/material.dart';
-
-// import 'package.flutter/material.dart';
 import 'package:http/http.dart' as http;
+import 'package:logger/logger.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import '../models/user_model.dart'; // Ensure this path is correct
 
-// 1. A simple model class to hold our user data
-class UserModel {
-  final String id;
-  final String username;
-  final String email;
-
-  UserModel({required this.id, required this.username, required this.email});
-
-  factory UserModel.fromJson(Map<String, dynamic> json) {
-    return UserModel(
-      id: json['id'] ?? '',
-      username: json['username'] ?? 'Guest',
-      email: json['email'] ?? '',
-    );
-  }
-}
-
-// 2. The Provider class that will manage the data
-class UserProvider with ChangeNotifier {
+class UserProvider extends ChangeNotifier {
   UserModel? _user;
   bool _isLoading = false;
+  final logger = Logger();
 
   UserModel? get user => _user;
   bool get isLoading => _isLoading;
 
-  // The main function to fetch data from your API
-  Future<void> fetchUser() async {
-    final prefs = await SharedPreferences.getInstance();
-    final token = prefs.getString('accessToken');
-    final userId = prefs.getString('userId');
+  UserProvider() {
+    _loadUserFromPrefs(); // Attempt to load user on app startup
+  }
 
-    // If there's no token or userId, we can't fetch the user
-    if (token == null || userId == null) {
-      return;
-    }
-
+  // ✅ NEW LOGIN LOGIC
+  Future<bool> login(String email, String password) async {
     _isLoading = true;
     notifyListeners();
 
-    try {
-      // Use the GET /users/{id} endpoint from your Swagger docs
-      final url = Uri.parse('http://msa.merkuz.com:3636/users/$userId');
+    final String apiUrl = "http://msa.merkuz.com:3636/users/login";
+    final body = jsonEncode({"email": email, "password": password});
 
-      final response = await http.get(
-        url,
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': 'Bearer $token', // Standard way to send the token
-        },
+    logger.d("Attempting login with payload: $body");
+
+    try {
+      final response = await http.post(
+        Uri.parse(apiUrl),
+        headers: {"Content-Type": "application/json"},
+        body: body,
       );
 
-      if (response.statusCode == 200) {
+      logger.i("Login Response Status Code: ${response.statusCode}");
+      logger.d("Login Response Body: ${response.body}");
+
+      if (response.statusCode == 201) {
         final data = jsonDecode(response.body);
-        _user = UserModel.fromJson(data);
+
+        // ✅ Correctly parse the nested user object
+        _user = UserModel.fromJson(data['user']);
+
+        final accessToken = data['accessToken'];
+
+        // Save data to SharedPreferences
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.setString('accessToken', accessToken);
+        // Save the entire user object as a JSON string
+        await prefs.setString('user', userModelToJson(_user!));
+
+        logger.i("✅ Login successful. User '${_user!.username}' data stored.");
+
+        _isLoading = false;
+        notifyListeners();
+        return true;
       } else {
-        // Handle error, maybe log out user if token is invalid
-        print('Failed to fetch user: ${response.statusCode}');
+        logger.e("Login failed. Server returned error.");
+        _isLoading = false;
+        notifyListeners();
+        return false;
       }
-    } catch (e) {
-      print('An error occurred while fetching user: $e');
-    } finally {
+    } catch (e, stackTrace) {
+      logger.e("An exception occurred during login",
+          error: e, stackTrace: stackTrace);
       _isLoading = false;
       notifyListeners();
+      return false;
     }
   }
 
-  void logout() {
+  // ✅ LOGIC TO PERSIST USER SESSION
+  Future<void> _loadUserFromPrefs() async {
+    final prefs = await SharedPreferences.getInstance();
+    final userJsonString = prefs.getString('user');
+    final token = prefs.getString('accessToken');
+
+    if (token != null && userJsonString != null) {
+      _user = UserModel.fromJson(userModelAsMap(userJsonString));
+      logger.i("Loaded user '${_user!.username}' from storage.");
+      notifyListeners();
+    } else {
+      logger.w("No user data found in storage.");
+    }
+  }
+
+  Future<void> logout() async {
     _user = null;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove('accessToken');
+    await prefs.remove('user');
+    logger.i("User logged out and data cleared.");
     notifyListeners();
   }
 }
