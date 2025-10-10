@@ -1,6 +1,8 @@
+// lib/screens/onboarding_screen.dart (Fully Updated & Ready to Paste)
+
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import '../core/app_colors.dart';
+import 'package:smooth_page_indicator/smooth_page_indicator.dart'; // ✅ UI/UX UPDATE: Import for modern page indicator
 
 class OnboardingScreen extends StatefulWidget {
   const OnboardingScreen({super.key});
@@ -9,9 +11,32 @@ class OnboardingScreen extends StatefulWidget {
   State<OnboardingScreen> createState() => _OnboardingScreenState();
 }
 
-class _OnboardingScreenState extends State<OnboardingScreen> {
+class _OnboardingScreenState extends State<OnboardingScreen>
+    with SingleTickerProviderStateMixin {
   final PageController _pageController = PageController();
   int _currentPage = 0;
+  // ✅ UI/UX UPDATE: For animating the logo
+  late final AnimationController _animationController;
+  late final Animation<double> _scaleAnimation;
+
+  @override
+  void initState() {
+    super.initState();
+    _animationController = AnimationController(
+      vsync: this,
+      duration: const Duration(seconds: 10),
+    )..repeat(reverse: true);
+    _scaleAnimation = Tween<double>(begin: 1.0, end: 1.05).animate(
+      CurvedAnimation(parent: _animationController, curve: Curves.easeInOut),
+    );
+  }
+
+  @override
+  void dispose() {
+    _pageController.dispose();
+    _animationController.dispose();
+    super.dispose();
+  }
 
   Future<void> _completeOnboarding() async {
     final prefs = await SharedPreferences.getInstance();
@@ -20,202 +45,122 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
     Navigator.pushReplacementNamed(context, '/login');
   }
 
+  void _onNextTap() {
+    if (_currentPage == 2) {
+      _completeOnboarding();
+    } else {
+      _pageController.nextPage(
+        duration: const Duration(milliseconds: 400),
+        curve: Curves.easeInOut,
+      );
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final size = MediaQuery.of(context).size;
+    final textTheme = theme.textTheme;
 
     return Scaffold(
-      backgroundColor: theme.scaffoldBackgroundColor, // adapts to theme
       body: SafeArea(
         child: Column(
           children: [
-            // Scrollable Pages
+            // Skip button
+            Align(
+              alignment: Alignment.topRight,
+              child: TextButton(
+                onPressed: _completeOnboarding,
+                child: const Text("Skip"),
+              ),
+            ),
             Expanded(
               child: PageView(
                 controller: _pageController,
                 onPageChanged: (index) => setState(() => _currentPage = index),
                 children: [
-                  // Onboarding 1
+                  // --- Page 1: Welcome ---
                   _buildPage(
-                    size,
-                    Column(
+                    child: Column(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        Image.asset(
-                          "assets/images/minber.jpg",
-                          width: size.width * 0.5,
-                          height: size.height * 0.25,
-                          fit: BoxFit.contain,
+                        // ✅ UI/UX UPDATE: Animated logo
+                        ScaleTransition(
+                          scale: _scaleAnimation,
+                          child: Image.asset("assets/images/minber.jpg",
+                              height: 120),
                         ),
-                        SizedBox(height: size.height * 0.05),
+                        const SizedBox(height: 40),
+                        Text("Welcome to Minber Super App",
+                            textAlign: TextAlign.center,
+                            style: textTheme.headlineSmall
+                                ?.copyWith(fontWeight: FontWeight.bold)),
+                        const SizedBox(height: 16),
                         Text(
-                          "Welcome to Minber Super App!",
-                          style: TextStyle(
-                            fontSize: size.width * 0.055,
-                            fontWeight: FontWeight.bold,
-                            color: theme.textTheme.bodyLarge!.color,
-                          ),
-                          textAlign: TextAlign.center,
-                        ),
-                        SizedBox(height: size.height * 0.02),
-                        Text(
-                          "Your everyday companion: shop, stream, pray, and pay in one app.",
-                          textAlign: TextAlign.center,
-                          style: TextStyle(
-                            fontSize: size.width * 0.04,
-                            color: theme.textTheme.bodyMedium!.color,
-                          ),
-                        ),
+                            "Your everyday companion: shop, stream, pray, and pay in one seamless experience.",
+                            textAlign: TextAlign.center,
+                            style: textTheme.bodyLarge
+                                ?.copyWith(color: theme.hintColor)),
                       ],
                     ),
                   ),
 
-                  // Onboarding 2
+                  // --- Page 2: Features ---
                   _buildPage(
-                    size,
-                    Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        Text(
-                          "Discover convenience and connection with all your daily essentials in one app.",
-                          style: TextStyle(
-                            fontSize: size.width * 0.045,
-                            fontWeight: FontWeight.w500,
-                            color: theme.textTheme.bodyLarge!.color,
-                          ),
-                        ),
-                        SizedBox(height: size.height * 0.03),
+                        Text("All Your Essentials, One App",
+                            textAlign: TextAlign.center,
+                            style: textTheme.headlineSmall
+                                ?.copyWith(fontWeight: FontWeight.bold)),
+                        const SizedBox(height: 24),
                         Wrap(
                           spacing: 16,
                           runSpacing: 16,
+                          alignment: WrapAlignment.center,
                           children: [
-                            _FeatureCard(
-                              title: "Live Streaming",
-                              subtitle: "Enjoy live TV and shows",
-                              width:
-                                  (size.width - (size.width * 0.16) - 16) / 2,
-                              theme: theme,
-                            ),
-                            _FeatureCard(
-                              title: "Halal Pay",
-                              subtitle: "Secure Islamic payments",
-                              width:
-                                  (size.width - (size.width * 0.16) - 16) / 2,
-                              theme: theme,
-                            ),
-                            _FeatureCard(
-                              title: "Prayer Times",
-                              subtitle: "Accurate timings & Qibla",
-                              width:
-                                  (size.width - (size.width * 0.16) - 16) / 2,
-                              theme: theme,
-                            ),
-                            _FeatureCard(
-                              title: "Hijri Calendar",
-                              subtitle: "Islamic dates & events",
-                              width:
-                                  (size.width - (size.width * 0.16) - 16) / 2,
-                              theme: theme,
-                            ),
-                            _FeatureCard(
-                              title: "AI Chatbot",
-                              subtitle: "Instant help & reminders",
-                              width:
-                                  (size.width - (size.width * 0.16) - 16) / 2,
-                              theme: theme,
-                            ),
+                            _FeatureChip(
+                                icon: Icons.live_tv_rounded,
+                                label: "Live Streaming"),
+                            _FeatureChip(
+                                icon: Icons.credit_card_rounded,
+                                label: "Halal Pay"),
+                            _FeatureChip(
+                                icon: Icons.mosque_rounded,
+                                label: "Prayer Times"),
+                            _FeatureChip(
+                                icon: Icons.calendar_month_rounded,
+                                label: "Hijri Calendar"),
+                            _FeatureChip(
+                                icon: Icons.smart_toy_rounded,
+                                label: "AI Chatbot"),
+                            _FeatureChip(
+                                icon: Icons.widgets_rounded,
+                                label: "And More!"),
                           ],
                         ),
                       ],
                     ),
                   ),
 
-                  // Onboarding 3
+                  // --- Page 3: Get Started ---
                   _buildPage(
-                    size,
-                    Column(
+                    child: Column(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        Icon(
-                          Icons.group,
-                          size: size.width * 0.4,
-                          color: AppColors.primary,
-                        ),
-                        SizedBox(height: size.height * 0.05),
+                        Icon(Icons.person_add_alt_1_rounded,
+                            size: 100, color: theme.colorScheme.primary),
+                        const SizedBox(height: 24),
+                        Text("Join the Community",
+                            textAlign: TextAlign.center,
+                            style: textTheme.headlineSmall
+                                ?.copyWith(fontWeight: FontWeight.bold)),
+                        const SizedBox(height: 16),
                         Text(
-                          "Ready to personalize your experience?",
-                          style: TextStyle(
-                            fontSize: size.width * 0.05,
-                            fontWeight: FontWeight.bold,
-                            color: theme.textTheme.bodyLarge!.color,
-                          ),
-                          textAlign: TextAlign.center,
-                        ),
-                        SizedBox(height: size.height * 0.02),
-                        Text(
-                          "Create an account or log in to get started!",
-                          textAlign: TextAlign.center,
-                          style: TextStyle(
-                            fontSize: size.width * 0.04,
-                            color: theme.textTheme.bodyMedium!.color,
-                          ),
-                        ),
-                        SizedBox(height: size.height * 0.06),
-                        SizedBox(
-                          width: double.infinity,
-                          child: ElevatedButton(
-                            onPressed: () async {
-                              final prefs =
-                                  await SharedPreferences.getInstance();
-                              await prefs.setBool('onboarding_complete', true);
-                              if (!mounted) return;
-                              Navigator.pushReplacementNamed(
-                                context,
-                                '/signup',
-                              );
-                            },
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: AppColors.primary,
-                              padding: EdgeInsets.symmetric(
-                                vertical: size.height * 0.02,
-                              ),
-                            ),
-                            child: Text(
-                              "Create an Account",
-                              style: TextStyle(
-                                fontSize: size.width * 0.045,
-                                color: Colors.white,
-                              ),
-                            ),
-                          ),
-                        ),
-                        SizedBox(height: size.height * 0.015),
-                        SizedBox(
-                          width: double.infinity,
-                          child: OutlinedButton(
-                            onPressed: () async {
-                              final prefs =
-                                  await SharedPreferences.getInstance();
-                              await prefs.setBool('onboarding_complete', true);
-                              if (!mounted) return;
-                              Navigator.pushReplacementNamed(context, '/login');
-                            },
-                            style: OutlinedButton.styleFrom(
-                              padding: EdgeInsets.symmetric(
-                                vertical: size.height * 0.02,
-                              ),
-                              side: BorderSide(color: AppColors.primary),
-                            ),
-                            child: Text(
-                              "Log In",
-                              style: TextStyle(
-                                fontSize: size.width * 0.045,
-                                color: AppColors.primary,
-                              ),
-                            ),
-                          ),
-                        ),
+                            "Create an account or sign in to personalize your experience and unlock all features.",
+                            textAlign: TextAlign.center,
+                            style: textTheme.bodyLarge
+                                ?.copyWith(color: theme.hintColor)),
                       ],
                     ),
                   ),
@@ -223,100 +168,82 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
               ),
             ),
 
-            // Bottom Button (only show for pages 0 and 1)
-            if (_currentPage < 2)
-              Padding(
-                padding: EdgeInsets.all(size.width * 0.06),
-                child: ElevatedButton(
-                  onPressed: () => _pageController.nextPage(
-                    duration: const Duration(milliseconds: 300),
-                    curve: Curves.easeInOut,
-                  ),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: AppColors.primary,
-                    padding: EdgeInsets.symmetric(
-                      vertical: size.height * 0.018,
-                      horizontal: size.width * 0.2,
+            // ✅ UI/UX UPDATE: Modern Page Indicator and Animated Button
+            Padding(
+              padding:
+                  const EdgeInsets.symmetric(horizontal: 24.0, vertical: 24.0),
+              child: Column(
+                children: [
+                  SmoothPageIndicator(
+                    controller: _pageController,
+                    count: 3,
+                    effect: ExpandingDotsEffect(
+                      activeDotColor: theme.colorScheme.primary,
+                      dotColor: theme.dividerColor,
+                      dotHeight: 10,
+                      dotWidth: 10,
                     ),
                   ),
-                  child: Text(
-                    "Next",
-                    style: TextStyle(
-                      fontSize: size.width * 0.045,
-                      color: Colors.white,
+                  const SizedBox(height: 24),
+                  SizedBox(
+                    width: double.infinity,
+                    height: 50,
+                    child: ElevatedButton(
+                      onPressed: _onNextTap,
+                      child: AnimatedSwitcher(
+                        duration: const Duration(milliseconds: 200),
+                        child: Text(
+                          _currentPage == 2 ? "Get Started" : "Next",
+                          key: ValueKey<int>(
+                              _currentPage), // Key to trigger animation
+                          style: const TextStyle(fontWeight: FontWeight.bold),
+                        ),
+                      ),
                     ),
                   ),
-                ),
+                  if (_currentPage == 2)
+                    SizedBox(
+                      width: double.infinity,
+                      height: 50,
+                      child: TextButton(
+                        onPressed: _completeOnboarding,
+                        child: const Text("I already have an account"),
+                      ),
+                    ),
+                ],
               ),
+            ),
           ],
         ),
       ),
     );
   }
 
-  Widget _buildPage(Size size, Widget child) {
-    return SingleChildScrollView(
-      padding: EdgeInsets.all(size.width * 0.08),
-      child: ConstrainedBox(
-        constraints: BoxConstraints(minHeight: size.height * 0.8),
-        child: child,
-      ),
+  Widget _buildPage({required Widget child}) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 24.0),
+      child: child,
     );
   }
 }
 
-// Updated Feature Card with theming
-class _FeatureCard extends StatelessWidget {
-  final String title;
-  final String subtitle;
-  final double width;
-  final ThemeData theme;
-
-  const _FeatureCard({
-    required this.title,
-    required this.subtitle,
-    required this.width,
-    required this.theme,
-  });
+// ✅ UI/UX UPDATE: A cleaner, reusable chip for features
+class _FeatureChip extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  const _FeatureChip({required this.icon, required this.label});
 
   @override
   Widget build(BuildContext context) {
-    final size = MediaQuery.of(context).size;
-    return Container(
-      width: width,
-      decoration: BoxDecoration(
-        border: Border.all(color: AppColors.primary.withOpacity(0.3)),
-        borderRadius: BorderRadius.circular(12),
-        color: theme.cardColor, // adapts to theme
-      ),
-      padding: EdgeInsets.all(size.width * 0.04),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Icon(
-            Icons.check_circle,
-            color: AppColors.primary,
-            size: size.width * 0.1,
-          ),
-          SizedBox(height: size.height * 0.01),
-          Text(
-            title,
-            style: TextStyle(
-              fontSize: size.width * 0.04,
-              fontWeight: FontWeight.bold,
-              color: theme.textTheme.bodyLarge!.color,
-            ),
-          ),
-          SizedBox(height: size.height * 0.005),
-          Text(
-            subtitle,
-            style: TextStyle(
-              fontSize: size.width * 0.035,
-              color: theme.textTheme.bodyMedium!.color,
-            ),
-          ),
-        ],
-      ),
+    final theme = Theme.of(context);
+    return Chip(
+      avatar: Icon(icon, color: theme.colorScheme.primary, size: 20),
+      label: Text(label),
+      labelStyle:
+          theme.textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w600),
+      backgroundColor: theme.colorScheme.primary.withOpacity(0.1),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      side: BorderSide.none,
     );
   }
 }

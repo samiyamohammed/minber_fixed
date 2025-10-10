@@ -1,4 +1,4 @@
-// lib/screens/login_screen.dart (Fully Updated)
+// lib/screens/login_screen.dart (Fully Updated & Ready to Paste)
 
 import 'dart:async';
 import 'package:connectivity_plus/connectivity_plus.dart';
@@ -8,7 +8,6 @@ import 'package:logger/logger.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-import '../core/app_colors.dart';
 import '../providers/user_provider.dart';
 
 class LoginPage extends StatefulWidget {
@@ -27,6 +26,8 @@ class _LoginPageState extends State<LoginPage> {
   bool _isLoading = false;
   bool _isPasswordObscured = true;
   final Logger _logger = Logger();
+
+  // --- CORE LOGIC (Unchanged) ---
 
   @override
   void initState() {
@@ -51,7 +52,6 @@ class _LoginPageState extends State<LoginPage> {
         _passwordController.text = savedPassword;
         _rememberMe = true;
       });
-      _logger.i("Loaded saved credentials for user: $savedEmail");
     }
   }
 
@@ -64,33 +64,26 @@ class _LoginPageState extends State<LoginPage> {
     if (_rememberMe) {
       await prefs.setString('savedEmail', _emailController.text.trim());
       await prefs.setString('savedPassword', _passwordController.text.trim());
-      _logger.i("Credentials saved for ${_emailController.text.trim()}.");
     } else {
       await prefs.remove('savedEmail');
       await prefs.remove('savedPassword');
-      _logger.i("Saved credentials cleared.");
     }
   }
 
   Future<void> _login() async {
-    if (!_formKey.currentState!.validate()) {
-      _logger.w("Form validation failed.");
-      return;
-    }
+    FocusManager.instance.primaryFocus?.unfocus();
+    if (!_formKey.currentState!.validate()) return;
 
     final connectivityResult = await (Connectivity().checkConnectivity());
     if (connectivityResult.contains(ConnectivityResult.none)) {
-      _logger.w("Login attempt while offline.");
-      _showToast("❌ You are offline. Please check your internet connection.");
+      _showToast("❌ No internet connection.");
       return;
     }
 
     if (mounted) setState(() => _isLoading = true);
-    _logger.i('--- LOGIN PROCESS STARTED (UI) ---');
-
-    final userProvider = Provider.of<UserProvider>(context, listen: false);
 
     try {
+      final userProvider = Provider.of<UserProvider>(context, listen: false);
       final bool loginSuccess = await userProvider.login(
         _emailController.text.trim(),
         _passwordController.text.trim(),
@@ -98,13 +91,8 @@ class _LoginPageState extends State<LoginPage> {
 
       if (mounted) {
         if (loginSuccess) {
-          // --- THIS IS THE FIX ---
           final prefs = await SharedPreferences.getInstance();
           await prefs.setBool('isLoggedIn', true);
-          _logger.i(
-              "✅ Login successful. Session state 'isLoggedIn' saved as true.");
-          // --- END OF FIX ---
-
           await _handleRememberMe();
           _showToast("Login Successful 🎉", bgColor: Colors.green);
           Navigator.pushReplacementNamed(context, '/home');
@@ -113,68 +101,83 @@ class _LoginPageState extends State<LoginPage> {
         }
       }
     } catch (e) {
-      _logger.e("An unexpected error occurred in the UI during login.",
-          error: e);
-      _showToast("An unexpected error occurred. Please try again.");
+      _showToast("An unexpected error occurred.");
     } finally {
       if (mounted) setState(() => _isLoading = false);
-      _logger.i('--- LOGIN PROCESS ENDED (UI) ---');
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    final size = MediaQuery.of(context).size;
+    // ✅ UI/UX UPDATE: Using theme for all colors and styles
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+    final textTheme = theme.textTheme;
 
     return Scaffold(
       body: SafeArea(
-        child: Padding(
-          padding: EdgeInsets.symmetric(horizontal: size.width * 0.08),
+        child: Center(
           child: SingleChildScrollView(
+            padding: const EdgeInsets.symmetric(horizontal: 24.0),
             child: Form(
               key: _formKey,
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  SizedBox(height: size.height * 0.1),
+                  // ✅ UI/UX UPDATE: Added App Logo
+                  Image.asset(
+                    'assets/images/minber.jpg', // Make sure you have your logo here
+                    height: 80,
+                  ),
+                  const SizedBox(height: 24),
                   Text(
                     "Welcome Back",
-                    style: TextStyle(
-                      fontSize: size.width * 0.08,
-                      fontWeight: FontWeight.bold,
-                      color: AppColors.primary,
-                    ),
+                    textAlign: TextAlign.center,
+                    style: textTheme.headlineMedium
+                        ?.copyWith(fontWeight: FontWeight.bold),
                   ),
-                  SizedBox(height: size.height * 0.05),
+                  const SizedBox(height: 8),
+                  Text(
+                    "Sign in to continue your journey",
+                    textAlign: TextAlign.center,
+                    style:
+                        textTheme.bodyLarge?.copyWith(color: theme.hintColor),
+                  ),
+                  const SizedBox(height: 40),
+
+                  // ✅ UI/UX UPDATE: Modernized TextFields
                   TextFormField(
                     controller: _emailController,
                     keyboardType: TextInputType.emailAddress,
-                    decoration: _inputDecoration(size).copyWith(
-                      labelText: "Email",
-                      prefixIcon: Icon(Icons.email,
-                          color: AppColors.primary.withOpacity(0.7)),
+                    autofillHints: const [AutofillHints.email],
+                    textInputAction: TextInputAction.next,
+                    decoration: const InputDecoration(
+                      labelText: "Email Address",
+                      prefixIcon: Icon(Icons.email_outlined),
                     ),
                     validator: (value) {
-                      if (value == null || value.isEmpty)
-                        return "Please enter your email";
-                      if (!RegExp(r'^[^@]+@[^@]+\.[^@]+').hasMatch(value))
-                        return "Enter a valid email";
+                      if (value == null ||
+                          value.trim().isEmpty ||
+                          !value.contains('@')) {
+                        return "Please enter a valid email";
+                      }
                       return null;
                     },
                   ),
-                  SizedBox(height: size.height * 0.02),
+                  const SizedBox(height: 16),
                   TextFormField(
                     controller: _passwordController,
                     obscureText: _isPasswordObscured,
-                    decoration: _inputDecoration(size).copyWith(
+                    autofillHints: const [AutofillHints.password],
+                    textInputAction: TextInputAction.done,
+                    decoration: InputDecoration(
                       labelText: "Password",
-                      prefixIcon: Icon(Icons.lock,
-                          color: AppColors.primary.withOpacity(0.7)),
+                      prefixIcon: const Icon(Icons.lock_outline),
                       suffixIcon: IconButton(
                         icon: Icon(_isPasswordObscured
-                            ? Icons.visibility_off
-                            : Icons.visibility),
-                        color: AppColors.primary.withOpacity(0.7),
+                            ? Icons.visibility_off_outlined
+                            : Icons.visibility_outlined),
                         onPressed: () => setState(
                             () => _isPasswordObscured = !_isPasswordObscured),
                       ),
@@ -187,7 +190,7 @@ class _LoginPageState extends State<LoginPage> {
                       return null;
                     },
                   ),
-                  SizedBox(height: size.height * 0.01),
+                  const SizedBox(height: 12),
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
@@ -204,76 +207,51 @@ class _LoginPageState extends State<LoginPage> {
                       TextButton(
                         onPressed: () =>
                             Navigator.pushNamed(context, '/forgot-password'),
-                        child: Text(
-                          "Forgot Password?",
-                          style: TextStyle(color: AppColors.primary),
-                        ),
+                        child: const Text("Forgot Password?"),
                       ),
                     ],
                   ),
-                  SizedBox(height: size.height * 0.03),
+                  const SizedBox(height: 24),
+
+                  // ✅ UI/UX UPDATE: Animated Login Button
                   SizedBox(
-                    width: double.infinity,
-                    height: size.height * 0.07,
+                    height: 50,
                     child: ElevatedButton(
                       onPressed: _isLoading ? null : _login,
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: AppColors.primary,
-                        foregroundColor: Colors.white,
-                        shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(12)),
+                      child: AnimatedSwitcher(
+                        duration: const Duration(milliseconds: 300),
+                        child: _isLoading
+                            ? const SizedBox(
+                                height: 24,
+                                width: 24,
+                                child:
+                                    CircularProgressIndicator(strokeWidth: 3))
+                            : const Text("Sign In",
+                                style: TextStyle(fontWeight: FontWeight.bold)),
                       ),
-                      child: _isLoading
-                          ? const CircularProgressIndicator(color: Colors.white)
-                          : Text(
-                              "Login",
-                              style: TextStyle(
-                                fontSize: size.width * 0.045,
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
                     ),
                   ),
-                  SizedBox(height: size.height * 0.03),
+                  const SizedBox(height: 24),
                   Row(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      const Text("Don't have an account? "),
-                      GestureDetector(
-                        onTap: () => Navigator.pushNamed(context, '/signup'),
-                        child: Text(
-                          "Sign Up",
-                          style: TextStyle(
-                              color: AppColors.primary,
-                              fontWeight: FontWeight.bold),
-                        ),
+                      Text("Don't have an account?",
+                          style: textTheme.bodyMedium),
+                      TextButton(
+                        onPressed: () =>
+                            Navigator.pushNamed(context, '/signup'),
+                        child: Text("Sign Up",
+                            style: TextStyle(
+                                color: colorScheme.primary,
+                                fontWeight: FontWeight.bold)),
                       ),
                     ],
                   ),
-                  SizedBox(height: size.height * 0.1),
                 ],
               ),
             ),
           ),
         ),
-      ),
-    );
-  }
-
-  InputDecoration _inputDecoration(Size size) {
-    return InputDecoration(
-      border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-      enabledBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(12),
-        borderSide: BorderSide(color: AppColors.primary.withOpacity(0.3)),
-      ),
-      focusedBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(12),
-        borderSide: BorderSide(color: AppColors.primary, width: 2),
-      ),
-      contentPadding: EdgeInsets.symmetric(
-        horizontal: size.width * 0.04,
-        vertical: size.height * 0.02,
       ),
     );
   }

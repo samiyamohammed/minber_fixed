@@ -1,3 +1,5 @@
+// lib/main.dart (Fully Updated & Ready to Paste)
+
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -13,7 +15,7 @@ import 'services/firebase-notification.dart'; // For FIREBASE push notifications
 // --- PROVIDER & CORE IMPORTS ---
 import 'providers/user_provider.dart';
 import 'core/app_colors.dart';
-import 'core/theme_notifier.dart'; // ✅ 1. IMPORT YOUR NEW THEME NOTIFIER
+import 'core/theme_notifier.dart';
 
 // --- SCREEN IMPORTS ---
 import 'screens/onboarding_screen.dart';
@@ -37,12 +39,10 @@ import 'screens/upgrade_plan.dart';
 import 'screens/manage_subscriptions.dart';
 import 'screens/subapps_screen.dart';
 import 'screens/dua_dhikr_page.dart';
-import 'screens/forgot_password_screen.dart'; // Add this import
+import 'screens/forgot_password_screen.dart';
 import 'screens/reset_password_screen.dart';
 
-// ✅ 2. NOTE: The old theme functions that were here are now REMOVED.
-
-// --- BACKGROUND TASK DEFINITION (FOR LOCAL PRAYER NOTIFICATIONS) ---
+// --- BACKGROUND TASK DEFINITION (UNCHANGED) ---
 @pragma('vm:entry-point')
 void callbackDispatcher() {
   Workmanager().executeTask((task, inputData) async {
@@ -61,7 +61,7 @@ void callbackDispatcher() {
   });
 }
 
-// --- CORRECTED FIREBASE BACKGROUND HANDLER ---
+// --- FIREBASE BACKGROUND HANDLER (UNCHANGED) ---
 @pragma('vm:entry-point')
 Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
   await Firebase.initializeApp();
@@ -73,16 +73,13 @@ Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
   );
 }
 
-// --- MAIN FUNCTION ---
+// --- MAIN FUNCTION (UNCHANGED) ---
 Future<void> main() async {
-  // STAGE 1: CORE INITIALIZATION
   WidgetsFlutterBinding.ensureInitialized();
 
-  // ✅ 3. LOAD and INITIALIZE the theme notifier from your new file
   final savedThemeMode = await loadThemePreference();
   themeNotifier = ValueNotifier<ThemeMode>(savedThemeMode);
 
-  // STAGE 2: FIREBASE & BACKGROUND HANDLERS
   try {
     await Firebase.initializeApp();
     debugPrint("✅ Firebase Core initialized successfully.");
@@ -99,16 +96,13 @@ Future<void> main() async {
     constraints: Constraints(networkType: NetworkType.connected),
   );
 
-  // STAGE 3: INITIALIZE FOREGROUND SERVICES & PREFERENCES
   final prefs = await SharedPreferences.getInstance();
   await NotificationService.init();
   await FirebaseNotificationService.init();
 
-  // STAGE 4: TRIGGER ASYNCHRONOUS SETUPS (FIRE-AND-FORGET)
   NotificationService.scheduleDailyAndWeeklyNotifications();
   setupFirebasePushNotifications();
 
-  // STAGE 5: DETERMINE INITIAL ROUTE AND RUN APP
   final isLoggedIn = prefs.getBool('isLoggedIn') ?? false;
   final seenOnboarding = prefs.getBool('onboarding_complete') ?? false;
 
@@ -123,7 +117,7 @@ Future<void> main() async {
   runApp(MyApp(initialRoute: initialRoute));
 }
 
-/// A single, clean function to set up all Firebase Push Notification logic.
+// --- FIREBASE PUSH NOTIFICATION SETUP (UNCHANGED) ---
 Future<void> setupFirebasePushNotifications() async {
   try {
     FirebaseMessaging messaging = FirebaseMessaging.instance;
@@ -162,7 +156,7 @@ Future<void> setupFirebasePushNotifications() async {
   }
 }
 
-// --- MAIN APP WIDGET ---
+// --- MAIN APP WIDGET (THEMES UPDATED) ---
 class MyApp extends StatelessWidget {
   final String initialRoute;
   const MyApp({super.key, required this.initialRoute});
@@ -172,65 +166,71 @@ class MyApp extends StatelessWidget {
     return ChangeNotifierProvider(
       create: (context) => UserProvider(),
       child: ValueListenableBuilder<ThemeMode>(
-        // ✅ 4. This now correctly listens to the notifier we initialized in main()
         valueListenable: themeNotifier,
         builder: (_, ThemeMode currentMode, __) {
           return MaterialApp(
             navigatorKey: NotificationService.navigatorKey,
             debugShowCheckedModeBanner: false,
             title: 'Minber TV',
+
+            // --- ✅ LIGHT THEME: UPDATED WITH BRAND COLORS ---
             theme: ThemeData(
-              primaryColor: AppColors.primary,
-              scaffoldBackgroundColor: AppColors.background,
-              appBarTheme: AppBarTheme(
-                backgroundColor: AppColors.primary,
+              primaryColor: AppColors.primaryBlue,
+              scaffoldBackgroundColor: AppColors.backgroundLight,
+             appBarTheme: const AppBarTheme(
+                backgroundColor: AppColors.primaryBlue,
                 foregroundColor: Colors.white,
-                elevation: 0,
-                titleTextStyle: const TextStyle(
-                  color: Colors.white,
+                elevation: 2.0,
+                titleTextStyle: TextStyle(
+                  color: Colors.white, // ✅ FIX 1: Changed to white
                   fontSize: 20,
-                  fontWeight: FontWeight.bold,
+                  fontWeight: FontWeight.w600,
                 ),
-                iconTheme: const IconThemeData(color: Colors.white),
+                iconTheme: IconThemeData(
+                    color: Colors
+                        .white), // ✅ FIX 2: Changed to white for consistency
               ),
               brightness: Brightness.light,
-              colorScheme: ColorScheme.light(
-                primary: AppColors.primary,
-                secondary: Colors.tealAccent,
-                surface: Colors.white,
-                onBackground: Colors.black87,
-                onSurface: Colors.black87,
+              colorScheme: const ColorScheme.light(
+                primary: AppColors.primaryBlue,
+                secondary: AppColors.accentBlue,
+                surface: AppColors.backgroundLight,
+                onBackground: AppColors.textGrey,
+                onSurface: AppColors.textGrey,
               ),
               textTheme: const TextTheme(
-                bodyLarge: TextStyle(color: Colors.black87),
-                bodyMedium: TextStyle(color: Colors.black87),
+                bodyLarge: TextStyle(color: Color.fromARGB(255, 61, 61, 61)),
+                bodyMedium: TextStyle(color: Colors.black54),
               ),
             ),
+
+            // --- ✅ DARK THEME: UPDATED WITH BRAND COLORS ---
             darkTheme: ThemeData(
-              primaryColor: AppColors.primary,
-              scaffoldBackgroundColor: const Color(0xFF121212),
+              primaryColor: AppColors.primaryBlue,
+              scaffoldBackgroundColor: AppColors.backgroundDark,
               appBarTheme: const AppBarTheme(
-                backgroundColor: Color(0xFF1F1F1F),
+                backgroundColor: AppColors.surfaceDark,
                 foregroundColor: Colors.white,
-                elevation: 0,
+                elevation: 2.0,
                 titleTextStyle: TextStyle(
                   color: Colors.white,
                   fontSize: 20,
-                  fontWeight: FontWeight.bold,
+                  fontWeight: FontWeight.w600,
                 ),
                 iconTheme: IconThemeData(color: Colors.white70),
               ),
               brightness: Brightness.dark,
-              colorScheme: ColorScheme.dark(
-                primary: AppColors.primary,
-                secondary: Colors.tealAccent,
-                surface: const Color(0xFF1F1F1F),
+              colorScheme: const ColorScheme.dark(
+                primary: AppColors
+                    .accentBlue, // Use brighter blue for better contrast
+                secondary: AppColors.primaryBlue,
+                surface: AppColors.surfaceDark,
                 onBackground: Colors.white70,
                 onSurface: Colors.white70,
               ),
               textTheme: const TextTheme(
                 bodyLarge: TextStyle(color: Colors.white70),
-                bodyMedium: TextStyle(color: Colors.white70),
+                bodyMedium: TextStyle(color: Colors.white54),
               ),
             ),
             themeMode: currentMode,
@@ -242,7 +242,7 @@ class MyApp extends StatelessWidget {
               '/signup': (_) => const SignUpPage(),
               '/profile': (_) => const ProfilePage(),
               // '/editProfile': (_) => const EditProfilePage(),
-               '/forgot-password': (_) => const ForgotPasswordScreen(),
+              '/forgot-password': (_) => const ForgotPasswordScreen(),
               '/reset-password': (_) => const ResetPasswordScreen(),
               '/changePassword': (_) => const ChangePasswordPage(),
               '/live': (_) => const LiveStreamPage(),

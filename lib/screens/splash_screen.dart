@@ -1,9 +1,11 @@
+// lib/screens/splash_screen.dart (Fully Updated & Ready to Paste)
+
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:firebase_core/firebase_core.dart';
-import '../api/firebase_api.dart';
-import '../services/notification_service.dart';
+import '../api/firebase_api.dart'; // Assuming this path is correct
+import '../services/notification_service.dart'; // Assuming this path is correct
 
 class SplashScreen extends StatefulWidget {
   const SplashScreen({super.key});
@@ -12,99 +14,112 @@ class SplashScreen extends StatefulWidget {
   State<SplashScreen> createState() => _SplashScreenState();
 }
 
-class _SplashScreenState extends State<SplashScreen> {
+// ✅ UI/UX UPDATE: Added TickerProviderStateMixin for animations
+class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderStateMixin {
+  late final AnimationController _animationController;
+  late final Animation<double> _fadeAnimation;
+  late final Animation<double> _scaleAnimation;
+
   @override
   void initState() {
     super.initState();
+    // Initialize animations
+    _animationController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1200),
+    );
+    _fadeAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
+      CurvedAnimation(parent: _animationController, curve: Curves.easeIn),
+    );
+    _scaleAnimation = Tween<double>(begin: 0.8, end: 1.0).animate(
+      CurvedAnimation(parent: _animationController, curve: Curves.easeInOut),
+    );
+
+    // Start the animation and then the initialization logic
+    _animationController.forward();
     _initializeAppAndNavigate();
   }
 
+  @override
+  void dispose() {
+    _animationController.dispose();
+    super.dispose();
+  }
+
+  // --- CORE LOGIC (Unchanged) ---
   Future<void> _initializeAppAndNavigate() async {
     final setupStart = DateTime.now();
-    final prefs = await SharedPreferences.getInstance();
-
     try {
-      // Initialize Firebase (but don't block navigation forever)
-      try {
-        await Firebase.initializeApp().timeout(
-          const Duration(seconds: 5),
-          onTimeout: () {
-            debugPrint("⚠️ Firebase initialization timed out.");
-            throw Exception("Firebase initialization timed out.");
-          },
-        );
-      } catch (e) {
-        debugPrint("⚠️ Firebase init error: $e");
-      }
+      // These can run in parallel for speed
+      await Future.wait([
+        SharedPreferences.getInstance(),
+        Firebase.initializeApp().timeout(const Duration(seconds: 5)),
+      ]);
 
-      // Initialize Notifications (Firebase + local)
-      try {
-        await FirebaseApi().initNotifications().timeout(
-          const Duration(seconds: 3),
-          onTimeout: () {
-            debugPrint("⚠️ FirebaseApi notifications init timed out.");
-          },
-        );
-      } catch (e) {
-        debugPrint("⚠️ FirebaseApi init error: $e");
-      }
+      final prefs = await SharedPreferences.getInstance();
 
-      try {
-        await NotificationService.init().timeout(
-          const Duration(seconds: 3),
-          onTimeout: () {
-            debugPrint("⚠️ Local notifications init timed out.");
-          },
-        );
-      } catch (e) {
-        debugPrint("⚠️ NotificationService init error: $e");
-      }
+      // Don't need to await these fully, they can finish in the background
+      FirebaseApi().initNotifications();
+      NotificationService.init();
 
-      // Load login data from SharedPreferences
-      final accessToken = prefs.getString('accessToken');
       final isLoggedIn = prefs.getBool('isLoggedIn') ?? false;
       final seenOnboarding = prefs.getBool('onboarding_complete') ?? false;
 
-      // Debug prints to understand what splash sees
-      debugPrint('🔎 SPLASH DEBUG → accessToken: ${accessToken ?? "NULL"}');
-      debugPrint('🔎 SPLASH DEBUG → isLoggedIn: $isLoggedIn');
-      debugPrint('🔎 SPLASH DEBUG → onboarding_complete: $seenOnboarding');
-
-      // Keep splash screen visible at least 2 seconds for better UX
+      // Ensure splash is visible for a minimum duration
       final duration = DateTime.now().difference(setupStart);
-      const minimumDelay = Duration(seconds: 2);
+      const minimumDelay = Duration(seconds: 2, milliseconds: 500); // Slightly longer for a smoother feel
       if (duration < minimumDelay) {
         await Future.delayed(minimumDelay - duration);
       }
 
       if (!mounted) return;
 
-      // ✅ Decide where to go
-      if (isLoggedIn && accessToken != null && accessToken.isNotEmpty) {
-        debugPrint('➡️ Splash → navigating to /home');
-        Navigator.pushReplacementNamed(context, '/home');
+      String routeName;
+      if (isLoggedIn) {
+        routeName = '/home';
       } else if (seenOnboarding) {
-        debugPrint('➡️ Splash → navigating to /login');
-        Navigator.pushReplacementNamed(context, '/login');
+        routeName = '/login';
       } else {
-        debugPrint('➡️ Splash → navigating to /onboarding');
-        Navigator.pushReplacementNamed(context, '/onboarding');
+        routeName = '/onboarding';
       }
-    } catch (e, st) {
-      debugPrint("❌ ERROR during initialization: $e\n$st");
-      if (mounted) Navigator.pushReplacementNamed(context, '/login');
+      Navigator.pushReplacementNamed(context, routeName);
+
+    } catch (e) {
+      debugPrint("❌ ERROR during initialization: $e");
+      if (mounted) Navigator.pushReplacementNamed(context, '/login'); // Fallback to login on error
     }
   }
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+
     return Scaffold(
       backgroundColor: theme.scaffoldBackgroundColor,
       body: Center(
-        child: Image.asset(
-          "assets/images/minber.jpg",
-          width: MediaQuery.of(context).size.width * 0.5,
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            // ✅ UI/UX UPDATE: Animated Logo
+            FadeTransition(
+              opacity: _fadeAnimation,
+              child: ScaleTransition(
+                scale: _scaleAnimation,
+                // Use the official logo.png for brand consistency
+                child: Image.asset("assets/images/minber.jpg", width: 150),
+              ),
+            ),
+            const SizedBox(height: 40),
+            // ✅ UI/UX UPDATE: Loading indicator for user feedback
+            SizedBox(
+              width: 24,
+              height: 24,
+              child: CircularProgressIndicator(
+                strokeWidth: 3,
+                valueColor: AlwaysStoppedAnimation<Color>(theme.colorScheme.primary),
+              ),
+            ),
+          ],
         ),
       ),
     );

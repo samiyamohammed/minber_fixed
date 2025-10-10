@@ -1,6 +1,22 @@
+// lib/screens/subscription_page.dart (Fully Updated & Ready to Paste)
+
 import 'package:flutter/material.dart';
 import 'package:fluttertoast/fluttertoast.dart';
-import '../core/app_colors.dart';
+
+// A simple data model for better code structure
+class SubscriptionPlan {
+  final String name;
+  final String price;
+  final List<String> features;
+  final bool isRecommended;
+
+  SubscriptionPlan({
+    required this.name,
+    required this.price,
+    required this.features,
+    this.isRecommended = false,
+  });
+}
 
 class SubscriptionPage extends StatefulWidget {
   const SubscriptionPage({super.key});
@@ -10,82 +26,91 @@ class SubscriptionPage extends StatefulWidget {
 }
 
 class _SubscriptionPageState extends State<SubscriptionPage> {
-  int _selectedIndex = 0;
+  int _selectedIndex = 0; // For BottomNavBar
+  String _selectedPlan = 'Premium Plan'; // To track the chosen plan
 
-  final List<Map<String, String>> _planOptions = [
-    {
-      'name': 'Basic Plan',
-      'price': '\$4.99/month',
-      'features': 'Basic features, limited content',
-    },
-    {
-      'name': 'Premium Plan',
-      'price': '\$9.99/month',
-      'features': 'All features, unlimited access',
-    },
-    {
-      'name': 'Family Plan',
-      'price': '\$14.99/month',
-      'features': 'For up to 5 family members',
-    },
+  // ✅ UI/UX UPDATE: Using a structured list of plan objects
+  final List<SubscriptionPlan> _planOptions = [
+    SubscriptionPlan(
+      name: 'Basic Plan',
+      price: '\$4.99 / month',
+      features: [
+        'Ad-supported streaming',
+        'Limited content library',
+        'Standard definition'
+      ],
+    ),
+    SubscriptionPlan(
+      name: 'Premium Plan',
+      price: '\$9.99 / month',
+      features: [
+        'Ad-free streaming',
+        'Full content library',
+        'HD & 4K streaming',
+        'Offline downloads'
+      ],
+      isRecommended: true,
+    ),
+    SubscriptionPlan(
+      name: 'Family Plan',
+      price: '\$14.99 / month',
+      features: [
+        'All Premium features',
+        'Up to 5 profiles',
+        'Simultaneous streaming'
+      ],
+    ),
   ];
 
   void _onItemTapped(int index) {
     if (_selectedIndex == index) return;
-
-    setState(() {
-      _selectedIndex = index;
-    });
-
+    String routeName = '';
     switch (index) {
       case 0:
-        Navigator.pushReplacementNamed(context, '/home');
+        routeName = '/home';
         break;
       case 1:
-        Navigator.pushReplacementNamed(context, '/media');
+        routeName = '/media';
         break;
       case 2:
-        Navigator.pushReplacementNamed(context, '/prayer');
+        routeName = '/prayer';
         break;
       case 3:
-        Navigator.pushReplacementNamed(context, '/chat');
+        routeName = '/chatbot';
         break;
       case 4:
-        Navigator.pushReplacementNamed(context, '/subapps');
+        routeName = '/subapps';
         break;
     }
+    if (routeName.isNotEmpty)
+      Navigator.pushReplacementNamed(context, routeName);
   }
 
   void _showCancelConfirmation() {
+    // ✅ UI/UX UPDATE: Modern, theme-aware dialog
     showDialog(
       context: context,
       builder: (BuildContext context) {
         final theme = Theme.of(context);
         return AlertDialog(
-          title: Text("Cancel Subscription"),
-          content: Text(
-            "Are you sure you want to cancel your Premium Plan subscription?",
-            style: TextStyle(color: theme.textTheme.bodyLarge!.color),
-          ),
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          title: const Text("Cancel Subscription"),
+          content:
+              const Text("Are you sure you want to cancel your current plan?"),
           actions: [
             TextButton(
               onPressed: () => Navigator.of(context).pop(),
-              child: Text(
-                "Keep Subscription",
-                style: TextStyle(color: theme.primaryColor),
-              ),
+              child: const Text("Keep Plan"),
             ),
             TextButton(
               onPressed: () {
                 Navigator.of(context).pop();
                 Fluttertoast.showToast(
-                  msg: "Subscription cancellation requested",
-                );
+                    msg: "Subscription cancellation requested");
               },
-              child: Text(
-                "Cancel Subscription",
-                style: TextStyle(color: theme.colorScheme.error),
-              ),
+              child: Text("Yes, Cancel",
+                  style: TextStyle(color: theme.colorScheme.error)),
             ),
           ],
         );
@@ -95,319 +120,230 @@ class _SubscriptionPageState extends State<SubscriptionPage> {
 
   @override
   Widget build(BuildContext context) {
-    final size = MediaQuery.of(context).size;
     final theme = Theme.of(context);
+    final textTheme = theme.textTheme;
 
     return Scaffold(
-      backgroundColor: theme.scaffoldBackgroundColor,
       appBar: AppBar(
-        title: Text(
-          "Manage Subscription",
-          style: TextStyle(
-            fontSize: size.width * 0.05,
-            fontWeight: FontWeight.bold,
-            color: theme.textTheme.bodyLarge!.color,
-          ),
-        ),
-        backgroundColor: theme.appBarTheme.backgroundColor,
-        foregroundColor: theme.appBarTheme.foregroundColor,
-        elevation: 1,
-        actions: [
-          IconButton(
-            icon: Icon(Icons.help_outline, size: size.width * 0.06),
-            onPressed: () => Fluttertoast.showToast(msg: "Subscription help"),
-          ),
-          Padding(
-            padding: EdgeInsets.only(right: size.width * 0.03),
-            child: InkWell(
-              onTap: () => Navigator.pushNamed(context, "/profile"),
-              borderRadius: BorderRadius.circular(50),
-              child: CircleAvatar(
-                radius: size.width * 0.05,
-                backgroundImage: const AssetImage("assets/images/profile.jpg"),
-              ),
-            ),
-          ),
-        ],
+        title: const Text("Subscriptions"),
+        centerTitle: true,
       ),
       body: SingleChildScrollView(
-        padding: EdgeInsets.all(size.width * 0.04),
+        padding: const EdgeInsets.all(16.0),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Current Plan Section
-            Text(
-              "Current Plan",
-              style: TextStyle(
-                fontSize: size.width * 0.045,
-                fontWeight: FontWeight.bold,
-                color: theme.textTheme.bodyLarge!.color,
-              ),
-            ),
-            SizedBox(height: size.height * 0.02),
-            Container(
-              padding: EdgeInsets.all(size.width * 0.04),
-              decoration: BoxDecoration(
-                color: theme.cardColor,
-                borderRadius: BorderRadius.circular(12),
-                boxShadow: [
-                  BoxShadow(
-                    color: theme.shadowColor.withOpacity(0.1),
-                    blurRadius: 4,
-                    offset: const Offset(0, 2),
-                  ),
-                ],
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    "Premium Plan - Renews on Mar 7, 2025",
-                    style: TextStyle(
-                      fontSize: size.width * 0.04,
-                      fontWeight: FontWeight.bold,
-                      color: AppColors.primary,
-                    ),
-                  ),
-                  SizedBox(height: size.height * 0.02),
-                  _buildDetailRow("Period", "Yearly", theme, size),
-                  _buildDetailRow("Type", "Apple", theme, size),
-                  _buildDetailRow("Renewal Date", "Mar 7, 2025", theme, size),
-                  _buildDetailRow(
-                    "Subscription Starts",
-                    "Mar 7, 2024",
-                    theme,
-                    size,
-                  ),
-                  SizedBox(height: size.height * 0.02),
-                  Divider(color: theme.dividerColor),
-                  SizedBox(height: size.height * 0.02),
-                  Text(
-                    "You will be charged for a subscription unless you cancel the trial at least 24 hours before the end date.",
-                    style: TextStyle(
-                      fontSize: size.width * 0.035,
-                      color: theme.textTheme.bodyMedium!.color,
-                      fontStyle: FontStyle.italic,
-                    ),
-                  ),
-                ],
-              ),
-            ),
+            // ✅ UI/UX UPDATE: Redesigned "Current Plan" card
+            Text("Your Plan",
+                style: textTheme.titleLarge
+                    ?.copyWith(fontWeight: FontWeight.bold)),
+            const SizedBox(height: 12),
+            _buildCurrentPlanCard(theme),
+            const SizedBox(height: 32),
 
-            SizedBox(height: size.height * 0.04),
-            Divider(color: theme.dividerColor),
-            SizedBox(height: size.height * 0.04),
-
-            // Upgrade Plan Section
-            Text(
-              "Upgrade Plan",
-              style: TextStyle(
-                fontSize: size.width * 0.045,
-                fontWeight: FontWeight.bold,
-                color: theme.textTheme.bodyLarge!.color,
-              ),
-            ),
-            SizedBox(height: size.height * 0.02),
-
+            // ✅ UI/UX UPDATE: Redesigned "Upgrade Plan" section
+            Text("Choose Your Plan",
+                style: textTheme.titleLarge
+                    ?.copyWith(fontWeight: FontWeight.bold)),
+            const SizedBox(height: 16),
             ListView.separated(
               shrinkWrap: true,
               physics: const NeverScrollableScrollPhysics(),
               itemCount: _planOptions.length,
-              separatorBuilder: (_, __) => SizedBox(height: size.height * 0.02),
+              separatorBuilder: (_, __) => const SizedBox(height: 12),
               itemBuilder: (context, index) {
                 final plan = _planOptions[index];
-                final isCurrentPlan = plan['name'] == 'Premium Plan';
-
-                return Container(
-                  padding: EdgeInsets.all(size.width * 0.04),
-                  decoration: BoxDecoration(
-                    color: theme.cardColor,
-                    borderRadius: BorderRadius.circular(12),
-                    border: isCurrentPlan
-                        ? Border.all(color: AppColors.primary, width: 2)
-                        : null,
-                    boxShadow: [
-                      BoxShadow(
-                        color: theme.shadowColor.withOpacity(0.1),
-                        blurRadius: 4,
-                        offset: const Offset(0, 2),
-                      ),
-                    ],
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          Text(
-                            plan['name']!,
-                            style: TextStyle(
-                              fontSize: size.width * 0.04,
-                              fontWeight: FontWeight.bold,
-                              color: theme.textTheme.bodyLarge!.color,
-                            ),
-                          ),
-                          if (isCurrentPlan)
-                            Container(
-                              padding: EdgeInsets.symmetric(
-                                horizontal: size.width * 0.03,
-                                vertical: size.height * 0.005,
-                              ),
-                              decoration: BoxDecoration(
-                                color: AppColors.primary.withOpacity(0.1),
-                                borderRadius: BorderRadius.circular(4),
-                              ),
-                              child: Text(
-                                "Current",
-                                style: TextStyle(
-                                  fontSize: size.width * 0.03,
-                                  color: AppColors.primary,
-                                  fontWeight: FontWeight.bold,
-                                ),
-                              ),
-                            ),
-                        ],
-                      ),
-                      SizedBox(height: size.height * 0.01),
-                      Text(
-                        plan['price']!,
-                        style: TextStyle(
-                          fontSize: size.width * 0.035,
-                          fontWeight: FontWeight.w500,
-                          color: theme.textTheme.bodyLarge!.color,
-                        ),
-                      ),
-                      SizedBox(height: size.height * 0.005),
-                      Text(
-                        plan['features']!,
-                        style: TextStyle(
-                          fontSize: size.width * 0.035,
-                          color: theme.textTheme.bodyMedium!.color,
-                        ),
-                      ),
-                      SizedBox(height: size.height * 0.01),
-                      if (!isCurrentPlan)
-                        SizedBox(
-                          width: double.infinity,
-                          child: ElevatedButton(
-                            onPressed: () {
-                              Fluttertoast.showToast(
-                                msg: "Upgrading to ${plan['name']}",
-                              );
-                              Navigator.pushNamed(context, "/upgradeplan");
-                            },
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: AppColors.primary,
-                              foregroundColor: Colors.white,
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(8),
-                              ),
-                            ),
-                            child: Text("Select Plan"),
-                          ),
-                        ),
-                    ],
-                  ),
-                );
+                return _buildPlanOptionCard(theme, plan);
               },
             ),
+            const SizedBox(height: 24),
 
-            SizedBox(height: size.height * 0.04),
-
-            // Cancel Subscription Button
+            // ✅ UI/UX UPDATE: Primary action button
             SizedBox(
               width: double.infinity,
-              child: OutlinedButton(
-                onPressed: _showCancelConfirmation,
-                style: OutlinedButton.styleFrom(
-                  foregroundColor: theme.colorScheme.error,
-                  side: BorderSide(color: theme.colorScheme.error),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  padding: EdgeInsets.symmetric(vertical: size.height * 0.02),
-                ),
-                child: Text(
-                  "Cancel Subscription",
-                  style: TextStyle(
-                    fontSize: size.width * 0.04,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
+              height: 50,
+              child: ElevatedButton(
+                onPressed: () {
+                  Fluttertoast.showToast(msg: "Proceeding with $_selectedPlan");
+                  Navigator.pushNamed(context, "/upgradeplan");
+                },
+                child: Text("Continue with $_selectedPlan",
+                    style: const TextStyle(fontWeight: FontWeight.bold)),
               ),
             ),
+            const SizedBox(height: 12),
 
-            SizedBox(height: size.height * 0.03),
+            // ✅ UI/UX UPDATE: Secondary action button for cancellation
+            SizedBox(
+              width: double.infinity,
+              height: 50,
+              child: TextButton(
+                onPressed: _showCancelConfirmation,
+                style: TextButton.styleFrom(
+                    foregroundColor: theme.colorScheme.error),
+                child: const Text("Cancel Subscription"),
+              ),
+            ),
           ],
         ),
       ),
+      bottomNavigationBar: _buildBottomNavBar(theme),
+    );
+  }
 
-      bottomNavigationBar: BottomNavigationBar(
-        currentIndex: _selectedIndex,
-        onTap: _onItemTapped,
-        selectedItemColor: AppColors.primary,
-        unselectedItemColor: theme.iconTheme.color,
-        type: BottomNavigationBarType.fixed,
-        selectedFontSize: size.width * 0.03,
-        unselectedFontSize: size.width * 0.03,
-        iconSize: size.width * 0.06,
-        // backgroundColor: theme.bottomAppBarColor,
-        items: [
-          BottomNavigationBarItem(
-            icon: Icon(Icons.home, size: size.width * 0.06),
-            label: "Home",
+  // --- WIDGET BUILDER METHODS ---
+
+  Widget _buildCurrentPlanCard(ThemeData theme) {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: theme.colorScheme.primaryContainer,
+        borderRadius: BorderRadius.circular(16),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(Icons.star_rounded,
+                  color: theme.colorScheme.onPrimaryContainer),
+              const SizedBox(width: 8),
+              Text(
+                "Premium Plan",
+                style: theme.textTheme.titleMedium?.copyWith(
+                  fontWeight: FontWeight.bold,
+                  color: theme.colorScheme.onPrimaryContainer,
+                ),
+              ),
+            ],
           ),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.tv, size: size.width * 0.06),
-            label: "Watch",
-          ),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.mosque, size: size.width * 0.06),
-            label: "Prayer",
-          ),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.chat_bubble_outline, size: size.width * 0.06),
-            activeIcon: Icon(Icons.chat_bubble, size: size.width * 0.06),
-            label: "Chat Box",
-          ),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.explore, size: size.width * 0.06),
-            label: "Sub Apps",
+          const SizedBox(height: 8),
+          Text(
+            "Your subscription is active and renews on Mar 7, 2025.",
+            style: theme.textTheme.bodyMedium?.copyWith(
+                color: theme.colorScheme.onPrimaryContainer.withOpacity(0.8)),
           ),
         ],
       ),
     );
   }
 
-  Widget _buildDetailRow(
-    String label,
-    String value,
-    ThemeData theme,
-    Size size,
-  ) {
-    return Padding(
-      padding: EdgeInsets.symmetric(vertical: size.height * 0.005),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          Text(
-            label,
-            style: TextStyle(
-              fontSize: size.width * 0.035,
-              fontWeight: FontWeight.w500,
-              color: theme.textTheme.bodyLarge!.color,
-            ),
+  Widget _buildPlanOptionCard(ThemeData theme, SubscriptionPlan plan) {
+    // ✅ UI/UX UPDATE: Interactive, animated plan selection card
+    final bool isSelected = plan.name == _selectedPlan;
+
+    return GestureDetector(
+      onTap: () => setState(() => _selectedPlan = plan.name),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 300),
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: isSelected
+              ? theme.colorScheme.primary.withOpacity(0.1)
+              : theme.cardColor,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(
+            color: isSelected ? theme.colorScheme.primary : theme.dividerColor,
+            width: isSelected ? 2.0 : 1.0,
           ),
-          Text(
-            value,
-            style: TextStyle(
-              fontSize: size.width * 0.035,
-              color: theme.textTheme.bodyMedium!.color,
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(
+                  isSelected
+                      ? Icons.radio_button_checked_rounded
+                      : Icons.radio_button_unchecked_rounded,
+                  color:
+                      isSelected ? theme.colorScheme.primary : theme.hintColor,
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Text(
+                    plan.name,
+                    style: theme.textTheme.titleMedium
+                        ?.copyWith(fontWeight: FontWeight.bold),
+                  ),
+                ),
+                if (plan.isRecommended)
+                  Container(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    decoration: BoxDecoration(
+                        color: theme.colorScheme.secondary,
+                        borderRadius: BorderRadius.circular(6)),
+                    child: Text("Recommended",
+                        style: theme.textTheme.labelSmall?.copyWith(
+                            color: theme.colorScheme.onSecondary,
+                            fontWeight: FontWeight.bold)),
+                  ),
+              ],
             ),
-          ),
-        ],
+            const SizedBox(height: 8),
+            Padding(
+              padding: const EdgeInsets.only(left: 36),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(plan.price, style: theme.textTheme.bodyLarge),
+                  const SizedBox(height: 12),
+                  ...plan.features
+                      .map((feature) => Padding(
+                            padding: const EdgeInsets.only(bottom: 6.0),
+                            child: Row(
+                              children: [
+                                Icon(Icons.check_circle_outline_rounded,
+                                    size: 18, color: theme.hintColor),
+                                const SizedBox(width: 8),
+                                Expanded(
+                                    child: Text(feature,
+                                        style: theme.textTheme.bodyMedium
+                                            ?.copyWith(
+                                                color: theme.hintColor))),
+                              ],
+                            ),
+                          ))
+                      .toList(),
+                ],
+              ),
+            ),
+          ],
+        ),
       ),
+    );
+  }
+
+  BottomNavigationBar _buildBottomNavBar(ThemeData theme) {
+    return BottomNavigationBar(
+      currentIndex: _selectedIndex,
+      onTap: _onItemTapped,
+      selectedItemColor: theme.colorScheme.primary,
+      unselectedItemColor: theme.unselectedWidgetColor,
+      type: BottomNavigationBarType.fixed,
+      items: const [
+        BottomNavigationBarItem(
+            icon: Icon(Icons.home_outlined),
+            activeIcon: Icon(Icons.home),
+            label: "Home"),
+        BottomNavigationBarItem(
+            icon: Icon(Icons.tv_outlined),
+            activeIcon: Icon(Icons.tv),
+            label: "Watch"),
+        BottomNavigationBarItem(
+            icon: Icon(Icons.mosque_outlined),
+            activeIcon: Icon(Icons.mosque),
+            label: "Prayer"),
+        BottomNavigationBarItem(
+            icon: Icon(Icons.chat_bubble_outline),
+            activeIcon: Icon(Icons.chat_bubble),
+            label: "Chat Box"),
+        BottomNavigationBarItem(
+            icon: Icon(Icons.explore_outlined),
+            activeIcon: Icon(Icons.explore),
+            label: "Sub Apps"),
+      ],
     );
   }
 }

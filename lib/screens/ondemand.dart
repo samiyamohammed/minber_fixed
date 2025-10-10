@@ -1,6 +1,7 @@
+// lib/screens/on_demand_page.dart (Fully Updated & Ready to Paste)
+
 import 'package:flutter/material.dart';
-import 'package:fluttertoast/fluttertoast.dart';
-import '../core/app_colors.dart';
+import 'package:shimmer/shimmer.dart';
 
 class OnDemandPage extends StatefulWidget {
   const OnDemandPage({super.key});
@@ -11,540 +12,422 @@ class OnDemandPage extends StatefulWidget {
 
 class _OnDemandPageState extends State<OnDemandPage> {
   final TextEditingController _searchController = TextEditingController();
-  int _selectedCategory =
-      0; // 0 = All, 1 = Movies, 2 = Series, 3 = Documentaries
-  int _selectedIndex = 1; // Default = Media tab
+  int _selectedCategory = 0;
+  int _selectedIndex = 1; // For BottomNavBar
 
+  // --- MOCK DATA (Unchanged) ---
   final List<Map<String, dynamic>> _continueWatching = [
     {
       'title': 'A Journey Through Time',
       'description': 'An epic tale of discovery and adventure',
       'progress': 0.7,
-      'thumbnail': 'https://picsum.photos/300/169?random=101',
+      'thumbnail': 'https://picsum.photos/300/169?random=101'
     },
     {
       'title': 'Dinner',
       'description': 'Culinary adventures around the world',
       'progress': 0.4,
-      'thumbnail': 'https://picsum.photos/300/169?random=102',
-    },
+      'thumbnail': 'https://picsum.photos/300/169?random=102'
+    }
   ];
-
   final List<Map<String, dynamic>> _downloaded = [
     {
       'title': 'The Silent Hunter',
       'description': 'Top-rated action thriller of the year',
       'thumbnail': 'https://picsum.photos/300/169?random=105',
-      'size': '1.2GB',
+      'size': '1.2GB'
     },
     {
       'title': 'Wild Wonders: Amazon',
       'description': 'Explore the hidden gems of the rainforest',
       'thumbnail': 'https://picsum.photos/300/169?random=106',
-      'size': '2.1GB',
-    },
+      'size': '2.1GB'
+    }
   ];
-
   final List<Map<String, dynamic>> _trendingVideos = [
     {
       'title': 'The Lost Expedition',
       'description': 'A team of engineers embark on a perfect mission',
       'thumbnail': 'https://picsum.photos/300/169?random=108',
-      'views': '15K views',
+      'views': '15K views'
     },
     {
       'title': 'Echoes of the Past',
       'description': 'Unraveling ancient species in a modern world',
       'thumbnail': 'https://picsum.photos/300/169?random=109',
-      'views': '23K views',
-    },
+      'views': '23K views'
+    }
   ];
 
   void _onItemTapped(int index) {
     if (_selectedIndex == index) return;
-    setState(() => _selectedIndex = index);
-
+    String routeName = '';
     switch (index) {
       case 0:
-        Navigator.pushReplacementNamed(context, '/home');
+        routeName = '/home';
         break;
       case 1:
-        break; // already on Media
+        break;
       case 2:
-        Navigator.pushReplacementNamed(context, '/prayer');
+        routeName = '/prayer';
         break;
       case 3:
-        Navigator.pushReplacementNamed(context, '/wallet');
+        routeName = '/chatbot';
         break;
       case 4:
-        Navigator.pushReplacementNamed(context, '/subapps');
+        routeName = '/subapps';
         break;
     }
+    if (routeName.isNotEmpty)
+      Navigator.pushReplacementNamed(context, routeName);
   }
 
   @override
   Widget build(BuildContext context) {
-    final size = MediaQuery.of(context).size;
     final theme = Theme.of(context);
 
     return Scaffold(
-      backgroundColor: theme.colorScheme.background,
-      appBar: AppBar(
-        title: Text(
-          "On Demand",
-          style: TextStyle(
-            fontSize: size.width * 0.045,
-            fontWeight: FontWeight.bold,
-            color: theme.colorScheme.onBackground,
-          ),
-        ),
-        backgroundColor: theme.appBarTheme.backgroundColor,
-        foregroundColor: theme.colorScheme.onBackground,
-        elevation: 1,
-        actions: [
-          IconButton(
-            icon: Icon(
-              Icons.search,
-              size: size.width * 0.06,
-              color: theme.iconTheme.color,
-            ),
-            onPressed: () {},
-          ),
-          IconButton(
-            icon: Icon(
-              Icons.notifications_none,
-              size: size.width * 0.06,
-              color: theme.iconTheme.color,
-            ),
-            onPressed: () =>
-                Fluttertoast.showToast(msg: "Notifications clicked"),
-          ),
-        ],
-      ),
-      body: SingleChildScrollView(
-        child: Padding(
-          padding: EdgeInsets.symmetric(vertical: size.height * 0.02),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // Search Bar
-              Padding(
-                padding: EdgeInsets.symmetric(horizontal: size.width * 0.04),
-                child: TextField(
-                  controller: _searchController,
-                  style: TextStyle(color: theme.textTheme.bodyMedium?.color),
-                  decoration: InputDecoration(
-                    hintText: "Search videos...",
-                    hintStyle: TextStyle(color: theme.hintColor),
-                    prefixIcon: Icon(
-                      Icons.search,
-                      size: size.width * 0.05,
-                      color: theme.hintColor,
-                    ),
-                    filled: true,
-                    fillColor: theme.cardColor,
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(size.width * 0.06),
-                      borderSide: BorderSide.none,
-                    ),
-                    contentPadding: EdgeInsets.symmetric(
-                      horizontal: size.width * 0.04,
-                      vertical: size.height * 0.015,
-                    ),
-                  ),
-                ),
-              ),
-              SizedBox(height: size.height * 0.03),
-
-              // Continue Watching Section
-              _buildSectionHeader(size, "Continue Watching", "See All", theme),
-              SizedBox(height: size.height * 0.01),
-              SizedBox(
-                height: size.height * 0.25,
-                child: ListView.builder(
-                  scrollDirection: Axis.horizontal,
-                  padding: EdgeInsets.symmetric(horizontal: size.width * 0.04),
-                  itemCount: _continueWatching.length,
-                  itemBuilder: (context, index) => _buildContinueWatchingItem(
-                    _continueWatching[index],
-                    size,
-                    theme,
-                  ),
-                ),
-              ),
-              SizedBox(height: size.height * 0.03),
-
-              // Downloaded Section
-              _buildSectionHeader(size, "Downloaded", "", theme),
-              SizedBox(height: size.height * 0.01),
-              ListView.builder(
-                shrinkWrap: true,
-                physics: const NeverScrollableScrollPhysics(),
-                padding: EdgeInsets.symmetric(horizontal: size.width * 0.04),
-                itemCount: _downloaded.length,
-                itemBuilder: (context, index) =>
-                    _buildDownloadedItem(_downloaded[index], size, theme),
-              ),
-              SizedBox(height: size.height * 0.03),
-
-              // Trending Videos Section
-              _buildSectionHeader(size, "Trending Videos", "", theme),
-              SizedBox(height: size.height * 0.02),
-
-              // Category Tabs
-              Padding(
-                padding: EdgeInsets.symmetric(horizontal: size.width * 0.04),
-                child: SingleChildScrollView(
-                  scrollDirection: Axis.horizontal,
-                  child: Row(
-                    children: List.generate(
-                      4,
-                      (index) => Padding(
-                        padding: EdgeInsets.only(right: size.width * 0.02),
-                        child: _buildCategoryTab(
-                          ["All", "Movies", "Series", "Documentaries"][index],
-                          index,
-                          size,
-                          theme,
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
-              ),
-              SizedBox(height: size.height * 0.02),
-
-              // Trending Videos Grid
-              Padding(
-                padding: EdgeInsets.symmetric(horizontal: size.width * 0.04),
-                child: GridView.builder(
-                  shrinkWrap: true,
-                  physics: const NeverScrollableScrollPhysics(),
-                  gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-                    crossAxisCount: 2,
-                    crossAxisSpacing: size.width * 0.03,
-                    mainAxisSpacing: size.height * 0.02,
-                    childAspectRatio: 0.85,
-                  ),
-                  itemCount: _trendingVideos.length,
-                  itemBuilder: (context, index) => _buildTrendingVideoItem(
-                    _trendingVideos[index],
-                    size,
-                    theme,
-                  ),
-                ),
-              ),
-              SizedBox(height: size.height * 0.03),
+      // ✅ UI/UX UPDATE: Using CustomScrollView with Slivers for a more advanced layout
+      body: CustomScrollView(
+        slivers: [
+          SliverAppBar(
+            title: const Text("On Demand"),
+            floating: true, // App bar appears as you scroll down
+            snap: true,
+            actions: [
+              IconButton(icon: const Icon(Icons.search), onPressed: () {})
             ],
+            bottom: PreferredSize(
+              preferredSize: const Size.fromHeight(60.0),
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+                child: _buildSearchBar(theme),
+              ),
+            ),
           ),
-        ),
-      ),
-      bottomNavigationBar: BottomNavigationBar(
-        currentIndex: _selectedIndex,
-        onTap: _onItemTapped,
-        selectedItemColor: AppColors.primary,
-        unselectedItemColor: theme.iconTheme.color?.withOpacity(0.6),
-        type: BottomNavigationBarType.fixed,
-        selectedFontSize: size.width * 0.03,
-        unselectedFontSize: size.width * 0.03,
-        iconSize: size.width * 0.06,
-        items: const [
-          BottomNavigationBarItem(icon: Icon(Icons.home), label: "Home"),
-          BottomNavigationBarItem(icon: Icon(Icons.tv), label: "Media"),
-          BottomNavigationBarItem(icon: Icon(Icons.mosque), label: "Prayer"),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.account_balance_wallet),
-            label: "Wallet",
+          SliverList(
+            delegate: SliverChildListDelegate([
+              const SizedBox(height: 16),
+              _buildSectionHeader("Continue Watching", "See All", theme),
+              const SizedBox(height: 12),
+              _buildContinueWatchingList(),
+              const SizedBox(height: 24),
+              _buildSectionHeader("My Downloads", "See All", theme),
+              const SizedBox(height: 12),
+              _buildDownloadedList(theme),
+              const SizedBox(height: 24),
+              _buildSectionHeader("Trending Now", "", theme),
+              const SizedBox(height: 12),
+              _buildCategoryChips(theme),
+              const SizedBox(height: 16),
+              _buildTrendingGrid(),
+              const SizedBox(height: 24),
+            ]),
           ),
-          BottomNavigationBarItem(icon: Icon(Icons.explore), label: "Sub Apps"),
         ],
+      ),
+      bottomNavigationBar: _buildBottomNavBar(theme),
+    );
+  }
+
+  // --- WIDGET BUILDER METHODS ---
+
+  Widget _buildSearchBar(ThemeData theme) {
+    return TextField(
+      controller: _searchController,
+      decoration: InputDecoration(
+        hintText: "Search movies, series, shows...",
+        prefixIcon: const Icon(Icons.search),
+        filled: true,
+        fillColor: theme.colorScheme.surfaceVariant.withOpacity(0.6),
+        border: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(30),
+            borderSide: BorderSide.none),
+        contentPadding: const EdgeInsets.symmetric(horizontal: 20),
       ),
     );
   }
 
-  // Section header
-  Widget _buildSectionHeader(
-    Size size,
-    String title,
-    String action,
-    ThemeData theme,
-  ) {
+  Widget _buildSectionHeader(String title, String action, ThemeData theme) {
     return Padding(
-      padding: EdgeInsets.symmetric(horizontal: size.width * 0.04),
+      padding: const EdgeInsets.symmetric(horizontal: 16.0),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Text(
-            title,
-            style: TextStyle(
-              fontSize: size.width * 0.045,
-              fontWeight: FontWeight.bold,
-              color: theme.colorScheme.onBackground,
-            ),
-          ),
+          Text(title,
+              style: theme.textTheme.titleLarge
+                  ?.copyWith(fontWeight: FontWeight.bold)),
           if (action.isNotEmpty)
-            TextButton(
-              onPressed: () {},
-              child: Text(
-                action,
-                style: TextStyle(
-                  fontSize: size.width * 0.032,
-                  color: AppColors.primary,
-                ),
-              ),
-            ),
+            TextButton(onPressed: () {}, child: Text(action)),
         ],
       ),
     );
   }
 
-  // Category tab
-  Widget _buildCategoryTab(
-    String title,
-    int index,
-    Size size,
-    ThemeData theme,
-  ) {
-    final isSelected = _selectedCategory == index;
-    return Container(
-      constraints: BoxConstraints(minWidth: size.width * 0.18),
-      child: TextButton(
-        onPressed: () => setState(() => _selectedCategory = index),
-        style: TextButton.styleFrom(
-          padding: EdgeInsets.symmetric(
-            horizontal: size.width * 0.02,
-            vertical: size.height * 0.005,
-          ),
-          backgroundColor: isSelected
-              ? AppColors.primary.withOpacity(0.1)
-              : Colors.transparent,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(size.width * 0.03),
-          ),
-        ),
-        child: Text(
-          title,
-          style: TextStyle(
-            fontSize: size.width * 0.032,
-            fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
-            color: isSelected
-                ? AppColors.primary
-                : theme.textTheme.bodyMedium?.color?.withOpacity(0.7),
-          ),
-        ),
+  Widget _buildContinueWatchingList() {
+    return SizedBox(
+      height: 220,
+      child: ListView.builder(
+        scrollDirection: Axis.horizontal,
+        padding: const EdgeInsets.symmetric(horizontal: 16),
+        itemCount: _continueWatching.length,
+        itemBuilder: (context, index) =>
+            _ContinueWatchingCard(item: _continueWatching[index]),
       ),
     );
   }
 
-  // Continue Watching Item
-  Widget _buildContinueWatchingItem(
-    Map<String, dynamic> item,
-    Size size,
-    ThemeData theme,
-  ) {
-    return Container(
-      width: size.width * 0.65,
-      margin: EdgeInsets.only(right: size.width * 0.03),
-      decoration: BoxDecoration(
-        color: theme.cardColor,
-        borderRadius: BorderRadius.circular(size.width * 0.04),
-        boxShadow: [
-          BoxShadow(
-            color: theme.shadowColor.withOpacity(0.2),
-            blurRadius: 4,
-            offset: const Offset(0, 2),
-          ),
-        ],
+  Widget _buildDownloadedList(ThemeData theme) {
+    return ListView.builder(
+      shrinkWrap: true,
+      physics: const NeverScrollableScrollPhysics(),
+      padding: const EdgeInsets.symmetric(horizontal: 16),
+      itemCount: _downloaded.length,
+      itemBuilder: (context, index) =>
+          _DownloadedCard(item: _downloaded[index]),
+    );
+  }
+
+  Widget _buildCategoryChips(ThemeData theme) {
+    final categories = ["All", "Movies", "Series", "Documentaries"];
+    return SizedBox(
+      height: 40,
+      child: ListView.separated(
+        scrollDirection: Axis.horizontal,
+        padding: const EdgeInsets.symmetric(horizontal: 16),
+        itemCount: categories.length,
+        separatorBuilder: (_, __) => const SizedBox(width: 8),
+        itemBuilder: (context, index) {
+          return ChoiceChip(
+            label: Text(categories[index]),
+            selected: _selectedCategory == index,
+            onSelected: (isSelected) {
+              if (isSelected) setState(() => _selectedCategory = index);
+            },
+            backgroundColor: theme.colorScheme.surfaceVariant.withOpacity(0.6),
+            selectedColor: theme.colorScheme.primaryContainer,
+            labelStyle: TextStyle(
+                fontWeight: _selectedCategory == index
+                    ? FontWeight.bold
+                    : FontWeight.normal,
+                color: theme.colorScheme.onSurface),
+            side: BorderSide.none,
+          );
+        },
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Stack(
-            children: [
-              Container(
-                height: size.height * 0.12,
-                decoration: BoxDecoration(
-                  borderRadius: BorderRadius.only(
-                    topLeft: Radius.circular(size.width * 0.04),
-                    topRight: Radius.circular(size.width * 0.04),
-                  ),
-                  image: DecorationImage(
-                    image: NetworkImage(item['thumbnail']),
-                    fit: BoxFit.cover,
-                  ),
-                ),
-              ),
-              Positioned(
-                bottom: 0,
-                left: 0,
-                right: 0,
-                child: LinearProgressIndicator(
-                  value: item['progress'],
-                  backgroundColor: theme.dividerColor,
-                  valueColor: AlwaysStoppedAnimation<Color>(AppColors.primary),
-                ),
-              ),
-            ],
-          ),
-          Padding(
-            padding: EdgeInsets.all(size.width * 0.03),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+    );
+  }
+
+  Widget _buildTrendingGrid() {
+    return GridView.builder(
+      shrinkWrap: true,
+      physics: const NeverScrollableScrollPhysics(),
+      padding: const EdgeInsets.symmetric(horizontal: 16),
+      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+        crossAxisCount: 2,
+        crossAxisSpacing: 16,
+        mainAxisSpacing: 16,
+        childAspectRatio: 0.75,
+      ),
+      itemCount: _trendingVideos.length,
+      itemBuilder: (context, index) =>
+          _TrendingCard(item: _trendingVideos[index]),
+    );
+  }
+
+  BottomNavigationBar _buildBottomNavBar(ThemeData theme) {
+    return BottomNavigationBar(
+      currentIndex: _selectedIndex,
+      onTap: _onItemTapped,
+      selectedItemColor: theme.colorScheme.primary,
+      unselectedItemColor: theme.unselectedWidgetColor,
+      type: BottomNavigationBarType.fixed,
+      items: const [
+        BottomNavigationBarItem(
+            icon: Icon(Icons.home_outlined),
+            activeIcon: Icon(Icons.home),
+            label: "Home"),
+        BottomNavigationBarItem(
+            icon: Icon(Icons.tv_outlined),
+            activeIcon: Icon(Icons.tv),
+            label: "Media"),
+        BottomNavigationBarItem(
+            icon: Icon(Icons.mosque_outlined),
+            activeIcon: Icon(Icons.mosque),
+            label: "Prayer"),
+        BottomNavigationBarItem(
+            icon: Icon(Icons.chat_bubble_outline),
+            activeIcon: Icon(Icons.chat_bubble),
+            label: "Chat Bot"),
+        BottomNavigationBarItem(
+            icon: Icon(Icons.explore_outlined),
+            activeIcon: Icon(Icons.explore),
+            label: "Sub Apps"),
+      ],
+    );
+  }
+}
+
+// --- REUSABLE CARD WIDGETS ---
+
+class _ContinueWatchingCard extends StatelessWidget {
+  final Map<String, dynamic> item;
+  const _ContinueWatchingCard({required this.item});
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return SizedBox(
+      width: 280,
+      child: Card(
+        elevation: 0,
+        margin: const EdgeInsets.only(right: 16),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        clipBehavior: Clip.antiAlias,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Stack(
+              alignment: Alignment.center,
               children: [
-                Text(
-                  item['title'],
-                  style: TextStyle(
-                    fontSize: size.width * 0.038,
-                    fontWeight: FontWeight.bold,
-                    color: theme.colorScheme.onBackground,
+                AspectRatio(
+                  aspectRatio: 16 / 9,
+                  child: Image.network(
+                    item['thumbnail'],
+                    fit: BoxFit.cover,
+                    // ✅ UI/UX UPDATE: Shimmer loading for image
+                    loadingBuilder: (context, child, progress) {
+                      if (progress == null) return child;
+                      return Shimmer.fromColors(
+                        baseColor: theme.splashColor,
+                        highlightColor: theme.cardColor,
+                        child: Container(color: Colors.white),
+                      );
+                    },
                   ),
                 ),
-                SizedBox(height: size.height * 0.005),
-                Text(
-                  item['description'],
-                  style: TextStyle(
-                    fontSize: size.width * 0.03,
-                    color: theme.textTheme.bodyMedium?.color?.withOpacity(0.7),
-                  ),
+                // Play button overlay
+                Container(
+                  decoration: BoxDecoration(
+                      color: Colors.black.withOpacity(0.3),
+                      shape: BoxShape.circle),
+                  child: const Icon(Icons.play_arrow_rounded,
+                      color: Colors.white, size: 40),
                 ),
               ],
             ),
-          ),
-        ],
+            Padding(
+              padding: const EdgeInsets.all(12.0),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(item['title'],
+                      style: theme.textTheme.titleMedium
+                          ?.copyWith(fontWeight: FontWeight.bold),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis),
+                  const SizedBox(height: 4),
+                  Text(item['description'],
+                      style: theme.textTheme.bodySmall
+                          ?.copyWith(color: theme.hintColor),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis),
+                ],
+              ),
+            ),
+            const Spacer(),
+            LinearProgressIndicator(
+              value: item['progress'],
+              backgroundColor: theme.dividerColor,
+              valueColor:
+                  AlwaysStoppedAnimation<Color>(theme.colorScheme.primary),
+              minHeight: 6,
+            ),
+          ],
+        ),
       ),
     );
   }
+}
 
-  // Downloaded item
-  Widget _buildDownloadedItem(
-    Map<String, dynamic> item,
-    Size size,
-    ThemeData theme,
-  ) {
-    return Container(
-      margin: EdgeInsets.only(bottom: size.height * 0.02),
-      padding: EdgeInsets.all(size.width * 0.03),
-      decoration: BoxDecoration(
-        color: theme.cardColor,
-        borderRadius: BorderRadius.circular(size.width * 0.04),
-        boxShadow: [
-          BoxShadow(
-            color: theme.shadowColor.withOpacity(0.1),
-            blurRadius: 4,
-            offset: const Offset(0, 2),
-          ),
-        ],
-      ),
+class _DownloadedCard extends StatelessWidget {
+  final Map<String, dynamic> item;
+  const _DownloadedCard({required this.item});
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Card(
+      elevation: 0,
+      margin: const EdgeInsets.only(bottom: 12),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      clipBehavior: Clip.antiAlias,
       child: Row(
         children: [
-          Container(
-            width: size.width * 0.22,
-            height: size.height * 0.09,
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(size.width * 0.03),
-              image: DecorationImage(
-                image: NetworkImage(item['thumbnail']),
-                fit: BoxFit.cover,
+          SizedBox(
+            width: 120,
+            height: 70,
+            child: Image.network(item['thumbnail'], fit: BoxFit.cover),
+          ),
+          Expanded(
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 12.0),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(item['title'],
+                      style: theme.textTheme.titleSmall
+                          ?.copyWith(fontWeight: FontWeight.bold)),
+                  const SizedBox(height: 4),
+                  Text(item['size'],
+                      style: theme.textTheme.bodySmall
+                          ?.copyWith(color: theme.hintColor)),
+                ],
               ),
             ),
           ),
-          SizedBox(width: size.width * 0.03),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  item['title'],
-                  style: TextStyle(
-                    fontSize: size.width * 0.038,
-                    fontWeight: FontWeight.bold,
-                    color: theme.colorScheme.onBackground,
-                  ),
-                ),
-                SizedBox(height: size.height * 0.003),
-                Text(
-                  item['description'],
-                  style: TextStyle(
-                    fontSize: size.width * 0.03,
-                    color: theme.textTheme.bodyMedium?.color?.withOpacity(0.7),
-                  ),
-                ),
-                SizedBox(height: size.height * 0.003),
-                Text(
-                  item['size'],
-                  style: TextStyle(
-                    fontSize: size.width * 0.028,
-                    color: theme.textTheme.bodySmall?.color,
-                  ),
-                ),
-              ],
-            ),
-          ),
+          IconButton(onPressed: () {}, icon: const Icon(Icons.more_vert)),
         ],
       ),
     );
   }
+}
 
-  // Trending Video Item
-  Widget _buildTrendingVideoItem(
-    Map<String, dynamic> item,
-    Size size,
-    ThemeData theme,
-  ) {
-    return Container(
-      decoration: BoxDecoration(
-        color: theme.cardColor,
-        borderRadius: BorderRadius.circular(size.width * 0.04),
-        boxShadow: [
-          BoxShadow(
-            color: theme.shadowColor.withOpacity(0.1),
-            blurRadius: 4,
-            offset: const Offset(0, 2),
-          ),
-        ],
-      ),
+class _TrendingCard extends StatelessWidget {
+  final Map<String, dynamic> item;
+  const _TrendingCard({required this.item});
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Card(
+      elevation: 0,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      clipBehavior: Clip.antiAlias,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Container(
-            height: size.height * 0.12,
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.only(
-                topLeft: Radius.circular(size.width * 0.04),
-                topRight: Radius.circular(size.width * 0.04),
-              ),
-              image: DecorationImage(
-                image: NetworkImage(item['thumbnail']),
-                fit: BoxFit.cover,
-              ),
-            ),
+          AspectRatio(
+            aspectRatio: 1.0,
+            child: Image.network(item['thumbnail'], fit: BoxFit.cover),
           ),
-          Padding(
-            padding: EdgeInsets.all(size.width * 0.03),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  item['title'],
-                  style: TextStyle(
-                    fontSize: size.width * 0.036,
-                    fontWeight: FontWeight.bold,
-                    color: theme.colorScheme.onBackground,
-                  ),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
-                SizedBox(height: size.height * 0.003),
-                Text(
-                  item['description'],
-                  style: TextStyle(
-                    fontSize: size.width * 0.028,
-                    color: theme.textTheme.bodyMedium?.color?.withOpacity(0.7),
-                  ),
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ],
+          Expanded(
+            child: Padding(
+              padding: const EdgeInsets.all(12.0),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(item['title'],
+                      style: theme.textTheme.titleSmall
+                          ?.copyWith(fontWeight: FontWeight.bold),
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis),
+                  const Spacer(),
+                  Text(item['views'],
+                      style: theme.textTheme.bodySmall
+                          ?.copyWith(color: theme.hintColor)),
+                ],
+              ),
             ),
           ),
         ],

@@ -1,6 +1,7 @@
+// lib/screens/chatbot_screen.dart (Fully Updated & Ready to Paste)
+
+import 'dart:async';
 import 'package:flutter/material.dart';
-import 'package:fluttertoast/fluttertoast.dart';
-import '../core/app_colors.dart';
 
 class ChatBotPage extends StatefulWidget {
   const ChatBotPage({super.key});
@@ -10,37 +11,88 @@ class ChatBotPage extends StatefulWidget {
 }
 
 class _ChatBotPageState extends State<ChatBotPage> {
-  int _selectedIndex = 3; // 👈 Default = Chat Bot tab
+  final int _selectedIndex = 3; // For BottomNavBar highlighting
   final TextEditingController _messageController = TextEditingController();
-  final List<Map<String, String>> _chatMessages = [
-    {'sender': 'user', 'text': 'What are the prayer times for my location?'},
-    {
-      'sender': 'ai',
-      'text':
-          'I can help with that. Please provide your current location or enable location services for precise prayer times.',
-    },
-    {
-      'sender': 'user',
-      'text': 'Can you recommend a good Hala! movie to watch tonight?',
-    },
-    {
-      'sender': 'user',
-      'text': 'I\'m looking for a new Islamic podcast. Any suggestions?',
-    },
-    {
-      'sender': 'ai',
-      'text':
-          'Certainly! Based on your interests, \'The Seerah Podcast\' by Yasir Qadhi',
-    },
-  ];
 
-  void _onItemTapped(int index) {
-    if (_selectedIndex == index) return; // avoid reloading same tab
+  // ✅ UI/UX UPDATE: Keys for animating the list and controlling scroll
+  final GlobalKey<AnimatedListState> _listKey = GlobalKey<AnimatedListState>();
+  final ScrollController _scrollController = ScrollController();
 
-    setState(() {
-      _selectedIndex = index;
+  final List<Map<String, String>> _chatMessages = [];
+
+  @override
+  void initState() {
+    super.initState();
+    // Start with an initial welcome message from the AI
+    _addInitialMessage();
+  }
+
+  @override
+  void dispose() {
+    _messageController.dispose();
+    _scrollController.dispose();
+    super.dispose();
+  }
+
+  void _addInitialMessage() {
+    // Add the first message without animation when the screen loads
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _chatMessages.add({
+        'sender': 'ai',
+        'text':
+            "Hello! I'm your Minber TV Assistant. How can I help you today?",
+      });
+      setState(() {});
     });
+  }
 
+  // Helper function to add a message to the list with an animation
+  void _addMessage(String sender, String text) {
+    // Insert new message into the list
+    final index = _chatMessages.length;
+    _chatMessages.add({'sender': sender, 'text': text});
+
+    // Animate the insertion
+    _listKey.currentState?.insertItem(
+      index,
+      duration: const Duration(milliseconds: 400),
+    );
+
+    // ✅ UI/UX UPDATE: Automatically scroll to the bottom
+    _scrollToBottom();
+  }
+
+  void _sendMessage() {
+    final text = _messageController.text.trim();
+    if (text.isEmpty) return;
+
+    // Add user message
+    _addMessage('user', text);
+    _messageController.clear();
+
+    // Simulate AI response
+    Future.delayed(const Duration(milliseconds: 1000), () {
+      _addMessage(
+          'ai', 'Thank you for your question. I am processing your request...');
+    });
+  }
+
+  void _scrollToBottom() {
+    // Wait a moment for the list to build, then scroll
+    Timer(const Duration(milliseconds: 100), () {
+      if (_scrollController.hasClients) {
+        _scrollController.animateTo(
+          _scrollController.position.maxScrollExtent,
+          duration: const Duration(milliseconds: 300),
+          curve: Curves.easeOut,
+        );
+      }
+    });
+  }
+
+  // --- NAVIGATION (Simplified) ---
+  void _onItemTapped(int index) {
+    if (_selectedIndex == index) return;
     switch (index) {
       case 0:
         Navigator.pushReplacementNamed(context, '/home');
@@ -52,323 +104,238 @@ class _ChatBotPageState extends State<ChatBotPage> {
         Navigator.pushReplacementNamed(context, '/prayer');
         break;
       case 3:
-        // already on Chat Bot
-        break;
+        break; // Already here
       case 4:
         Navigator.pushReplacementNamed(context, '/subapps');
         break;
     }
   }
 
-  void _sendMessage() {
-    if (_messageController.text.trim().isEmpty) return;
-
-    setState(() {
-      _chatMessages.add({'sender': 'user', 'text': _messageController.text});
-      _messageController.clear();
-    });
-
-    // Simulate AI response after a short delay
-    Future.delayed(const Duration(milliseconds: 500), () {
-      setState(() {
-        _chatMessages.add({
-          'sender': 'ai',
-          'text': 'I understand your question. Let me help you with that.',
-        });
-      });
-    });
-  }
-
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final size = MediaQuery.of(context).size;
+    final colorScheme = theme.colorScheme;
 
     return Scaffold(
-      backgroundColor: theme.scaffoldBackgroundColor,
       appBar: AppBar(
-        title: Text(
-          "AI Assistant",
-          style: theme.textTheme.titleLarge?.copyWith(
-            fontSize: size.width * 0.05,
-            fontWeight: FontWeight.bold,
-          ),
-        ),
-        backgroundColor: theme.appBarTheme.backgroundColor,
-        foregroundColor: theme.appBarTheme.foregroundColor,
+        title: const Text("AI Assistant"),
         elevation: 1,
-        actions: [
-          IconButton(
-            icon: Icon(Icons.notifications_none, size: size.width * 0.06),
-            onPressed: () {
-              Navigator.pushNamed(context, "/notifications");
-            },
-          ),
-          Padding(
-            padding: EdgeInsets.only(right: size.width * 0.03),
-            child: InkWell(
-              onTap: () {
-                Navigator.pushNamed(context, "/profile");
-              },
-              borderRadius: BorderRadius.circular(50),
-              child: CircleAvatar(
-                radius: size.width * 0.05,
-                backgroundImage: const AssetImage("assets/images/profile.jpg"),
-              ),
-            ),
-          ),
-        ],
       ),
       body: Column(
         children: [
-          // Welcome message
+          // ✅ UI/UX UPDATE: Quick action suggestion chips
           Container(
-            padding: EdgeInsets.all(size.width * 0.04),
-            color: theme.cardColor,
-            child: Row(
-              children: [
-                CircleAvatar(
-                  radius: size.width * 0.06,
-                  backgroundColor: AppColors.primary.withOpacity(0.2),
-                  child: Icon(
-                    Icons.smart_toy_outlined,
-                    color: AppColors.primary,
-                    size: size.width * 0.06,
-                  ),
-                ),
-                SizedBox(width: size.width * 0.03),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        "Hello! I'm your Hala! Assistant.",
-                        style: theme.textTheme.bodyLarge?.copyWith(
-                          fontSize: size.width * 0.04,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                      Text(
-                        "How can I assist you today?",
-                        style: theme.textTheme.bodyMedium?.copyWith(
-                          fontSize: size.width * 0.035,
-                          color: theme.textTheme.bodySmall?.color,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-          ),
-          SizedBox(height: size.height * 0.01),
-
-          // Quick action buttons
-          Container(
-            padding: EdgeInsets.symmetric(vertical: size.height * 0.01),
-            color: theme.cardColor,
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-              children: [
-                _buildQuickActionButton(
-                  context,
-                  "Prayer Times",
-                  Icons.access_time,
-                  () {
-                    Navigator.pushNamed(context, '/prayer-times');
-                  },
-                ),
-                _buildQuickActionButton(
-                  context,
-                  "Movie Recommendations",
-                  Icons.movie,
-                  () {
-                    Fluttertoast.showToast(
-                      msg: "Movie recommendations clicked",
-                    );
-                  },
-                ),
-              ],
+            padding: const EdgeInsets.symmetric(vertical: 8.0),
+            color: theme.scaffoldBackgroundColor,
+            child: SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              padding: const EdgeInsets.symmetric(horizontal: 12),
+              child: Row(
+                children: [
+                  _buildQuickActionChip(
+                      "Prayer Times", Icons.access_time_filled_rounded),
+                  const SizedBox(width: 8),
+                  _buildQuickActionChip(
+                      "Find a Show", Icons.movie_filter_rounded),
+                  const SizedBox(width: 8),
+                  _buildQuickActionChip(
+                      "Qibla Direction", Icons.explore_rounded),
+                ],
+              ),
             ),
           ),
 
-          // Chat messages
+          // ✅ UI/UX UPDATE: Chat messages now use AnimatedList
           Expanded(
-            child: ListView.builder(
-              padding: EdgeInsets.all(size.width * 0.04),
-              itemCount: _chatMessages.length,
-              itemBuilder: (context, index) {
+            child: AnimatedList(
+              key: _listKey,
+              controller: _scrollController,
+              padding: const EdgeInsets.all(16.0),
+              initialItemCount: _chatMessages.length,
+              itemBuilder: (context, index, animation) {
                 final message = _chatMessages[index];
-                final isUser = message['sender'] == 'user';
-
-                return Container(
-                  margin: EdgeInsets.only(bottom: size.height * 0.02),
-                  child: Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    mainAxisAlignment: isUser
-                        ? MainAxisAlignment.end
-                        : MainAxisAlignment.start,
-                    children: [
-                      if (!isUser)
-                        CircleAvatar(
-                          radius: size.width * 0.045,
-                          backgroundColor: AppColors.primary.withOpacity(0.2),
-                          child: Icon(
-                            Icons.smart_toy_outlined,
-                            color: AppColors.primary,
-                            size: size.width * 0.045,
-                          ),
-                        ),
-                      if (!isUser) SizedBox(width: size.width * 0.03),
-                      Flexible(
-                        child: Container(
-                          padding: EdgeInsets.all(size.width * 0.04),
-                          decoration: BoxDecoration(
-                            color: isUser
-                                ? AppColors.primary.withOpacity(0.1)
-                                : theme.cardColor,
-                            borderRadius: BorderRadius.circular(16),
-                            boxShadow: [
-                              BoxShadow(
-                                color: theme.dividerColor.withOpacity(0.1),
-                                blurRadius: 4,
-                                offset: const Offset(0, 2),
-                              ),
-                            ],
-                          ),
-                          child: Text(
-                            message['text']!,
-                            style: theme.textTheme.bodyMedium?.copyWith(
-                              fontSize: size.width * 0.04,
-                            ),
-                          ),
-                        ),
-                      ),
-                      if (isUser) SizedBox(width: size.width * 0.03),
-                      if (isUser)
-                        CircleAvatar(
-                          radius: size.width * 0.045,
-                          backgroundImage: const AssetImage(
-                            "assets/images/profile.jpg",
-                          ),
-                        ),
-                    ],
-                  ),
-                );
+                return _buildAnimatedMessageItem(message, animation);
               },
             ),
           ),
 
-          // Message input
-          Container(
-            padding: EdgeInsets.all(size.width * 0.04),
-            color: theme.cardColor,
-            child: Row(
-              children: [
-                Expanded(
-                  child: Container(
-                    padding: EdgeInsets.symmetric(
-                      horizontal: size.width * 0.04,
-                    ),
-                    decoration: BoxDecoration(
-                      color:
-                          theme.inputDecorationTheme.fillColor ??
-                          theme.colorScheme.surfaceVariant,
-                      borderRadius: BorderRadius.circular(24),
-                    ),
-                    child: TextField(
-                      controller: _messageController,
-                      decoration: InputDecoration(
-                        hintText: "Type your message...",
-                        border: InputBorder.none,
-                        hintStyle: theme.textTheme.bodySmall,
-                        suffixIcon: IconButton(
-                          icon: Icon(Icons.send, color: AppColors.primary),
-                          onPressed: _sendMessage,
-                        ),
-                      ),
-                      onSubmitted: (value) => _sendMessage(),
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
+          // ✅ UI/UX UPDATE: Modern message input bar
+          _buildMessageInputBar(),
         ],
       ),
-
-      // Bottom Navigation Bar
       bottomNavigationBar: BottomNavigationBar(
         currentIndex: _selectedIndex,
         onTap: _onItemTapped,
-        selectedItemColor: AppColors.primary,
-        unselectedItemColor: theme.iconTheme.color?.withOpacity(0.6),
+        // ✅ UI/UX UPDATE: Using theme colors for consistency
+        selectedItemColor: colorScheme.primary,
+        unselectedItemColor: theme.unselectedWidgetColor,
         type: BottomNavigationBarType.fixed,
-        selectedFontSize: size.width * 0.03,
-        unselectedFontSize: size.width * 0.03,
-        iconSize: size.width * 0.06,
-        items: [
+        items: const [
           BottomNavigationBarItem(
-            icon: Icon(Icons.home, size: size.width * 0.06),
-            label: "Home",
-          ),
+              icon: Icon(Icons.home_outlined),
+              activeIcon: Icon(Icons.home),
+              label: "Home"),
           BottomNavigationBarItem(
-            icon: Icon(Icons.tv, size: size.width * 0.06),
-            label: "Watch",
-          ),
+              icon: Icon(Icons.tv_outlined),
+              activeIcon: Icon(Icons.tv),
+              label: "Watch"),
           BottomNavigationBarItem(
-            icon: Icon(Icons.mosque, size: size.width * 0.06),
-            label: "Prayer",
-          ),
+              icon: Icon(Icons.mosque_outlined),
+              activeIcon: Icon(Icons.mosque),
+              label: "Prayer"),
           BottomNavigationBarItem(
-            icon: Icon(Icons.chat_bubble_outline, size: size.width * 0.06),
-            activeIcon: Icon(Icons.chat_bubble, size: size.width * 0.06),
-            label: "Chat Box",
-          ),
+              icon: Icon(Icons.chat_bubble_outline),
+              activeIcon: Icon(Icons.chat_bubble),
+              label: "Chat Box"),
           BottomNavigationBarItem(
-            icon: Icon(Icons.explore, size: size.width * 0.06),
-            label: "Sub Apps",
-          ),
+              icon: Icon(Icons.explore_outlined),
+              activeIcon: Icon(Icons.explore),
+              label: "Sub Apps"),
         ],
       ),
     );
   }
 
-  Widget _buildQuickActionButton(
-    BuildContext context,
-    String text,
-    IconData icon,
-    VoidCallback onTap,
-  ) {
-    final theme = Theme.of(context);
-    final size = MediaQuery.of(context).size;
+  // --- WIDGET BUILDER METHODS ---
 
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(12),
-      child: Container(
-        padding: EdgeInsets.symmetric(
-          horizontal: size.width * 0.04,
-          vertical: size.height * 0.01,
+  Widget _buildAnimatedMessageItem(
+      Map<String, String> message, Animation<double> animation) {
+    // This wrapper provides the fade and slide animation for new messages
+    return FadeTransition(
+      opacity: animation,
+      child: SlideTransition(
+        position: Tween<Offset>(
+          begin: const Offset(0, 0.5),
+          end: Offset.zero,
+        ).animate(CurvedAnimation(parent: animation, curve: Curves.easeOut)),
+        child: _ChatMessageBubble(
+          sender: message['sender']!,
+          text: message['text']!,
         ),
-        decoration: BoxDecoration(
-          color: AppColors.primary.withOpacity(0.1),
-          borderRadius: BorderRadius.circular(12),
-        ),
+      ),
+    );
+  }
+
+  Widget _buildMessageInputBar() {
+    final theme = Theme.of(context);
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12.0, vertical: 8.0),
+      decoration: BoxDecoration(
+        color: theme.cardColor,
+        boxShadow: [
+          BoxShadow(
+              color: theme.shadowColor.withOpacity(0.05),
+              blurRadius: 10,
+              offset: const Offset(0, -2)),
+        ],
+      ),
+      child: SafeArea(
         child: Row(
           children: [
-            Icon(icon, color: AppColors.primary, size: size.width * 0.045),
-            SizedBox(width: size.width * 0.02),
-            Text(
-              text,
-              style: theme.textTheme.bodyMedium?.copyWith(
-                fontSize: size.width * 0.035,
-                fontWeight: FontWeight.w500,
-                color: AppColors.primary,
+            Expanded(
+              child: TextField(
+                controller: _messageController,
+                decoration: InputDecoration(
+                  hintText: "Ask me anything...",
+                  filled: true,
+                  fillColor: theme.colorScheme.surfaceVariant.withOpacity(0.6),
+                  contentPadding:
+                      const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(30),
+                    borderSide: BorderSide.none,
+                  ),
+                ),
+                onSubmitted: (_) => _sendMessage(),
               ),
+            ),
+            const SizedBox(width: 8),
+            IconButton.filled(
+              style: IconButton.styleFrom(
+                backgroundColor: theme.colorScheme.primary,
+                foregroundColor: theme.colorScheme.onPrimary,
+              ),
+              icon: const Icon(Icons.send_rounded),
+              onPressed: _sendMessage,
             ),
           ],
         ),
+      ),
+    );
+  }
+
+  Widget _buildQuickActionChip(String text, IconData icon) {
+    final theme = Theme.of(context);
+    return ActionChip(
+      avatar: Icon(icon, size: 18, color: theme.colorScheme.primary),
+      label: Text(text),
+      labelStyle: TextStyle(
+          color: theme.colorScheme.primary, fontWeight: FontWeight.w600),
+      onPressed: () {
+        _addMessage('user', text);
+        Future.delayed(const Duration(milliseconds: 500), () {
+          _addMessage(
+              'ai', 'Sure! Let me get the "$text" information for you.');
+        });
+      },
+      backgroundColor: theme.colorScheme.primary.withOpacity(0.1),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+      side: BorderSide.none,
+    );
+  }
+}
+
+// A dedicated widget for the chat bubble UI for cleaner code
+class _ChatMessageBubble extends StatelessWidget {
+  final String sender;
+  final String text;
+
+  const _ChatMessageBubble({required this.sender, required this.text});
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+    final bool isUser = sender == 'user';
+
+    return Container(
+      margin: const EdgeInsets.symmetric(vertical: 8.0),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisAlignment:
+            isUser ? MainAxisAlignment.end : MainAxisAlignment.start,
+        children: [
+          if (!isUser)
+            CircleAvatar(
+              backgroundColor: colorScheme.primary.withOpacity(0.1),
+              child: Icon(Icons.smart_toy_rounded,
+                  color: colorScheme.primary, size: 20),
+            ),
+          const SizedBox(width: 12),
+          Flexible(
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+              decoration: BoxDecoration(
+                color:
+                    isUser ? colorScheme.primary : colorScheme.surfaceVariant,
+                borderRadius: BorderRadius.only(
+                  topLeft: const Radius.circular(20),
+                  topRight: const Radius.circular(20),
+                  bottomLeft: Radius.circular(isUser ? 20 : 4),
+                  bottomRight: Radius.circular(isUser ? 4 : 20),
+                ),
+              ),
+              child: Text(
+                text,
+                style: theme.textTheme.bodyMedium?.copyWith(
+                  color: isUser
+                      ? colorScheme.onPrimary
+                      : colorScheme.onSurfaceVariant,
+                ),
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }

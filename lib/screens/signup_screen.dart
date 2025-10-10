@@ -1,11 +1,12 @@
+// lib/screens/signup_page.dart (Fully Updated & Ready to Paste)
+
 import 'dart:convert';
-import 'package:minber_super_app_new_fixed/screens/email_verification_page.dart'; // Import the new page
+import 'package:minber_super_app_new_fixed/screens/email_verification_page.dart';
 import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:flutter/material.dart';
 import 'package:fluttertoast/fluttertoast.dart';
 import 'package:http/http.dart' as http;
 import 'package:logger/logger.dart';
-import '../core/app_colors.dart'; // Assuming AppColors is defined
 
 class SignUpPage extends StatefulWidget {
   const SignUpPage({super.key});
@@ -21,288 +22,227 @@ class _SignUpPageState extends State<SignUpPage> {
   final _passwordController = TextEditingController();
   final _confirmPasswordController = TextEditingController();
 
-  // --- UI STATE ---
   bool _isLoading = false;
   bool _isPasswordObscured = true;
   bool _isConfirmPasswordObscured = true;
-
-  // --- LOGGER INSTANCE ---
   final Logger _logger = Logger();
 
-  // The register URL from your API documentation
   final String registerUrl = "http://msa.merkuz.com:3636/users/register";
+
+  // ✅ UI/UX UPDATE: State for real-time password validation
+  bool _has8Chars = false;
+  bool _hasUppercase = false;
+  bool _hasNumber = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _passwordController.addListener(_updatePasswordRequirements);
+  }
 
   @override
   void dispose() {
     _nameController.dispose();
     _emailController.dispose();
+    _passwordController.removeListener(_updatePasswordRequirements);
     _passwordController.dispose();
     _confirmPasswordController.dispose();
     super.dispose();
   }
 
+  void _updatePasswordRequirements() {
+    setState(() {
+      final password = _passwordController.text;
+      _has8Chars = password.length >= 8;
+      _hasUppercase = password.contains(RegExp(r'[A-Z]'));
+      _hasNumber = password.contains(RegExp(r'[0-9]'));
+    });
+  }
+
   void _showToast(String message, {Color bgColor = Colors.red}) {
     Fluttertoast.showToast(
-      msg: message,
-      toastLength: Toast.LENGTH_LONG,
-      gravity: ToastGravity.BOTTOM,
-      backgroundColor: bgColor,
-      textColor: Colors.white,
-      fontSize: 16.0,
-    );
+        msg: message, backgroundColor: bgColor, toastLength: Toast.LENGTH_LONG);
   }
 
   Future<void> _signUp() async {
-    // 1. FORM VALIDATION
-    if (!_formKey.currentState!.validate()) {
-      _logger.w("Form validation failed.");
-      return;
-    }
+    FocusManager.instance.primaryFocus?.unfocus();
+    if (!_formKey.currentState!.validate()) return;
 
-    // 2. OFFLINE CHECK
     final connectivityResult = await (Connectivity().checkConnectivity());
     if (connectivityResult.contains(ConnectivityResult.none)) {
-      _logger.w("Sign-up attempt while offline.");
-      _showToast("❌ You are offline. Please check your internet connection.");
+      _showToast("❌ No internet connection.");
       return;
     }
 
     if (mounted) setState(() => _isLoading = true);
-    _logger.i('--- SIGN UP PROCESS STARTED ---');
-
-    // 3. CORRECTED REQUEST BODY
-    final requestBody = {
-      "username": _nameController.text.trim(),
-      "email": _emailController.text.trim(),
-      "password": _passwordController.text.trim(),
-    };
-    final jsonBody = jsonEncode(requestBody);
-
-    _logger.i('Request URL: $registerUrl');
-    _logger.d('Request JSON Body: $jsonBody');
 
     try {
       final response = await http.post(
         Uri.parse(registerUrl),
         headers: {"Content-Type": "application/json"},
-        body: jsonBody,
+        body: jsonEncode({
+          "username": _nameController.text.trim(),
+          "email": _emailController.text.trim(),
+          "password": _passwordController.text.trim()
+        }),
       );
-
-      _logger.i("Status Code Received: ${response.statusCode}");
-      _logger.d("Response Body Received: ${response.body}");
       final responseData = jsonDecode(response.body);
 
-      // 4. SUCCESS HANDLING (Status Code 201)
-      if (response.statusCode == 201) {
-        _logger.i('Registration successful. Awaiting email verification.');
-
-        // Use the message from the API response for the toast
-        final apiMessage = responseData["message"] ??
-            "Registration successful! Please check your email for a verification code.";
-        _showToast(apiMessage, bgColor: Colors.green);
-
-        // *** CHANGE: NAVIGATE TO VERIFICATION PAGE ***
-        // Navigate to the new verification page and pass the user's email.
-        if (mounted) {
+      if (mounted) {
+        if (response.statusCode == 201) {
+          final apiMessage = responseData["message"] ??
+              "Registration successful! Please verify your email.";
+          _showToast(apiMessage, bgColor: Colors.green);
           Navigator.push(
-            context,
-            MaterialPageRoute(
-              builder: (context) => EmailVerificationPage(
-                email: _emailController.text.trim(),
-              ),
-            ),
-          );
-        }
-      } else {
-        // 5. ENHANCED ERROR HANDLING
-        String errorMessage = "An unexpected error occurred.";
-        if (responseData is Map<String, dynamic>) {
-          errorMessage = responseData["message"] ??
-              responseData["error"] ??
-              "Could not read error message.";
-        }
-
-        _logger.e('API Error: ${response.statusCode} - $errorMessage');
-
-        // Provide user-friendly messages based on status code
-        switch (response.statusCode) {
-          case 400:
-            _showToast("❌ Please check the details you entered.");
-            break;
-          case 409: // Conflict
-            _showToast("❌ This email address is already in use.");
-            break;
-          case 500:
-            _showToast(
-                "🔧 There's a problem on our end. Please try again later.");
-            break;
-          default:
-            _showToast("❌ Error ${response.statusCode}: $errorMessage");
+              context,
+              MaterialPageRoute(
+                  builder: (context) => EmailVerificationPage(
+                      email: _emailController.text.trim())));
+        } else {
+          String errorMessage =
+              responseData["message"] ?? "An unexpected error occurred.";
+          _showToast("❌ Error: $errorMessage");
         }
       }
-    } on http.ClientException catch (e, st) {
-      _logger.e('Network ClientException:', error: e, stackTrace: st);
-      _showToast("⚠️ You appear to be offline. Please check your connection.");
-    } catch (e, st) {
-      _logger.f('Fatal Unhandled Exception:', error: e, stackTrace: st);
-      _showToast("⚠️ An unexpected error occurred: $e");
+    } catch (e) {
+      _showToast("⚠️ An unexpected error occurred.");
     } finally {
-      _logger.i('--- SIGN UP PROCESS ENDED ---');
       if (mounted) setState(() => _isLoading = false);
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    final size = MediaQuery.of(context).size;
+    final theme = Theme.of(context);
+    final textTheme = theme.textTheme;
 
     return Scaffold(
       body: SafeArea(
-        child: SingleChildScrollView(
-          padding: EdgeInsets.symmetric(horizontal: size.width * 0.08),
-          child: Form(
-            key: _formKey,
-            child: Column(
-              children: [
-                SizedBox(height: size.height * 0.05),
-                Text(
-                  "Create Your Account",
-                  style: TextStyle(
-                    fontSize: size.width * 0.08,
-                    fontWeight: FontWeight.bold,
-                    color: AppColors.primary,
-                  ),
-                ),
-                SizedBox(height: size.height * 0.015),
-                Text(
-                  "Begin your journey with Minber Super App and enjoy effortless access.",
-                  textAlign: TextAlign.center,
-                  style: TextStyle(fontSize: size.width * 0.04),
-                ),
-                SizedBox(height: size.height * 0.04),
-                // Name Field (corresponds to 'username')
-                _buildTextField(
-                  size,
-                  controller: _nameController,
-                  label: "Username",
-                  hint: "Enter your full name or username",
-                  icon: Icons.person,
-                  validator: (value) {
-                    if (value == null || value.trim().isEmpty)
-                      return "Username is required";
-                    return null;
-                  },
-                ),
-                SizedBox(height: size.height * 0.02),
-                // Email Field
-                _buildTextField(
-                  size,
-                  controller: _emailController,
-                  label: "Email",
-                  hint: "Enter your email address",
-                  icon: Icons.email,
-                  keyboardType: TextInputType.emailAddress,
-                  validator: (value) {
-                    if (value == null || value.trim().isEmpty)
-                      return "Email is required";
-                    if (!RegExp(r'^[^@]+@[^@]+\.[^@]+').hasMatch(value))
-                      return "Enter a valid email";
-                    return null;
-                  },
-                ),
-                SizedBox(height: size.height * 0.02),
+        child: Center(
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.symmetric(horizontal: 24.0),
+            child: Form(
+              key: _formKey,
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Image.asset('assets/images/minber.jpg', height: 80),
+                  const SizedBox(height: 24),
+                  Text("Create Your Account",
+                      textAlign: TextAlign.center,
+                      style: textTheme.headlineMedium
+                          ?.copyWith(fontWeight: FontWeight.bold)),
+                  const SizedBox(height: 8),
+                  Text("Join us to unlock a world of features.",
+                      textAlign: TextAlign.center,
+                      style: textTheme.bodyLarge
+                          ?.copyWith(color: theme.hintColor)),
+                  const SizedBox(height: 32),
 
-                // **** PASSWORD FIELD WITH EYE ICON ****
-                _buildTextField(
-                  size,
-                  controller: _passwordController,
-                  label: "Password",
-                  hint: "Create a password",
-                  icon: Icons.lock,
-                  obscure: _isPasswordObscured,
-                  validator: (value) {
-                    if (value == null || value.isEmpty)
-                      return "Password is required";
-                    if (value.length < 6)
-                      return "Password must be at least 6 characters";
-                    return null;
-                  },
-                  // This is the eye icon implementation
-                  suffixIcon: IconButton(
-                    icon: Icon(_isPasswordObscured
-                        ? Icons.visibility_off
-                        : Icons.visibility),
-                    color: AppColors.primary.withOpacity(0.7),
-                    onPressed: () => setState(
-                        () => _isPasswordObscured = !_isPasswordObscured),
+                  TextFormField(
+                    controller: _nameController,
+                    decoration: const InputDecoration(
+                        labelText: "Username",
+                        prefixIcon: Icon(Icons.person_outline_rounded)),
+                    validator: (v) => (v == null || v.trim().isEmpty)
+                        ? "Username is required"
+                        : null,
                   ),
-                ),
-                SizedBox(height: size.height * 0.02),
-
-                // **** CONFIRM PASSWORD FIELD WITH EYE ICON ****
-                _buildTextField(
-                  size,
-                  controller: _confirmPasswordController,
-                  label: "Confirm Password",
-                  hint: "Confirm your password",
-                  icon: Icons.lock_reset,
-                  obscure: _isConfirmPasswordObscured,
-                  validator: (value) {
-                    if (value != _passwordController.text)
-                      return "Passwords do not match";
-                    return null;
-                  },
-                  // This is the eye icon implementation
-                  suffixIcon: IconButton(
-                    icon: Icon(_isConfirmPasswordObscured
-                        ? Icons.visibility_off
-                        : Icons.visibility),
-                    color: AppColors.primary.withOpacity(0.7),
-                    onPressed: () => setState(() => _isConfirmPasswordObscured =
-                        !_isConfirmPasswordObscured),
+                  const SizedBox(height: 16),
+                  TextFormField(
+                    controller: _emailController,
+                    keyboardType: TextInputType.emailAddress,
+                    decoration: const InputDecoration(
+                        labelText: "Email Address",
+                        prefixIcon: Icon(Icons.email_outlined)),
+                    validator: (v) =>
+                        (v == null || v.trim().isEmpty || !v.contains('@'))
+                            ? "Please enter a valid email"
+                            : null,
                   ),
-                ),
-                SizedBox(height: size.height * 0.04),
-                // Sign Up Button
-                SizedBox(
-                  width: double.infinity,
-                  height: size.height * 0.07,
-                  child: ElevatedButton(
-                    onPressed: _isLoading ? null : _signUp,
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: AppColors.primary,
-                      foregroundColor: Colors.white,
-                      shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12)),
-                    ),
-                    child: _isLoading
-                        ? const CircularProgressIndicator(color: Colors.white)
-                        : Text(
-                            "Sign Up",
-                            style: TextStyle(
-                                fontSize: size.width * 0.045,
-                                fontWeight: FontWeight.bold),
-                          ),
-                  ),
-                ),
-                SizedBox(height: size.height * 0.03),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    const Text("Already have an account? "),
-                    GestureDetector(
-                      onTap: () => Navigator.of(context).pop(),
-                      child: Text(
-                        "Login",
-                        style: TextStyle(
-                            color: AppColors.primary,
-                            fontWeight: FontWeight.bold),
+                  const SizedBox(height: 16),
+                  TextFormField(
+                    controller: _passwordController,
+                    obscureText: _isPasswordObscured,
+                    decoration: InputDecoration(
+                      labelText: "Password",
+                      prefixIcon: const Icon(Icons.lock_outline_rounded),
+                      suffixIcon: IconButton(
+                        icon: Icon(_isPasswordObscured
+                            ? Icons.visibility_off_outlined
+                            : Icons.visibility_outlined),
+                        onPressed: () => setState(
+                            () => _isPasswordObscured = !_isPasswordObscured),
                       ),
                     ),
-                  ],
-                ),
-                SizedBox(height: size.height * 0.05),
-              ],
+                    validator: (v) => (v == null || v.isEmpty)
+                        ? "Password is required"
+                        : ((!_has8Chars || !_hasUppercase || !_hasNumber)
+                            ? "Password does not meet requirements"
+                            : null),
+                  ),
+                  const SizedBox(height: 16),
+
+                  // ✅ UI/UX UPDATE: Interactive password strength checklist
+                  _buildPasswordChecklist(),
+                  const SizedBox(height: 16),
+
+                  TextFormField(
+                    controller: _confirmPasswordController,
+                    obscureText: _isConfirmPasswordObscured,
+                    decoration: InputDecoration(
+                      labelText: "Confirm Password",
+                      prefixIcon: const Icon(Icons.lock_outline_rounded),
+                      suffixIcon: IconButton(
+                        icon: Icon(_isConfirmPasswordObscured
+                            ? Icons.visibility_off_outlined
+                            : Icons.visibility_outlined),
+                        onPressed: () => setState(() =>
+                            _isConfirmPasswordObscured =
+                                !_isConfirmPasswordObscured),
+                      ),
+                    ),
+                    validator: (v) => (v != _passwordController.text)
+                        ? "Passwords do not match"
+                        : null,
+                  ),
+                  const SizedBox(height: 24),
+
+                  SizedBox(
+                    height: 50,
+                    child: ElevatedButton(
+                      onPressed: _isLoading ? null : _signUp,
+                      child: AnimatedSwitcher(
+                        duration: const Duration(milliseconds: 300),
+                        child: _isLoading
+                            ? const SizedBox(
+                                height: 24,
+                                width: 24,
+                                child:
+                                    CircularProgressIndicator(strokeWidth: 3))
+                            : const Text("Create Account",
+                                style: TextStyle(fontWeight: FontWeight.bold)),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 24),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Text("Already have an account?",
+                          style: textTheme.bodyMedium),
+                      TextButton(
+                        onPressed: () => Navigator.of(context).pop(),
+                        child: Text("Sign In",
+                            style: TextStyle(
+                                color: theme.colorScheme.primary,
+                                fontWeight: FontWeight.bold)),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
             ),
           ),
         ),
@@ -310,42 +250,58 @@ class _SignUpPageState extends State<SignUpPage> {
     );
   }
 
-  // This helper widget now correctly handles the suffixIcon
-  Widget _buildTextField(
-    Size size, {
-    required TextEditingController controller,
-    required String label,
-    required String hint,
-    required IconData icon,
-    bool obscure = false,
-    TextInputType keyboardType = TextInputType.text,
-    String? Function(String?)? validator,
-    Widget? suffixIcon,
-  }) {
-    return TextFormField(
-      controller: controller,
-      obscureText: obscure,
-      validator: validator,
-      keyboardType: keyboardType,
-      decoration: InputDecoration(
-        labelText: label,
-        hintText: hint,
-        prefixIcon: Icon(icon, color: AppColors.primary.withOpacity(0.7)),
-        suffixIcon: suffixIcon, // The IconButton is passed here
-        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-        enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
-          borderSide: BorderSide(color: AppColors.primary.withOpacity(0.3)),
-        ),
-        focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
-          borderSide: BorderSide(color: AppColors.primary, width: 2),
-        ),
-        contentPadding: EdgeInsets.symmetric(
-          horizontal: size.width * 0.04,
-          vertical: size.height * 0.02,
-        ),
+  Widget _buildPasswordChecklist() {
+    return Container(
+      padding: const EdgeInsets.all(16.0),
+      decoration: BoxDecoration(
+        color: Theme.of(context).colorScheme.surfaceVariant.withOpacity(0.5),
+        borderRadius: BorderRadius.circular(12),
       ),
+      child: Column(
+        children: [
+          _PasswordRequirementItem(
+              isValid: _has8Chars, text: "At least 8 characters"),
+          const SizedBox(height: 8),
+          _PasswordRequirementItem(
+              isValid: _hasUppercase,
+              text: "Contains an uppercase letter (A-Z)"),
+          const SizedBox(height: 8),
+          _PasswordRequirementItem(
+              isValid: _hasNumber, text: "Contains a number (0-9)"),
+        ],
+      ),
+    );
+  }
+}
+
+class _PasswordRequirementItem extends StatelessWidget {
+  final bool isValid;
+  final String text;
+  const _PasswordRequirementItem({required this.isValid, required this.text});
+
+  @override
+  Widget build(BuildContext context) {
+    final successColor = Colors.green.shade600;
+    final defaultColor =
+        Theme.of(context).textTheme.bodyMedium?.color?.withOpacity(0.7);
+    return Row(
+      children: [
+        AnimatedSwitcher(
+          duration: const Duration(milliseconds: 300),
+          transitionBuilder: (child, animation) =>
+              ScaleTransition(scale: animation, child: child),
+          child: Icon(
+              isValid ? Icons.check_circle_rounded : Icons.circle_outlined,
+              key: ValueKey<bool>(isValid),
+              color: isValid ? successColor : defaultColor,
+              size: 20),
+        ),
+        const SizedBox(width: 12),
+        Text(text,
+            style: TextStyle(
+                color: isValid ? successColor : defaultColor,
+                fontWeight: isValid ? FontWeight.w600 : FontWeight.normal)),
+      ],
     );
   }
 }

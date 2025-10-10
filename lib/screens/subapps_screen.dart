@@ -1,92 +1,76 @@
+// lib/screens/subapps_screen.dart (Fully Updated & Ready to Paste)
+
 import 'package:flutter/material.dart';
 import 'package:fluttertoast/fluttertoast.dart';
 import 'package:url_launcher/url_launcher.dart';
-import 'package:webview_flutter/webview_flutter.dart'; // Make sure this is added to pubspec.yaml
+import 'package:webview_flutter/webview_flutter.dart';
+import 'package:flutter_staggered_animations/flutter_staggered_animations.dart'; // ✅ UI/UX UPDATE: Import for list animation
 
 // --- Screen for displaying the web content ---
-// This screen will be navigated to when Kirbgebeya is tapped.
 class EmbeddedWebScreen extends StatefulWidget {
   final String url;
   final String appName;
 
-  const EmbeddedWebScreen({
-    super.key,
-    required this.url,
-    required this.appName,
-  });
+  const EmbeddedWebScreen(
+      {super.key, required this.url, required this.appName});
 
   @override
   State<EmbeddedWebScreen> createState() => _EmbeddedWebScreenState();
 }
 
 class _EmbeddedWebScreenState extends State<EmbeddedWebScreen> {
-  late WebViewController _controller;
+  late final WebViewController _controller;
+  // ✅ UI/UX UPDATE: State for loading indicator
+  double _loadingProgress = 0;
 
   @override
   void initState() {
     super.initState();
     _controller = WebViewController()
-      ..setJavaScriptMode(JavaScriptMode.unrestricted) // Enable JavaScript
-      ..setBackgroundColor(const Color(0x00000000)) // Transparent background
+      ..setJavaScriptMode(JavaScriptMode.unrestricted)
+      ..setBackgroundColor(Colors.transparent)
       ..setNavigationDelegate(
         NavigationDelegate(
-          onPageStarted: (String url) {
-            // This callback is part of NavigationDelegate
-            debugPrint('Page started loading: $url');
-            // You can show a loading indicator here if needed.
-          },
-          onProgress: (int progress) {
-            // Update loading bar if you have one
-            debugPrint('WebView is loading (progress : $progress%)');
-          },
-          onPageFinished: (String url) {
-            // This callback is part of NavigationDelegate
-            debugPrint('Page finished loading: $url');
-            // You can hide the loading indicator here.
-          },
+          onProgress: (int progress) =>
+              setState(() => _loadingProgress = progress / 100),
+          onPageStarted: (String url) => setState(() => _loadingProgress = 0),
+          onPageFinished: (String url) => setState(() => _loadingProgress = 0),
           onWebResourceError: (WebResourceError error) {
-            // Handle errors from the web page loading
-            debugPrint('Page resource error: ${error.description}');
             Fluttertoast.showToast(
-              msg: "Error loading ${widget.appName}: ${error.description}",
-            );
-          },
-          onNavigationRequest: (NavigationRequest request) {
-            // This allows you to control which URLs the WebView can navigate to.
-            // For now, we allow all navigations.
-            return NavigationDecision.navigate;
+                msg: "Error loading ${widget.appName}: ${error.description}");
           },
         ),
       )
-      ..loadRequest(Uri.parse(widget.url)); // Load the specified URL
+      ..loadRequest(Uri.parse(widget.url));
   }
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final size = MediaQuery.of(context).size;
-
     return Scaffold(
       appBar: AppBar(
-        title: Text(
-          widget.appName, // Dynamically set the AppBar title
-          style: TextStyle(
-            fontSize: size.width * 0.05,
-            fontWeight: FontWeight.bold,
-            color: theme.colorScheme.onBackground,
+        title: Text(widget.appName),
+        actions: [
+          // ✅ UI/UX UPDATE: Added a refresh button for the webview
+          IconButton(
+            icon: const Icon(Icons.refresh),
+            onPressed: () => _controller.reload(),
           ),
-        ),
-        backgroundColor: theme.appBarTheme.backgroundColor,
-        foregroundColor: theme.colorScheme.onBackground,
-        leading: IconButton(
-          icon: Icon(Icons.arrow_back, color: theme.colorScheme.onBackground),
-          onPressed: () =>
-              Navigator.pop(context), // Navigate back to the previous screen
-        ),
+        ],
+        // ✅ UI/UX UPDATE: Linear progress indicator for loading
+        bottom: _loadingProgress > 0 && _loadingProgress < 1
+            ? PreferredSize(
+                preferredSize: const Size.fromHeight(4.0),
+                child: LinearProgressIndicator(
+                    value: _loadingProgress,
+                    backgroundColor: Colors.transparent),
+              )
+            : null,
       ),
-      body: WebViewWidget(
-        controller: _controller,
-      ), // Display the WebView content
+      // ✅ UI/UX UPDATE: Added Pull-to-Refresh for the WebView
+      body: RefreshIndicator(
+        onRefresh: () async => _controller.reload(),
+        child: WebViewWidget(controller: _controller),
+      ),
     );
   }
 }
@@ -94,283 +78,170 @@ class _EmbeddedWebScreenState extends State<EmbeddedWebScreen> {
 // --- KiriyogdeyraPage Widget ---
 class KiriyogdeyraPage extends StatefulWidget {
   const KiriyogdeyraPage({super.key});
-
   @override
   State<KiriyogdeyraPage> createState() => _KiriyogdeyraPageState();
 }
 
 class _KiriyogdeyraPageState extends State<KiriyogdeyraPage> {
-  int _selectedIndex = 4; // Default to the Sub Apps tab
-
+  int _selectedIndex = 4;
   final List<Map<String, dynamic>> _featuredApps = [
-    // Kirbgebeya moved to the first position
     {
       'name': 'Kirbgebeya',
       'description': 'Shop online and find great deals',
       'image': 'assets/images/kirbgebeya.png',
-      'url': 'https://kirbgebeya.com/', // URL for Kirbgebeya
+      'url': 'https://kirbgebeya.com/'
     },
     {
       'name': 'Besirah',
-      'description': 'Explore historical and religious content on demand.',
-      'image': 'assets/images/besira.jpg',
-      // No URL provided, so it will trigger a toast or internal navigation.
+      'description': 'Explore historical and religious content',
+      'image': 'assets/images/besira.jpg'
     },
     {
       'name': 'Alfurqan App',
       'description': 'Read, listen, and understand the Quran',
-      'image': 'assets/images/alfuqan.jpg',
-      // No URL provided.
+      'image': 'assets/images/alfuqan.jpg'
     },
   ];
 
   void _onItemTapped(int index) {
-    if (_selectedIndex == index)
-      return; // Do nothing if already on the same tab
-
-    setState(() => _selectedIndex = index); // Update the selected tab
-
-    // Navigate to the corresponding route based on the selected index
+    if (_selectedIndex == index) return;
+    String routeName = '';
     switch (index) {
       case 0:
-        Navigator.pushReplacementNamed(context, '/home');
+        routeName = '/home';
         break;
       case 1:
-        Navigator.pushReplacementNamed(context, '/media');
+        routeName = '/media';
         break;
       case 2:
-        Navigator.pushReplacementNamed(context, '/prayer');
+        routeName = '/prayer';
         break;
       case 3:
-        Navigator.pushReplacementNamed(context, '/Chat Bot');
+        routeName = '/chatbot';
         break;
       case 4:
-        // Currently on KiriyogdeyraPage (Sub Apps), so no navigation needed if tapped again.
-        // If navigating from another page to this one, this is the correct route.
-        Navigator.pushReplacementNamed(context, '/subapps');
         break;
     }
+    if (routeName.isNotEmpty)
+      Navigator.pushReplacementNamed(context, routeName);
   }
 
-  /// Handles the action when an app card is tapped.
   void _openApp(Map<String, dynamic> app) {
-    final appName = app['name'];
-    final appUrl = app['url']; // Get the URL if it exists
-
-    if (appName == 'Kirbgebeya' && appUrl != null && appUrl is String) {
-      // If it's Kirbgebeya and has a URL, navigate to the embedded web view screen.
+    final url = app['url'] as String?;
+    if (url != null) {
       Navigator.push(
-        context,
-        MaterialPageRoute(
-          // Pass the URL and app name to the embedded screen.
-          builder: (context) =>
-              EmbeddedWebScreen(url: appUrl, appName: appName),
-        ),
-      );
-    } else if (appUrl != null && appUrl is String) {
-      // If it's any other app with a URL, launch it in the external browser.
-      _launchURL(appUrl, appName);
+          context,
+          MaterialPageRoute(
+              builder: (context) =>
+                  EmbeddedWebScreen(url: url, appName: app['name'])));
     } else {
-      // If no URL is provided, show a toast message.
-      // You can add internal navigation logic here for apps that are part of your project.
-      Fluttertoast.showToast(msg: "Opening $appName");
-      // Example of internal navigation:
-      // if (appName == 'Besirah') {
-      //   Navigator.pushNamed(context, '/besirah_details');
-      // }
-    }
-  }
-
-  /// Launches a URL in the external browser.
-  Future<void> _launchURL(String url, String appName) async {
-    final uri = Uri.parse(url);
-    try {
-      if (await canLaunchUrl(uri)) {
-        // Use LaunchMode.externalApplication to open in the system's browser.
-        await launchUrl(uri, mode: LaunchMode.externalApplication);
-        Fluttertoast.showToast(msg: "Opening $appName in browser");
-      } else {
-        Fluttertoast.showToast(
-          msg: "Could not open $appName. Please check the URL.",
-        );
-      }
-    } catch (e) {
-      Fluttertoast.showToast(msg: "Error opening $appName: ${e.toString()}");
+      Fluttertoast.showToast(msg: "Opening ${app['name']}");
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    final size = MediaQuery.of(context).size;
     final theme = Theme.of(context);
-
     return Scaffold(
-      backgroundColor: theme.colorScheme.background,
-      appBar: AppBar(
-        title: Text(
-          "Sub Apps",
-          style: TextStyle(
-            fontSize: size.width * 0.05,
-            fontWeight: FontWeight.bold,
-            color: theme.colorScheme.onBackground,
-          ),
-        ),
-        backgroundColor: theme.appBarTheme.backgroundColor,
-        foregroundColor: theme.colorScheme.onBackground,
-        elevation: 1,
-        actions: [
-          IconButton(
-            icon: Icon(
-              Icons.search,
-              color: theme.iconTheme.color,
-              size: size.width * 0.06,
-            ),
-            onPressed: () => Fluttertoast.showToast(
-              msg: "Search apps",
-            ), // Placeholder for search functionality
-          ),
-          Padding(
-            padding: EdgeInsets.only(right: size.width * 0.03),
-            child: InkWell(
-              onTap: () => Navigator.pushNamed(
-                context,
-                "/profile",
-              ), // Navigate to profile
-              borderRadius: BorderRadius.circular(50), // Make tap area circular
-              child: CircleAvatar(
-                radius: size.width * 0.05,
-                backgroundImage: const AssetImage(
-                  "assets/images/profile.jpg",
-                ), // Your profile image
+      appBar: AppBar(title: const Text("Sub Apps"), centerTitle: true),
+      body: AnimationLimiter(
+        // ✅ UI/UX UPDATE: Wrapper for staggered animations
+        child: ListView.builder(
+          padding: const EdgeInsets.all(16.0),
+          itemCount: _featuredApps.length,
+          itemBuilder: (context, index) {
+            final app = _featuredApps[index];
+            // ✅ UI/UX UPDATE: Each list item is now animated
+            return AnimationConfiguration.staggeredList(
+              position: index,
+              duration: const Duration(milliseconds: 375),
+              child: SlideAnimation(
+                verticalOffset: 50.0,
+                child: FadeInAnimation(
+                  child: _buildAppCard(theme, app),
+                ),
               ),
-            ),
-          ),
-        ],
-      ),
-      body: SingleChildScrollView(
-        padding: EdgeInsets.all(size.width * 0.04),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            ListView.separated(
-              shrinkWrap: true,
-              physics:
-                  const NeverScrollableScrollPhysics(), // Disable scrolling for ListView inside SingleChildScrollView
-              itemCount: _featuredApps.length,
-              separatorBuilder: (_, __) =>
-                  SizedBox(height: size.height * 0.03), // Spacing between cards
-              itemBuilder: (context, index) {
-                final app = _featuredApps[index];
-                return GestureDetector(
-                  onTap: () => _openApp(app), // Make the entire card tappable
-                  child: Container(
-                    padding: EdgeInsets.all(size.width * 0.04),
-                    decoration: BoxDecoration(
-                      color: theme.cardColor, // Use theme's card color
-                      borderRadius: BorderRadius.circular(
-                        12,
-                      ), // Rounded corners for the card
-                      boxShadow: [
-                        BoxShadow(
-                          color: theme.shadowColor.withOpacity(
-                            0.1,
-                          ), // Subtle shadow
-                          blurRadius: 4,
-                          offset: const Offset(0, 2),
-                        ),
-                      ],
-                    ),
-                    child: Row(
-                      crossAxisAlignment: CrossAxisAlignment
-                          .center, // Vertically align items in the row
-                      children: [
-                        // App Icon
-                        Container(
-                          width: size.width * 0.15,
-                          height: size.width * 0.15,
-                          decoration: BoxDecoration(
-                            borderRadius: BorderRadius.circular(12),
-                            image: DecorationImage(
-                              image: AssetImage(app['image']), // Load app image
-                              fit: BoxFit
-                                  .cover, // Ensure image covers the container
-                            ),
-                          ),
-                        ),
-                        SizedBox(
-                          width: size.width * 0.04,
-                        ), // Spacing between icon and text
-                        // App Info (Name and Description)
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                app['name'],
-                                style: TextStyle(
-                                  fontSize: size.width * 0.045,
-                                  fontWeight: FontWeight.bold,
-                                  color: theme.colorScheme.onBackground,
-                                ),
-                              ),
-                              SizedBox(
-                                height: size.height * 0.005,
-                              ), // Small spacing between name and description
-                              Text(
-                                app['description'],
-                                style: TextStyle(
-                                  fontSize: size.width * 0.035,
-                                  color: theme.textTheme.bodyMedium?.color
-                                      ?.withOpacity(
-                                        0.7,
-                                      ), // Slightly dimmed description
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-
-                        // Forward Arrow Icon - indicates interactivity
-                        Icon(
-                          Icons.arrow_forward_ios,
-                          color: theme
-                              .colorScheme
-                              .primary, // Use theme's primary color
-                          size: size.width * 0.05,
-                        ),
-                      ],
-                    ),
-                  ),
-                );
-              },
-            ),
-          ],
+            );
+          },
         ),
       ),
-      bottomNavigationBar: BottomNavigationBar(
-        currentIndex: _selectedIndex, // Set the currently selected item
-        onTap: _onItemTapped, // Handler for tap events
-        selectedItemColor: theme.colorScheme.primary, // Color for selected item
-        unselectedItemColor: theme.textTheme.bodyMedium?.color?.withOpacity(
-          0.7,
-        ), // Color for unselected items
-        type: BottomNavigationBarType
-            .fixed, // Use fixed type for consistent appearance
-        selectedFontSize: size.width * 0.03,
-        unselectedFontSize: size.width * 0.03,
-        iconSize: size.width * 0.06,
-        items: const [
-          BottomNavigationBarItem(icon: Icon(Icons.home), label: "Home"),
-          BottomNavigationBarItem(icon: Icon(Icons.tv), label: "Media"),
-          BottomNavigationBarItem(icon: Icon(Icons.mosque), label: "Prayer"),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.chat_bubble_outline),
-            activeIcon: Icon(Icons.chat_bubble), // Active state icon
-            label: "Chat Box",
+      bottomNavigationBar: _buildBottomNavBar(theme),
+    );
+  }
+
+  // --- WIDGET BUILDER METHODS ---
+
+  Widget _buildAppCard(ThemeData theme, Map<String, dynamic> app) {
+    // ✅ UI/UX UPDATE: Modernized app card design
+    return Card(
+      elevation: 0,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      margin: const EdgeInsets.only(bottom: 16),
+      child: InkWell(
+        onTap: () => _openApp(app),
+        borderRadius: BorderRadius.circular(16),
+        child: Padding(
+          padding: const EdgeInsets.all(16.0),
+          child: Row(
+            children: [
+              ClipRRect(
+                borderRadius: BorderRadius.circular(12),
+                child: Image.asset(app['image'],
+                    width: 60, height: 60, fit: BoxFit.cover),
+              ),
+              const SizedBox(width: 16),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(app['name'],
+                        style: theme.textTheme.titleMedium
+                            ?.copyWith(fontWeight: FontWeight.bold)),
+                    const SizedBox(height: 4),
+                    Text(app['description'],
+                        style: theme.textTheme.bodyMedium
+                            ?.copyWith(color: theme.hintColor)),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 8),
+              Icon(Icons.chevron_right_rounded, color: theme.hintColor),
+            ],
           ),
-          BottomNavigationBarItem(icon: Icon(Icons.explore), label: "Sub Apps"),
-        ],
+        ),
       ),
+    );
+  }
+
+  BottomNavigationBar _buildBottomNavBar(ThemeData theme) {
+    return BottomNavigationBar(
+      currentIndex: _selectedIndex,
+      onTap: _onItemTapped,
+      selectedItemColor: theme.colorScheme.primary,
+      unselectedItemColor: theme.unselectedWidgetColor,
+      type: BottomNavigationBarType.fixed,
+      items: const [
+        BottomNavigationBarItem(
+            icon: Icon(Icons.home_outlined),
+            activeIcon: Icon(Icons.home),
+            label: "Home"),
+        BottomNavigationBarItem(
+            icon: Icon(Icons.tv_outlined),
+            activeIcon: Icon(Icons.tv),
+            label: "Media"),
+        BottomNavigationBarItem(
+            icon: Icon(Icons.mosque_outlined),
+            activeIcon: Icon(Icons.mosque),
+            label: "Prayer"),
+        BottomNavigationBarItem(
+            icon: Icon(Icons.chat_bubble_outline),
+            activeIcon: Icon(Icons.chat_bubble),
+            label: "Chat Bot"),
+        BottomNavigationBarItem(
+            icon: Icon(Icons.explore_outlined),
+            activeIcon: Icon(Icons.explore),
+            label: "Sub Apps"),
+      ],
     );
   }
 }
