@@ -88,12 +88,24 @@ class UserProvider extends ChangeNotifier {
     }
   }
 
+ // Inside your UserProvider class
+
   Future<void> logout() async {
     _user = null;
     final prefs = await SharedPreferences.getInstance();
+
+    //
+    // ▼▼▼▼ THE FIX IS HERE ▼▼▼▼
+    //
+    // You MUST set this flag to false to complete the logout process.
+    await prefs.setBool('isLoggedIn', false);
+    //
+    // ▲▲▲▲ END OF FIX ▲▲▲▲
+    //
+
     await prefs.remove('accessToken');
-    await prefs.remove('user');
-    logger.i("User logged out and data cleared.");
+    await prefs.remove('user'); // Assuming you save user object here
+    logger.i("User logged out and all session data cleared.");
     notifyListeners();
   }
 }

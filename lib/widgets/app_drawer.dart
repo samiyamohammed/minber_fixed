@@ -1,11 +1,11 @@
-// lib/widgets/app_drawer.dart
+// lib/widgets/app_drawer.dart (Fully Corrected & Ready to Paste)
 
 import 'package:flutter/material.dart';
 import 'package:logger/logger.dart';
-import 'package:minber_super_app_new_fixed/core/theme_notifier.dart';
 import 'package:provider/provider.dart';
+
+import '../core/theme_notifier.dart';
 import '../core/app_colors.dart';
-import '../main.dart' as main;
 import '../providers/user_provider.dart';
 
 class AppDrawer extends StatelessWidget {
@@ -25,7 +25,6 @@ class AppDrawer extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // ✅ This is now the single source of truth for the user's login state
     final userProvider = Provider.of<UserProvider>(context);
     final isLoggedIn = userProvider.user != null;
 
@@ -33,7 +32,6 @@ class AppDrawer extends StatelessWidget {
       child: ListView(
         padding: EdgeInsets.zero,
         children: [
-          // This Consumer rebuilds ONLY the header when user data changes
           Consumer<UserProvider>(
             builder: (context, provider, child) {
               final logger = Logger();
@@ -49,7 +47,6 @@ class AppDrawer extends StatelessWidget {
               }
             },
           ),
-
           _buildDrawerItem(
             icon: Icons.home_outlined,
             text: 'Home',
@@ -64,7 +61,6 @@ class AppDrawer extends StatelessWidget {
                 Navigator.pushNamed(context, "/profile");
               },
             ),
-          // ... rest of your drawer items
           _buildDrawerItem(
             icon: Icons.settings_outlined,
             text: 'Settings',
@@ -72,7 +68,41 @@ class AppDrawer extends StatelessWidget {
               Navigator.pop(context);
             },
           ),
+          _buildDrawerItem(
+            icon: Icons.notifications_outlined,
+            text: 'Notifications',
+            onTap: () {
+              Navigator.pushNamed(context, "/notifications");
+            },
+          ),
           const Divider(indent: 16, endIndent: 16),
+          ValueListenableBuilder<ThemeMode>(
+            valueListenable: themeNotifier,
+            builder: (context, currentMode, child) {
+              return SwitchListTile(
+                title: const Text('Dark Mode'),
+                secondary: Icon(
+                  currentMode == ThemeMode.dark
+                      ? Icons.dark_mode_outlined
+                      : Icons.light_mode_outlined,
+                ),
+                value: currentMode == ThemeMode.dark,
+                onChanged: (isDark) {
+                  final newMode = isDark ? ThemeMode.dark : ThemeMode.light;
+                  themeNotifier.value = newMode;
+                  saveThemePreference(newMode);
+                },
+              );
+            },
+          ),
+          const Divider(indent: 16, endIndent: 16),
+          _buildDrawerItem(
+            icon: Icons.info_outline,
+            text: 'About Us',
+            onTap: () {
+              Navigator.pop(context);
+            },
+          ),
           if (isLoggedIn)
             _buildDrawerItem(
               icon: Icons.logout,
@@ -83,6 +113,8 @@ class AppDrawer extends StatelessWidget {
       ),
     );
   }
+
+  // --- WIDGET BUILDER METHODS ---
 
   Widget _buildLoggedInHeader(BuildContext context, UserProvider provider) {
     final user = provider.user!;
@@ -134,7 +166,6 @@ class AppDrawer extends StatelessWidget {
     );
   }
 
-  // Other helper methods (_buildLoggedOutHeader, etc.) remain the same
   Widget _buildLoggedOutHeader(BuildContext context) {
     return DrawerHeader(
       decoration: BoxDecoration(color: Theme.of(context).cardColor),
@@ -188,6 +219,7 @@ class AppDrawer extends StatelessWidget {
     );
   }
 
+  // --- THIS IS THE CORRECTED FUNCTION ---
   void _showLogoutConfirmation(BuildContext context) {
     showDialog(
       context: context,
@@ -202,13 +234,16 @@ class AppDrawer extends StatelessWidget {
             ),
             FilledButton(
               child: const Text("Logout"),
-              onPressed: () {
-                // Use the provider to log out
-                Provider.of<UserProvider>(dialogContext, listen: false)
+              onPressed: () async {
+                // Wait for the logout process to complete
+                await Provider.of<UserProvider>(context, listen: false)
                     .logout();
-                Navigator.of(dialogContext).pop(); // Close the dialog
-                Navigator.of(context)
-                    .pushReplacementNamed('/login'); // Go to login page
+
+                // Then, perform the robust navigation
+                if (context.mounted) {
+                  Navigator.of(context, rootNavigator: true)
+                      .pushNamedAndRemoveUntil('/login', (route) => false);
+                }
               },
             ),
           ],

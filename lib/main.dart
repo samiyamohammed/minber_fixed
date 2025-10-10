@@ -13,6 +13,7 @@ import 'services/firebase-notification.dart'; // For FIREBASE push notifications
 // --- PROVIDER & CORE IMPORTS ---
 import 'providers/user_provider.dart';
 import 'core/app_colors.dart';
+import 'core/theme_notifier.dart'; // ✅ 1. IMPORT YOUR NEW THEME NOTIFIER
 
 // --- SCREEN IMPORTS ---
 import 'screens/onboarding_screen.dart';
@@ -20,7 +21,7 @@ import 'screens/home_screen.dart';
 import 'screens/login_screen.dart';
 import 'screens/signup_screen.dart';
 import 'screens/Profile & Settings.dart';
-import 'screens/edit_profile.dart';
+// import 'screens/edit_profile.dart'; // Assuming you will create this later
 import 'screens/change_password.dart';
 import 'screens/live_screen.dart';
 import 'screens/media.dart';
@@ -36,20 +37,10 @@ import 'screens/upgrade_plan.dart';
 import 'screens/manage_subscriptions.dart';
 import 'screens/subapps_screen.dart';
 import 'screens/dua_dhikr_page.dart';
+import 'screens/forgot_password_screen.dart'; // Add this import
+import 'screens/reset_password_screen.dart';
 
-// --- THEME HANDLING ---
-ValueNotifier<ThemeMode> themeNotifier = ValueNotifier(ThemeMode.system);
-
-Future<void> saveThemePreference(ThemeMode mode) async {
-  final prefs = await SharedPreferences.getInstance();
-  await prefs.setInt('themeMode', mode.index);
-}
-
-Future<void> loadThemePreference() async {
-  final prefs = await SharedPreferences.getInstance();
-  final themeIndex = prefs.getInt('themeMode') ?? ThemeMode.system.index;
-  themeNotifier.value = ThemeMode.values[themeIndex];
-}
+// ✅ 2. NOTE: The old theme functions that were here are now REMOVED.
 
 // --- BACKGROUND TASK DEFINITION (FOR LOCAL PRAYER NOTIFICATIONS) ---
 @pragma('vm:entry-point')
@@ -70,42 +61,36 @@ void callbackDispatcher() {
   });
 }
 
-//
-// --- ▼▼▼▼ CRITICAL FIX IS HERE ▼▼▼▼ ---
-//
 // --- CORRECTED FIREBASE BACKGROUND HANDLER ---
 @pragma('vm:entry-point')
 Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
-  // 1. Initialize Firebase
   await Firebase.initializeApp();
-  // 2. Initialize our notification service so we can show a notification
   await FirebaseNotificationService.init();
-
   debugPrint("📲 Handling a background Firebase message: ${message.messageId}");
-
-  // 3. Create and display a local notification using the message data
-  //    **CRUCIAL ASSUMPTION:** Your backend must send 'title' and 'body'
-  //    inside the 'data' payload of the push notification.
   FirebaseNotificationService.showLocalNotification(
     title: message.data['title'] ?? 'New Message',
     body: message.data['body'] ?? 'You have a new message from Minber TV.',
   );
 }
-// --- ▲▲▲▲ END OF CRITICAL FIX ▲▲▲▲ ---
 
 // --- MAIN FUNCTION ---
 Future<void> main() async {
   // STAGE 1: CORE INITIALIZATION
   WidgetsFlutterBinding.ensureInitialized();
+
+  // ✅ 3. LOAD and INITIALIZE the theme notifier from your new file
+  final savedThemeMode = await loadThemePreference();
+  themeNotifier = ValueNotifier<ThemeMode>(savedThemeMode);
+
+  // STAGE 2: FIREBASE & BACKGROUND HANDLERS
   try {
     await Firebase.initializeApp();
     debugPrint("✅ Firebase Core initialized successfully.");
+    FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
   } catch (e) {
     debugPrint("🔥 FATAL: Firebase Core initialization failed: $e");
   }
 
-  // STAGE 2: REGISTER ALL BACKGROUND HANDLERS
-  FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
   await Workmanager().initialize(callbackDispatcher, isInDebugMode: true);
   await Workmanager().registerPeriodicTask(
     "1",
@@ -116,7 +101,6 @@ Future<void> main() async {
 
   // STAGE 3: INITIALIZE FOREGROUND SERVICES & PREFERENCES
   final prefs = await SharedPreferences.getInstance();
-  await loadThemePreference();
   await NotificationService.init();
   await FirebaseNotificationService.init();
 
@@ -125,17 +109,14 @@ Future<void> main() async {
   setupFirebasePushNotifications();
 
   // STAGE 5: DETERMINE INITIAL ROUTE AND RUN APP
-  final accessToken = prefs.getString('accessToken');
   final isLoggedIn = prefs.getBool('isLoggedIn') ?? false;
   final seenOnboarding = prefs.getBool('onboarding_complete') ?? false;
 
-  String initialRoute;
-  if (isLoggedIn && accessToken != null && accessToken.isNotEmpty) {
+  String initialRoute = '/onboarding';
+  if (isLoggedIn) {
     initialRoute = '/home';
   } else if (seenOnboarding) {
     initialRoute = '/login';
-  } else {
-    initialRoute = '/onboarding';
   }
 
   debugPrint('➡️ App Start → navigating to $initialRoute');
@@ -159,33 +140,22 @@ Future<void> setupFirebasePushNotifications() async {
     await messaging.subscribeToTopic('all');
     debugPrint("📢 Subscribed to Firebase topic: all");
 
-    // This handles messages that arrive while the app is OPEN (in the foreground).
     FirebaseMessaging.onMessage.listen((RemoteMessage message) {
       debugPrint(
-        "💬 Firebase foreground message received: ${message.notification?.title}",
-      );
-
-      // We check BOTH the `notification` and `data` payloads.
+          "💬 Firebase foreground message received: ${message.notification?.title}");
       String title = message.notification?.title ??
           message.data['title'] ??
           "New Notification";
       String body = message.notification?.body ?? message.data['body'] ?? "";
-
       FirebaseNotificationService.showLocalNotification(
-        title: title,
-        body: body,
-      );
+          title: title, body: body);
     });
 
-    // This handles when the user TAPS a notification to open the app.
     FirebaseMessaging.onMessageOpenedApp.listen((RemoteMessage message) {
       debugPrint(
-        '🚀 App opened from Firebase notification: ${message.notification?.title}',
-      );
+          '🚀 App opened from Firebase notification: ${message.notification?.title}');
       final navigator = NotificationService.navigatorKey.currentState;
-      if (navigator != null) {
-        navigator.pushNamed('/notifications');
-      }
+      navigator?.pushNamed('/notifications');
     });
   } catch (e) {
     debugPrint("❌ ERROR setting up Firebase Push Notifications: $e");
@@ -202,6 +172,7 @@ class MyApp extends StatelessWidget {
     return ChangeNotifierProvider(
       create: (context) => UserProvider(),
       child: ValueListenableBuilder<ThemeMode>(
+        // ✅ 4. This now correctly listens to the notifier we initialized in main()
         valueListenable: themeNotifier,
         builder: (_, ThemeMode currentMode, __) {
           return MaterialApp(
@@ -271,6 +242,8 @@ class MyApp extends StatelessWidget {
               '/signup': (_) => const SignUpPage(),
               '/profile': (_) => const ProfilePage(),
               // '/editProfile': (_) => const EditProfilePage(),
+               '/forgot-password': (_) => const ForgotPasswordScreen(),
+              '/reset-password': (_) => const ResetPasswordScreen(),
               '/changePassword': (_) => const ChangePasswordPage(),
               '/live': (_) => const LiveStreamPage(),
               '/media': (_) => const MediaHubPage(),

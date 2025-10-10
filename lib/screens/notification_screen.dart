@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:logger/logger.dart';
+import 'package:intl/intl.dart'; // Make sure you have this import
 import '../api/notifications_api.dart';
 
 class NotificationsPage extends StatefulWidget {
@@ -16,86 +17,200 @@ class _NotificationsPageState extends State<NotificationsPage> {
   @override
   void initState() {
     super.initState();
-    _notificationsFuture = NotificationsApi.fetchNotifications();
+    _loadNotifications();
+  }
+
+  void _loadNotifications() {
+    setState(() {
+      _notificationsFuture = NotificationsApi.fetchNotifications();
+    });
+  }
+
+  String _formatTimestamp(String? dateString) {
+    if (dateString == null) {
+      return '';
+    }
+    try {
+      final dateTime = DateTime.parse(dateString).toLocal();
+      final now = DateTime.now();
+      final difference = now.difference(dateTime);
+
+      if (difference.inDays == 0) {
+        if (difference.inHours < 1) {
+          if (difference.inMinutes < 1) return 'Just now';
+          return '${difference.inMinutes}m ago';
+        }
+        return '${difference.inHours}h ago';
+      } else if (difference.inDays == 1) {
+        return 'Yesterday at ${DateFormat.jm().format(dateTime)}';
+      } else {
+        return DateFormat('MMM d, yyyy').format(dateTime);
+      }
+    } catch (e) {
+      logger.e("Error parsing date: $dateString", error: e);
+      return '';
+    }
   }
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+
     return Scaffold(
-      appBar: AppBar(title: const Text('Notifications')),
-      body: FutureBuilder<List<dynamic>>(
-        future: _notificationsFuture,
-        builder: (context, snapshot) {
-          logger.d("FutureBuilder state: ${snapshot.connectionState}");
-
-          // State 1: Still loading data from the server
-          if (snapshot.connectionState == ConnectionState.waiting) {
-            return const Center(child: CircularProgressIndicator());
-          }
-          // State 2: An error occurred during the fetch
-          else if (snapshot.hasError) {
-            logger.e("FutureBuilder caught an error", error: snapshot.error);
-            return Center(
-              child: Padding(
-                padding: const EdgeInsets.all(16.0),
-                child: Text(
-                  '❌ Something went wrong.\nPlease check your internet connection and try again.',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(color: Colors.red[700], fontSize: 16),
+      appBar: AppBar(
+        title: const Text('Notifications'),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.refresh),
+            onPressed: _loadNotifications,
+            tooltip: 'Refresh',
+          ),
+        ],
+      ),
+      body: RefreshIndicator(
+        onRefresh: () async => _loadNotifications(),
+        child: FutureBuilder<List<dynamic>>(
+          future: _notificationsFuture,
+          builder: (context, snapshot) {
+            if (snapshot.connectionState == ConnectionState.waiting) {
+              return const Center(child: CircularProgressIndicator());
+            } else if (snapshot.hasError) {
+              return Center(
+                child: Padding(
+                  padding: const EdgeInsets.all(24.0),
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(Icons.error_outline,
+                          color: theme.colorScheme.error, size: 60),
+                      const SizedBox(height: 16),
+                      const Text(
+                        'Failed to load notifications',
+                        style: TextStyle(
+                            fontSize: 20, fontWeight: FontWeight.bold),
+                        textAlign: TextAlign.center,
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        'Please check your connection and try again.',
+                        style: TextStyle(fontSize: 16, color: theme.hintColor),
+                        textAlign: TextAlign.center,
+                      ),
+                      const SizedBox(height: 24),
+                      ElevatedButton.icon(
+                        icon: const Icon(Icons.refresh),
+                        label: const Text('Retry'),
+                        onPressed: _loadNotifications,
+                      ),
+                    ],
+                  ),
                 ),
-              ),
-            );
-          }
-          // State 3: The request succeeded, but the list of notifications is empty
-          else if (!snapshot.hasData || snapshot.data!.isEmpty) {
-            logger.i(
-              "FutureBuilder received an empty list. Displaying 'No notifications'.",
-            );
-            return const Center(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Icon(
-                    Icons.notifications_off_outlined,
-                    size: 60,
-                    color: Colors.grey,
-                  ),
-                  SizedBox(height: 16),
-                  Text(
-                    'You have no new notifications.',
-                    style: TextStyle(fontSize: 18, color: Colors.grey),
-                  ),
-                ],
-              ),
-            );
-          }
+              );
+            } else if (!snapshot.hasData || snapshot.data!.isEmpty) {
+              return Center(
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(
+                      Icons.notifications_off_outlined,
+                      size: 60,
+                      color: theme.hintColor,
+                    ),
+                    const SizedBox(height: 16),
+                    Text(
+                      'You have no new notifications.',
+                      style: TextStyle(fontSize: 18, color: theme.hintColor),
+                    ),
+                  ],
+                ),
+              );
+            }
 
-          // State 4: Everything succeeded, and we have notifications to display
-          final notifications = snapshot.data!;
-          logger.i(
-            "FutureBuilder has data. Displaying ${notifications.length} notifications.",
-          );
-          return ListView.builder(
-            itemCount: notifications.length,
-            itemBuilder: (context, index) {
-              final n = notifications[index];
-              return Card(
-                margin: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-                child: ListTile(
-                  leading: const Icon(Icons.notifications_active),
-                  title: Text(n['title'] ?? 'Untitled'),
+            final notifications = snapshot.data!;
+            return ListView.separated(
+              padding: const EdgeInsets.all(12.0),
+              itemCount: notifications.length,
+              separatorBuilder: (context, index) => const SizedBox(height: 8),
+              itemBuilder: (context, index) {
+                final n = notifications[index];
+                return _buildNotificationItem(
+                  theme: theme,
+                  title: n['title'] ?? 'Untitled Notification',
+                  body: n['body'] ?? 'No message content.',
                   //
                   // ▼▼▼▼ THE FIX IS HERE ▼▼▼▼
                   //
-                  subtitle: Text(n['body'] ?? 'No message content.'),
+                  timestamp: _formatTimestamp(n['createdAt']), // Corrected key
                   //
                   // ▲▲▲▲ THE FIX IS HERE ▲▲▲▲
                   //
-                ),
-              );
-            },
-          );
-        },
+                );
+              },
+            );
+          },
+        ),
+      ),
+    );
+  }
+
+  Widget _buildNotificationItem({
+    required ThemeData theme,
+    required String title,
+    required String body,
+    required String timestamp,
+  }) {
+    return Card(
+      elevation: 2,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(12.0),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            CircleAvatar(
+              backgroundColor: theme.primaryColor.withOpacity(0.1),
+              child: Icon(
+                Icons.notifications,
+                color: theme.primaryColor,
+              ),
+            ),
+            const SizedBox(width: 16),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    title,
+                    style: const TextStyle(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 16,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    body,
+                    style: TextStyle(
+                      color:
+                          theme.textTheme.bodyMedium?.color?.withOpacity(0.8),
+                      fontSize: 14,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  if (timestamp.isNotEmpty)
+                    Text(
+                      timestamp,
+                      style: TextStyle(
+                        color: theme.hintColor,
+                        fontSize: 12,
+                      ),
+                    ),
+                ],
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
