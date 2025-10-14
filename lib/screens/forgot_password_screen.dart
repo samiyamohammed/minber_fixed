@@ -1,4 +1,4 @@
-// lib/screens/forgot_password_screen.dart (Fully Updated & Ready to Paste)
+// lib/screens/forgot_password_screen.dart (Fully Corrected & Ready to Paste)
 
 import 'dart:convert';
 import 'package:flutter/material.dart';
@@ -19,15 +19,10 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
   bool _isLoading = false;
   final _logger = Logger();
 
-  // --- CORE LOGIC (Unchanged) ---
   Future<void> _requestReset() async {
-    // Hide keyboard on submission
     FocusManager.instance.primaryFocus?.unfocus();
-
     if (!_formKey.currentState!.validate()) return;
-
     setState(() => _isLoading = true);
-    _logger.i("Requesting password reset for: ${_emailController.text.trim()}");
 
     try {
       final response = await http.post(
@@ -40,35 +35,15 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
           "Forgot Password Response - Status: ${response.statusCode}, Body: ${response.body}");
 
       if (mounted) {
-        if (response.statusCode == 201) {
-          Fluttertoast.showToast(
-            msg:
-                "If an account with that email exists, a reset code has been sent.",
-            backgroundColor: Colors.green,
-            toastLength: Toast.LENGTH_LONG,
-          );
-          // Navigate to the next screen where the user will enter the token.
-          // IMPORTANT: Make sure you pass the email to the reset password screen.
-          Navigator.pushReplacementNamed(
-            context,
-            '/reset-password',
-            arguments: _emailController.text.trim(), // Pass email as argument
-          );
-        } else {
-          // It's better practice to show the same success message even on failure
-          // to prevent users from checking which emails are registered.
-          Fluttertoast.showToast(
-            msg:
-                "If an account with that email exists, a reset code has been sent.",
-            backgroundColor: Colors.green,
-            toastLength: Toast.LENGTH_LONG,
-          );
-          Navigator.pushReplacementNamed(
-            context,
-            '/reset-password',
-            arguments: _emailController.text.trim(),
-          );
-        }
+        Fluttertoast.showToast(
+          msg:
+              "If an account with that email exists, a reset code has been sent.",
+          backgroundColor: Colors.green,
+          toastLength: Toast.LENGTH_LONG,
+        );
+
+        // ✅ CORRECTION: Removed the 'arguments' property as it's not needed.
+        Navigator.pushReplacementNamed(context, '/reset-password');
       }
     } catch (e) {
       _logger.e("Error requesting password reset", error: e);
@@ -81,15 +56,12 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
 
   @override
   Widget build(BuildContext context) {
-    // ✅ UI/UX UPDATE: Using theme for all colors and styles
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
     final textTheme = theme.textTheme;
 
     return Scaffold(
-      appBar: AppBar(
-        title: const Text("Reset Password"),
-      ),
+      appBar: AppBar(title: const Text("Reset Password")),
       body: Center(
         child: SingleChildScrollView(
           padding: const EdgeInsets.all(24.0),
@@ -99,40 +71,29 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
               mainAxisAlignment: MainAxisAlignment.center,
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                // ✅ UI/UX UPDATE: Added a prominent visual icon
-                Icon(
-                  Icons.lock_reset_outlined,
-                  size: 80,
-                  color: colorScheme.primary,
-                ),
+                Icon(Icons.lock_reset_outlined,
+                    size: 80, color: colorScheme.primary),
                 const SizedBox(height: 24),
-
-                // ✅ UI/UX UPDATE: Using theme text styles for consistency
-                Text(
-                  "Forgot Your Password?",
-                  textAlign: TextAlign.center,
-                  style: textTheme.headlineMedium
-                      ?.copyWith(fontWeight: FontWeight.bold),
-                ),
+                Text("Forgot Your Password?",
+                    textAlign: TextAlign.center,
+                    style: textTheme.headlineMedium
+                        ?.copyWith(fontWeight: FontWeight.bold)),
                 const SizedBox(height: 12),
                 Text(
-                  "Enter the email associated with your account and we'll send a code to reset your password.",
-                  textAlign: TextAlign.center,
-                  style: textTheme.bodyLarge?.copyWith(color: theme.hintColor),
-                ),
+                    "Enter the email associated with your account and we'll send a code to reset your password.",
+                    textAlign: TextAlign.center,
+                    style:
+                        textTheme.bodyLarge?.copyWith(color: theme.hintColor)),
                 const SizedBox(height: 32),
-
-                // ✅ UI/UX UPDATE: Modernized TextFormField
                 TextFormField(
                   controller: _emailController,
                   keyboardType: TextInputType.emailAddress,
                   autofillHints: const [AutofillHints.email],
                   decoration: InputDecoration(
-                    labelText: "Email Address",
-                    prefixIcon: const Icon(Icons.email_outlined),
-                    border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(12)),
-                  ),
+                      labelText: "Email Address",
+                      prefixIcon: const Icon(Icons.email_outlined),
+                      border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12))),
                   validator: (value) {
                     if (value == null ||
                         value.trim().isEmpty ||
@@ -143,8 +104,6 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
                   },
                 ),
                 const SizedBox(height: 24),
-
-                // ✅ UI/UX UPDATE: Button inherits style from the global theme
                 SizedBox(
                   height: 50,
                   child: ElevatedButton(
@@ -153,17 +112,15 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
                         ? const SizedBox(
                             height: 24,
                             width: 24,
-                            child: CircularProgressIndicator(strokeWidth: 3),
-                          )
+                            child: CircularProgressIndicator(strokeWidth: 3))
                         : const Text("Send Code",
                             style: TextStyle(fontWeight: FontWeight.bold)),
                   ),
                 ),
                 const SizedBox(height: 16),
                 TextButton(
-                  onPressed: () => Navigator.of(context).pop(),
-                  child: const Text("Back to Login"),
-                )
+                    onPressed: () => Navigator.of(context).pop(),
+                    child: const Text("Back to Login"))
               ],
             ),
           ),

@@ -3,7 +3,6 @@ description: "A new Flutter project."
 publish_to: "none"
 version: 1.0.0+1
 
-# CORRECTED: Use a standard, flexible SDK range
 environment:
   sdk: ">=3.0.0 <4.0.0"
 
@@ -11,7 +10,6 @@ dependencies:
   flutter:
     sdk: flutter
 
-  # Your original packages
   shared_preferences: ^2.2.2
   cupertino_icons: ^1.0.8
   fluttertoast: ^8.2.4
@@ -28,7 +26,8 @@ dependencies:
   url_launcher: ^6.3.2
   webview_flutter: ^4.13.0
   device_info_plus: ^12.1.0
-  youtube_player_iframe: ^5.2.2
+  # THIS IS CORRECT
+  youtube_player_flutter: ^9.0.1
   firebase_core: ^4.1.1
   firebase_messaging: ^16.0.2
   flutter_local_notifications: ^18.0.1
@@ -45,15 +44,20 @@ dependencies:
   shimmer: ^3.0.0
   smooth_page_indicator: ^1.2.1
   flutter_staggered_animations: ^1.1.1
-
-  # CORRECTED: Add better_player here
-  # better_player: ^0.0.84
+  font_awesome_flutter: ^10.7.0
+  package_info_plus: ^9.0.0
+  pretty_http_logger: ^1.0.5
+  better_player: ^0.0.84
+  flutter_vlc_player: ^7.4.4
+  # video_player_avplay: ^0.7.2
 
 dev_dependencies:
   flutter_test:
     sdk: flutter
   flutter_lints: ^5.0.0
   flutter_launcher_icons: "^0.13.1"
+  # ✅ ADD THIS LINE - This adds the package to your project
+  flutter_native_splash: ^2.4.0
 
 flutter:
   uses-material-design: true
@@ -65,3 +69,15 @@ flutter_launcher_icons:
   ios: true
   image_path: "assets/icon.jpg"
   min_sdk_android: 21
+
+# ✅ ADD THIS ENTIRE SECTION - This is your splash screen configuration
+flutter_native_splash:
+  color: "#FFFFFF"
+  image: assets/images/minber.png
+
+  branding: assets/images/skylink.png
+  branding_mode: bottom
+
+  android_12:
+    color: "#FFFFFF"
+    image: assets/images/minber.png

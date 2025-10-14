@@ -33,7 +33,7 @@ class _SubscriptionPageState extends State<SubscriptionPage> {
   final List<SubscriptionPlan> _planOptions = [
     SubscriptionPlan(
       name: 'Basic Plan',
-      price: '\$4.99 / month',
+      price: '4.99 ETB / month',
       features: [
         'Ad-supported streaming',
         'Limited content library',
@@ -42,7 +42,7 @@ class _SubscriptionPageState extends State<SubscriptionPage> {
     ),
     SubscriptionPlan(
       name: 'Premium Plan',
-      price: '\$9.99 / month',
+      price: '9.99 ETB / month',
       features: [
         'Ad-free streaming',
         'Full content library',
@@ -53,7 +53,7 @@ class _SubscriptionPageState extends State<SubscriptionPage> {
     ),
     SubscriptionPlan(
       name: 'Family Plan',
-      price: '\$14.99 / month',
+      price: '14.99 ETB / month',
       features: [
         'All Premium features',
         'Up to 5 profiles',
@@ -105,9 +105,10 @@ class _SubscriptionPageState extends State<SubscriptionPage> {
             ),
             TextButton(
               onPressed: () {
-                Navigator.of(context).pop();
+                Navigator.pushNamed(context, '/home');
                 Fluttertoast.showToast(
-                    msg: "Subscription cancellation requested");
+                  msg: "Subscription canceled",
+                );
               },
               child: Text("Yes, Cancel",
                   style: TextStyle(color: theme.colorScheme.error)),
@@ -341,7 +342,7 @@ class _SubscriptionPageState extends State<SubscriptionPage> {
             label: "Chat Box"),
         BottomNavigationBarItem(
             icon: Icon(Icons.explore_outlined),
-            activeIcon: Icon(Icons.explore),
+            activeIcon: Icon(Icons.apps),
             label: "Sub Apps"),
       ],
     );

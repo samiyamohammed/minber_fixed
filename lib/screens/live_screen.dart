@@ -1,10 +1,8 @@
-// lib/screens/live_stream_page.dart (Fully Updated & Corrected)
-
+// lib/live_stream_page.dart
 import 'dart:async';
-import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
-import 'package:video_player/video_player.dart';
 import 'package:chewie/chewie.dart';
+import 'package:flutter/material.dart';
+import 'package:video_player/video_player.dart';
 
 class LiveStreamPage extends StatefulWidget {
   const LiveStreamPage({super.key});
@@ -14,197 +12,429 @@ class LiveStreamPage extends StatefulWidget {
 }
 
 class _LiveStreamPageState extends State<LiveStreamPage> {
-  late VideoPlayerController _videoPlayerController;
-  ChewieController? _chewieController;
-  Timer? _bufferingTimer;
-  bool _isConnecting = true;
-  bool _isStuckBuffering = false;
+  // ----- CONFIG -----
+  final String _streamUrl =
+      'http://msa.merkuz.com:8888/live/stream1/index.m3u8';
+  static const Duration _heartbeatInterval = Duration(seconds: 5);
+  static const Duration _stallThreshold = Duration(seconds: 10);
+  static const Duration _periodicRefreshInterval = Duration(minutes: 10);
+  static const int _maxReconnectAttempts = 3;
 
-  final String streamUrl = 'http://msa.merkuz.com:8888/live/stream1/index.m3u8';
+  // ----- PLAYERS / CONTROLLERS -----
+  VideoPlayerController? _videoPlayerController;
+  ChewieController? _chewieController;
+
+  // ----- STATE -----
+  bool _isLoading = true;
+  bool _hasError = false;
+  bool _isReconnecting = false;
+  int _reconnectAttempts = 0;
+
+  // ----- TIMERS & MONITORS -----
+  Timer? _heartbeatTimer;
+  Timer? _periodicRefreshTimer;
+
+  // Track last known playback position for "stalled" detection
+  Duration? _lastPosition;
+  DateTime? _lastPositionUpdateTime;
+
+  // Reconnect backoff schedule (seconds)
+  final List<int> _backoffSeconds = [2, 5, 10];
 
   @override
   void initState() {
     super.initState();
-    // ✅ CORRECTION: Removed forced landscape orientation on page load
-    initializePlayer();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _initializePlayer();
+    });
+    _startHeartbeat();
+    _startPeriodicRefresh();
   }
 
-  @override
-  void dispose() {
-    // ✅ CORRECTION: Reset orientation to be safe when leaving the page
-    SystemChrome.setPreferredOrientations([
-      DeviceOrientation.portraitUp,
-      DeviceOrientation.portraitDown,
-    ]);
-    SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
+  // -------------------------
+  // Initialization & helpers
+  // -------------------------
+  Future<void> _initializePlayer() async {
+    if (!mounted) return;
 
-    _bufferingTimer?.cancel();
-    _videoPlayerController.removeListener(_videoListener);
-    _videoPlayerController.dispose();
-    _chewieController?.dispose();
-    super.dispose();
-  }
+    setState(() {
+      _hasError = false;
+      _isLoading = !_isReconnecting;
+    });
 
-  Future<void> initializePlayer() async {
-    if (mounted)
-      setState(() {
-        _isConnecting = true;
-        _isStuckBuffering = false;
-      });
-    _videoPlayerController =
-        VideoPlayerController.networkUrl(Uri.parse(streamUrl));
-    _videoPlayerController.addListener(_videoListener);
+    await _cleanUpControllers();
 
     try {
-      await _videoPlayerController.initialize();
-      _createChewieController();
-    } catch (e) {
-      // Handle error
-    } finally {
-      if (mounted) setState(() => _isConnecting = false);
-    }
-  }
+      _videoPlayerController = VideoPlayerController.networkUrl(
+        Uri.parse(_streamUrl),
+      );
 
-  void _createChewieController() {
-    final theme = Theme.of(context);
+      await _videoPlayerController!.initialize();
 
-    _chewieController = ChewieController(
-      videoPlayerController: _videoPlayerController,
-      autoPlay: true,
-      isLive: true,
+      if (!mounted) return;
 
-      // ✅ CORRECTION: Set fullScreenByDefault to false
-      fullScreenByDefault: false,
+      _videoPlayerController!.addListener(_videoListener);
 
-      // ✅ CORRECTION: Added this to handle orientation automatically
-      deviceOrientationsAfterFullScreen: const [
-        DeviceOrientation.portraitUp,
-        DeviceOrientation.portraitDown,
-      ],
-      // This tells Chewie to return to portrait when exiting full screen.
-      // It will automatically handle going to landscape when entering full screen.
+      _chewieController = ChewieController(
+        videoPlayerController: _videoPlayerController!,
+        autoPlay: true,
+        looping: false, // For live streams, looping is typically false
+        isLive: true,
+        allowFullScreen: true,
+        showControlsOnInitialize: false,
+        errorBuilder: (context, errorMessage) {
+          return Center(
+            child: Text(
+              'Playback error: $errorMessage',
+              style: const TextStyle(color: Colors.white),
+              textAlign: TextAlign.center,
+            ),
+          );
+        },
+      );
 
-      allowedScreenSleep: false,
-      materialProgressColors: ChewieProgressColors(
-        playedColor: theme.colorScheme.primary,
-        handleColor: theme.colorScheme.primary,
-        bufferedColor: theme.colorScheme.onSurface.withOpacity(0.5),
-        backgroundColor: theme.colorScheme.onSurface.withOpacity(0.2),
-      ),
-      placeholder: Container(color: Colors.black),
-      autoInitialize: true,
-    );
-  }
+      _lastPosition = _videoPlayerController!.value.position;
+      _lastPositionUpdateTime = DateTime.now();
 
-  void _videoListener() {
-    if (!mounted || !_videoPlayerController.value.isInitialized) return;
-    if (_videoPlayerController.value.isBuffering) {
-      _bufferingTimer ??= Timer(const Duration(seconds: 15), () {
-        if (_videoPlayerController.value.isBuffering && mounted) {
-          setState(() => _isStuckBuffering = true);
-          _restartStream();
-        }
+      setState(() {
+        _isLoading = false;
+        _isReconnecting = false;
+        _reconnectAttempts = 0;
+        _hasError = false;
       });
-    } else {
-      _bufferingTimer?.cancel();
-      _bufferingTimer = null;
-      if (_isStuckBuffering && mounted) {
-        setState(() => _isStuckBuffering = false);
+    } catch (e) {
+      debugPrint('Error initializing player: $e');
+      if (mounted) {
+        _scheduleReconnect();
       }
     }
   }
 
-  Future<void> _restartStream() async {
+  void _videoListener() {
+    if (!mounted || _videoPlayerController == null) return;
+
+    final value = _videoPlayerController!.value;
+
+    try {
+      final currentPosition = value.position;
+      if (_lastPosition == null || currentPosition > _lastPosition!) {
+        _lastPosition = currentPosition;
+        _lastPositionUpdateTime = DateTime.now();
+      }
+    } catch (_) {
+      // Ignore position comparison errors
+    }
+
+    // Check for player errors
+    if (value.hasError && !_isReconnecting) {
+      debugPrint('Video player reported an error: ${value.errorDescription}');
+      _scheduleReconnect(immediate: true);
+    }
+  }
+
+  // -------------------------
+  // Heartbeat & Stall logic
+  // -------------------------
+  void _startHeartbeat() {
+    _heartbeatTimer?.cancel();
+    _heartbeatTimer = Timer.periodic(_heartbeatInterval, (_) async {
+      if (!mounted) return;
+
+      if (_videoPlayerController == null ||
+          !_videoPlayerController!.value.isInitialized ||
+          _isReconnecting) {
+        return;
+      }
+
+      final value = _videoPlayerController!.value;
+
+      // Check for prolonged buffering
+      if (value.isBuffering) {
+        final since = _lastPositionUpdateTime ?? DateTime.now();
+        final bufferingDuration = DateTime.now().difference(since);
+        if (bufferingDuration >= _stallThreshold) {
+          debugPrint(
+              'Detected prolonged buffering: $bufferingDuration -> reconnect');
+          _scheduleReconnect(immediate: true);
+          return;
+        }
+      }
+
+      // Check for stagnant playback position
+      if (_lastPositionUpdateTime != null) {
+        final noAdvance = DateTime.now().difference(_lastPositionUpdateTime!);
+        if (noAdvance >= _stallThreshold && value.isPlaying) {
+          debugPrint('Playback position stagnant for $noAdvance -> reconnect');
+          _scheduleReconnect(immediate: true);
+          return;
+        }
+      }
+
+      // Check if playback stopped unexpectedly
+      if (!value.isPlaying && !value.isBuffering && value.isInitialized) {
+        debugPrint('Playback stopped unexpectedly -> reconnect');
+        _scheduleReconnect(immediate: true);
+        return;
+      }
+    });
+  }
+
+  // -------------------------
+  // Periodic refresh
+  // -------------------------
+  void _startPeriodicRefresh() {
+    _periodicRefreshTimer?.cancel();
+    _periodicRefreshTimer = Timer.periodic(_periodicRefreshInterval, (_) async {
+      if (!mounted) return;
+
+      if (_videoPlayerController == null ||
+          !_videoPlayerController!.value.isInitialized ||
+          _isReconnecting) {
+        return;
+      }
+
+      final lastUpdate = _lastPositionUpdateTime;
+      if (lastUpdate == null) {
+        debugPrint(
+            'Periodic refresh: lastPositionUpdateTime is null, refreshing.');
+        _scheduleReconnect(immediate: true, force: true);
+        return;
+      }
+
+      final noAdvance = DateTime.now().difference(lastUpdate);
+      if (noAdvance >= const Duration(seconds: 30)) {
+        debugPrint(
+            'Periodic refresh: playback stale ($noAdvance). Triggering reconnect.');
+        _scheduleReconnect(immediate: true, force: true);
+      }
+    });
+  }
+
+  // -------------------------
+  // Reconnect logic
+  // -------------------------
+  void _scheduleReconnect({bool immediate = false, bool force = false}) {
     if (!mounted) return;
-    _videoPlayerController.removeListener(_videoListener);
-    await _videoPlayerController.dispose();
-    await initializePlayer();
+    if (_isReconnecting && !force) return;
+
+    _attemptReconnect(immediate: immediate);
+  }
+
+  Future<void> _attemptReconnect({bool immediate = false}) async {
+    if (!mounted) return;
+    if (_isReconnecting) return;
+
+    setState(() {
+      _isReconnecting = true;
+      _isLoading = false;
+      _hasError = false;
+    });
+
+    while (_reconnectAttempts < _maxReconnectAttempts && mounted) {
+      final backoffIndex =
+          _reconnectAttempts.clamp(0, _backoffSeconds.length - 1);
+      final backoff = _backoffSeconds[backoffIndex];
+
+      if (!immediate && _reconnectAttempts > 0) {
+        await Future.delayed(Duration(seconds: backoff));
+      } else if (_reconnectAttempts > 0) {
+        await Future.delayed(Duration(seconds: backoff));
+      }
+
+      _reconnectAttempts++;
+      debugPrint(
+          'Reconnect attempt #$_reconnectAttempts (backoff ${backoff}s)');
+
+      try {
+        await _cleanUpControllers();
+
+        if (!mounted) break;
+
+        _videoPlayerController = VideoPlayerController.networkUrl(
+          Uri.parse(_streamUrl),
+        );
+
+        await _videoPlayerController!.initialize();
+
+        if (!mounted) {
+          await _cleanUpControllers();
+          break;
+        }
+
+        _videoPlayerController!.addListener(_videoListener);
+
+        _chewieController = ChewieController(
+          videoPlayerController: _videoPlayerController!,
+          autoPlay: true,
+          looping: false,
+          isLive: true,
+          allowFullScreen: true,
+          showControlsOnInitialize: false,
+          errorBuilder: (context, errorMessage) {
+            return Center(
+              child: Text(
+                'Playback error: $errorMessage',
+                style: const TextStyle(color: Colors.white),
+                textAlign: TextAlign.center,
+              ),
+            );
+          },
+        );
+
+        _lastPosition = _videoPlayerController!.value.position;
+        _lastPositionUpdateTime = DateTime.now();
+
+        if (mounted) {
+          setState(() {
+            _isReconnecting = false;
+            _hasError = false;
+            _isLoading = false;
+            _reconnectAttempts = 0;
+          });
+        }
+        debugPrint('Reconnect successful.');
+        return;
+      } catch (e) {
+        debugPrint('Reconnect attempt #$_reconnectAttempts failed: $e');
+      }
+    }
+
+    if (mounted) {
+      setState(() {
+        _isReconnecting = false;
+        _hasError = true;
+        _isLoading = false;
+      });
+      debugPrint('All reconnect attempts failed.');
+    }
+  }
+
+  // -------------------------
+  // Cleanup
+  // -------------------------
+  Future<void> _cleanUpControllers() async {
+    try {
+      _chewieController?.pause();
+    } catch (_) {}
+
+    try {
+      if (_videoPlayerController != null) {
+        _videoPlayerController!.removeListener(_videoListener);
+      }
+    } catch (_) {}
+
+    try {
+      _chewieController?.dispose();
+    } catch (_) {}
+    _chewieController = null;
+
+    try {
+      await _videoPlayerController?.dispose();
+    } catch (_) {}
+    _videoPlayerController = null;
+  }
+
+  Future<void> _manualRetry() async {
+    if (!mounted) return;
+
+    setState(() {
+      _isLoading = true;
+      _hasError = false;
+      _isReconnecting = false;
+      _reconnectAttempts = 0;
+    });
+
+    await _initializePlayer();
   }
 
   @override
+  void dispose() {
+    _heartbeatTimer?.cancel();
+    _periodicRefreshTimer?.cancel();
+    _cleanUpControllers();
+    super.dispose();
+  }
+
+  // -------------------------
+  // UI
+  // -------------------------
+  @override
   Widget build(BuildContext context) {
-    // ✅ CORRECTION: The page is now built in a standard Scaffold
     return Scaffold(
-      appBar: AppBar(title: const Text("Live Stream")),
-      body: _buildPlayer(),
+      appBar: AppBar(
+        title: const Text('Resilient Live Stream'),
+      ),
+      body: Center(
+        child: _buildPlayerWidget(),
+      ),
     );
   }
 
-  Widget _buildPlayer() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        AspectRatio(
-          aspectRatio: 16 / 9,
-          child: Container(
-            color: Colors.black,
-            child: Stack(
-              children: [
-                if (_chewieController != null &&
-                    _chewieController!
-                        .videoPlayerController.value.isInitialized)
-                  Chewie(controller: _chewieController!)
-                else
-                  _buildStatusIndicator(
-                    logoAsset: 'assets/images/minber.jpg',
-                    message: "Connecting to Live Stream...",
-                  ),
-                _buildStuckBufferingOverlay(),
-              ],
-            ),
-          ),
-        ),
-        // You can add other widgets below the player here, for example:
-        const Padding(
-          padding: EdgeInsets.all(16.0),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text("Minber TV - Live Broadcast",
-                  style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
-              SizedBox(height: 8),
-              Text(
-                  "You are watching the official live stream. Share with your friends and family.",
-                  style: TextStyle(color: Colors.grey)),
-            ],
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildStatusIndicator(
-      {required String logoAsset, required String message}) {
-    return Center(
-      child: Column(
+  Widget _buildPlayerWidget() {
+    if (_isLoading) {
+      return const Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Image.asset(logoAsset, width: 60, height: 60),
-          const SizedBox(height: 20),
-          const SizedBox(
-              width: 20,
-              height: 20,
-              child: CircularProgressIndicator(
-                  strokeWidth: 3, color: Colors.white)),
-          const SizedBox(height: 12),
-          Text(message,
-              style: const TextStyle(color: Colors.white, fontSize: 14)),
+          CircularProgressIndicator(),
+          SizedBox(height: 16),
+          Text('Loading stream...'),
         ],
-      ),
-    );
-  }
+      );
+    }
 
-  Widget _buildStuckBufferingOverlay() {
-    return AnimatedOpacity(
-      duration: const Duration(milliseconds: 300),
-      opacity: _isStuckBuffering ? 1.0 : 0.0,
-      child: Container(
-        color: Colors.black.withOpacity(0.7),
-        child: _buildStatusIndicator(
-          logoAsset: 'assets/images/logo.png',
-          message: "Reconnecting...",
-        ),
-      ),
+    if (_hasError) {
+      return Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          const Icon(Icons.error_outline, size: 64, color: Colors.red),
+          const SizedBox(height: 16),
+          const Text(
+            'Failed to load stream',
+            style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+          ),
+          const SizedBox(height: 8),
+          const Text('Please check your connection and try again.'),
+          const SizedBox(height: 20),
+          ElevatedButton.icon(
+            onPressed: _manualRetry,
+            icon: const Icon(Icons.refresh),
+            label: const Text('Retry'),
+          ),
+        ],
+      );
+    }
+
+    if (_chewieController == null ||
+        !_chewieController!.videoPlayerController.value.isInitialized) {
+      return const CircularProgressIndicator();
+    }
+
+    return Stack(
+      alignment: Alignment.center,
+      children: [
+        Chewie(controller: _chewieController!),
+        if (_isReconnecting)
+          Container(
+            color: Colors.black.withOpacity(0.7),
+            child: const Center(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  CircularProgressIndicator(color: Colors.white),
+                  SizedBox(height: 16),
+                  Text(
+                    'Reconnecting to stream...',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+      ],
     );
   }
 }

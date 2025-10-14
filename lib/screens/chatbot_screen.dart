@@ -188,8 +188,8 @@ class _ChatBotPageState extends State<ChatBotPage> {
               activeIcon: Icon(Icons.chat_bubble),
               label: "Chat Box"),
           BottomNavigationBarItem(
-              icon: Icon(Icons.explore_outlined),
-              activeIcon: Icon(Icons.explore),
+              icon: Icon(Icons.apps),
+              activeIcon: Icon(Icons.apps),
               label: "Sub Apps"),
         ],
       ),

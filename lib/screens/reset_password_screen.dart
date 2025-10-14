@@ -1,4 +1,4 @@
-// lib/screens/reset_password_screen.dart (Fully Updated & Ready to Paste)
+// lib/screens/reset_password_screen.dart (Fully Corrected & Ready to Paste)
 
 import 'dart:convert';
 import 'package:flutter/material.dart';
@@ -24,7 +24,6 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
   bool _isNewPasswordObscured = true;
   bool _isConfirmPasswordObscured = true;
 
-  // ✅ UI/UX UPDATE: State for real-time password validation
   bool _has8Chars = false;
   bool _hasUppercase = false;
   bool _hasLowercase = false;
@@ -34,7 +33,6 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
   @override
   void initState() {
     super.initState();
-    // Add a listener to the password controller to update the checklist
     _passwordController.addListener(_updatePasswordRequirements);
   }
 
@@ -71,21 +69,33 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
   }
 
   Future<void> _resetPassword() async {
+    // ✅ 1. REMOVED the email parameter
     FocusManager.instance.primaryFocus?.unfocus();
     if (!_formKey.currentState!.validate()) return;
     setState(() => _isLoading = true);
+
+    // Prepare the request body without the email
+    final requestBody = {
+      "token": _tokenController.text.trim(),
+      "newPassword": _passwordController.text.trim()
+    };
+
+    _logger.i(
+        "Attempting to reset password with body: ${jsonEncode(requestBody)}");
 
     try {
       final response = await http.post(
         Uri.parse("http://msa.merkuz.com:3636/users/reset-password"),
         headers: {"Content-Type": "application/json"},
-        body: jsonEncode({
-          "token": _tokenController.text.trim(),
-          "newPassword": _passwordController.text.trim()
-        }),
+        // ✅ 2. SEND THE CORRECT BODY (without email)
+        body: jsonEncode(requestBody),
       );
+
+      _logger.d(
+          "Reset Password Response - Status: ${response.statusCode}, Body: ${response.body}");
+
       if (mounted) {
-        if (response.statusCode == 201) {
+        if (response.statusCode == 200 || response.statusCode == 201) {
           Fluttertoast.showToast(
               msg: "Password reset successfully! Please log in.",
               backgroundColor: Colors.green,
@@ -93,12 +103,17 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
           Navigator.of(context)
               .pushNamedAndRemoveUntil('/login', (route) => false);
         } else {
-          final message = jsonDecode(response.body)['message'] ??
-              "Invalid or expired token.";
-          Fluttertoast.showToast(msg: "Error: $message");
+          // Provide a more detailed error message
+          final responseData = jsonDecode(response.body);
+          final message = responseData['message']?.toString() ??
+              "An unknown error occurred.";
+          _logger.e("Password reset failed: $message");
+          Fluttertoast.showToast(
+              msg: "Error: $message", toastLength: Toast.LENGTH_LONG);
         }
       }
     } catch (e) {
+      _logger.e("An exception occurred during password reset", error: e);
       Fluttertoast.showToast(
           msg: "An error occurred. Please check your connection.");
     } finally {
@@ -110,6 +125,7 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final textTheme = theme.textTheme;
+    // ✅ 3. REMOVED the logic to get email from arguments
 
     return Scaffold(
       appBar: AppBar(title: const Text("Reset Password")),
@@ -162,11 +178,8 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
                   validator: _validatePassword,
                 ),
                 const SizedBox(height: 16),
-
-                // ✅ UI/UX UPDATE: Interactive password strength checklist
                 _buildPasswordChecklist(),
                 const SizedBox(height: 16),
-
                 TextFormField(
                   controller: _confirmPasswordController,
                   obscureText: _isConfirmPasswordObscured,
@@ -190,7 +203,9 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
                 SizedBox(
                   height: 50,
                   child: ElevatedButton(
-                    onPressed: _isLoading ? null : _resetPassword,
+                    onPressed: _isLoading
+                        ? null
+                        : _resetPassword, // ✅ 4. CALL THE FUNCTION WITHOUT ARGUMENTS
                     child: _isLoading
                         ? const SizedBox(
                             height: 24,
@@ -213,9 +228,8 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
     return Container(
       padding: const EdgeInsets.all(16.0),
       decoration: BoxDecoration(
-        color: theme.colorScheme.surfaceVariant.withOpacity(0.5),
-        borderRadius: BorderRadius.circular(12),
-      ),
+          color: theme.colorScheme.surfaceVariant.withOpacity(0.5),
+          borderRadius: BorderRadius.circular(12)),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -256,11 +270,10 @@ class _PasswordRequirementItem extends StatelessWidget {
           transitionBuilder: (child, animation) =>
               ScaleTransition(scale: animation, child: child),
           child: Icon(
-            isValid ? Icons.check_circle_rounded : Icons.circle_outlined,
-            key: ValueKey<bool>(isValid),
-            color: isValid ? successColor : defaultColor,
-            size: 20,
-          ),
+              isValid ? Icons.check_circle_rounded : Icons.circle_outlined,
+              key: ValueKey<bool>(isValid),
+              color: isValid ? successColor : defaultColor,
+              size: 20),
         ),
         const SizedBox(width: 12),
         Text(text,

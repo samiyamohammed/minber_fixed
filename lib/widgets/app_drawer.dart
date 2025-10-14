@@ -72,7 +72,7 @@ class AppDrawer extends StatelessWidget {
             _buildDrawerItem(
               context: context,
               icon: Icons.person_outline,
-              text: 'Profile',
+              text: 'Profile and Settings',
               onTap: () {
                 Navigator.pop(context);
                 if (currentRoute != '/profile') {

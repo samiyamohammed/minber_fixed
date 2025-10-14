@@ -1,4 +1,4 @@
-// lib/screens/qibla_compass_page.dart (Fully Updated & Ready to Paste)
+// lib/screens/qibla_compass_page.dart (Fully Updated & Corrected)
 
 import 'dart:async';
 import 'dart:math' as math;
@@ -22,7 +22,6 @@ class _QiblaCompassPageState extends State<QiblaCompassPage> {
   double? _heading;
   double? _qiblaDirection;
   String _locationName = "Searching for location...";
-  String _permissionStatus = "Checking permissions...";
 
   StreamSubscription? _compassSubscription;
   StreamSubscription? _locationSubscription;
@@ -41,25 +40,26 @@ class _QiblaCompassPageState extends State<QiblaCompassPage> {
   }
 
   void _startListening() {
+    // Listen to compass events
     _compassSubscription = FlutterCompass.events?.listen((event) {
       if (mounted) setState(() => _heading = event.heading);
     });
 
-    _locationSubscription = Geolocator.getPositionStream().listen(
-      (Position position) => _updateLocationAndQibla(position),
-      onError: (error) => setState(() => _permissionStatus =
-          "Location access denied. Please enable it in your device settings."),
-    );
+    // Listen to location changes
+    _locationSubscription = Geolocator.getPositionStream()
+        .listen((Position position) => _updateLocationAndQibla(position),
+            onError: (error) {
+      // If there's an error (like permissions denied), show a relevant message
+      if (mounted) setState(() => _locationName = "Location access denied");
+    });
   }
 
   Future<void> _updateLocationAndQibla(Position position) async {
     final qiblaDir =
         Qibla.qibla(Coordinates(position.latitude, position.longitude));
-    if (mounted)
-      setState(() {
-        _qiblaDirection = qiblaDir;
-        _permissionStatus = "Ready";
-      });
+    if (mounted) setState(() => _qiblaDirection = qiblaDir);
+
+    // Update location name
     try {
       List<Placemark> placemarks =
           await placemarkFromCoordinates(position.latitude, position.longitude);
@@ -67,7 +67,7 @@ class _QiblaCompassPageState extends State<QiblaCompassPage> {
         final place = placemarks.first;
         setState(() => _locationName = "${place.locality}, ${place.country}");
       }
-    } catch (e) {/* Handle error */}
+    } catch (e) {/* Handle geocoding error if needed */}
   }
 
   void _onItemTapped(int index) {
@@ -103,8 +103,11 @@ class _QiblaCompassPageState extends State<QiblaCompassPage> {
     );
   }
 
+  // --- WIDGET BUILDER METHODS ---
+
   Widget _buildBody() {
-    if (_permissionStatus != "Ready") return _buildPermissionMessage();
+    // ✅ CORRECTION: Removed the explicit permission check UI.
+    // Now it just shows a loading indicator until data is available.
     if (_heading == null || _qiblaDirection == null) {
       return const Center(child: CircularProgressIndicator());
     }
@@ -120,113 +123,74 @@ class _QiblaCompassPageState extends State<QiblaCompassPage> {
     final bool isAligned = shortestAngle < 2.5;
     if (isAligned) HapticFeedback.lightImpact();
 
-    // ✅ CORRECTION: Using MainAxisAlignment.spaceEvenly to fix centering.
-    return Column(
-      mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-      crossAxisAlignment: CrossAxisAlignment.center,
-      children: [
-        Column(
-          children: [
-            Text("Qibla Direction",
-                style: theme.textTheme.titleMedium
-                    ?.copyWith(color: theme.hintColor)),
-            Text("${qiblaDirection.toStringAsFixed(1)}° N",
-                style: theme.textTheme.headlineSmall
-                    ?.copyWith(fontWeight: FontWeight.bold)),
-          ],
-        ),
-
-        // ✅ UI/UX UPDATE: New compass widget with a static target indicator.
-        SizedBox(
-          width: 300,
-          height: 300,
-          child: Stack(
-            alignment: Alignment.center,
-            children: [
-              // The rotating compass, drawn by the painter
-              AnimatedRotation(
-                turns: -normalizedHeading / 360,
-                duration: const Duration(milliseconds: 400),
-                child: CustomPaint(
-                  size: const Size(300, 300),
-                  painter: _CompassPainter(
-                    qiblaAngle: qiblaDirection,
-                    theme: theme,
+    // ✅ CORRECTION: Wrapped in a Center widget for perfect alignment.
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Text("Qibla Direction",
+              style: theme.textTheme.titleMedium
+                  ?.copyWith(color: theme.hintColor)),
+          Text("${qiblaDirection.toStringAsFixed(1)}° N",
+              style: theme.textTheme.headlineSmall
+                  ?.copyWith(fontWeight: FontWeight.bold)),
+          const Spacer(flex: 2),
+          SizedBox(
+            width: 300,
+            height: 300,
+            child: Stack(
+              alignment: Alignment.center,
+              children: [
+                AnimatedRotation(
+                  turns: -normalizedHeading / 360,
+                  duration: const Duration(milliseconds: 400),
+                  child: CustomPaint(
+                    size: const Size(300, 300),
+                    painter: _CompassPainter(
+                        qiblaAngle: qiblaDirection, theme: theme),
                   ),
                 ),
-              ),
-              // The static target indicator at the top
-              CustomPaint(
-                size: const Size(20, 30),
-                painter: _TargetMarkerPainter(
-                  color: isAligned
-                      ? Colors.green.shade400
-                      : theme.colorScheme.primary,
-                ),
-              )
-            ],
+                CustomPaint(
+                  size: const Size(20, 30),
+                  painter: _TargetMarkerPainter(
+                      color: isAligned
+                          ? Colors.green.shade400
+                          : theme.colorScheme.primary),
+                )
+              ],
+            ),
           ),
-        ),
-
-        Column(
-          children: [
-            AnimatedContainer(
-              duration: const Duration(milliseconds: 300),
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-              decoration: BoxDecoration(
+          const Spacer(flex: 2),
+          AnimatedContainer(
+            duration: const Duration(milliseconds: 300),
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+            decoration: BoxDecoration(
+              color: isAligned
+                  ? Colors.green.withOpacity(0.1)
+                  : Colors.transparent,
+              borderRadius: BorderRadius.circular(30),
+            ),
+            child: Text(
+              isAligned ? "Aligned" : "${shortestAngle.round()}° to Qibla",
+              style: theme.textTheme.titleLarge?.copyWith(
                 color: isAligned
-                    ? Colors.green.withOpacity(0.1)
-                    : Colors.transparent,
-                borderRadius: BorderRadius.circular(30),
-              ),
-              child: Text(
-                isAligned ? "Aligned" : "${shortestAngle.round()}° to Qibla",
-                style: theme.textTheme.titleLarge?.copyWith(
-                  color: isAligned
-                      ? Colors.green.shade600
-                      : theme.colorScheme.primary,
-                  fontWeight: FontWeight.bold,
-                ),
+                    ? Colors.green.shade600
+                    : theme.colorScheme.primary,
+                fontWeight: FontWeight.bold,
               ),
             ),
-            const SizedBox(height: 8),
-            Text(_locationName,
-                style: theme.textTheme.bodyMedium
-                    ?.copyWith(color: theme.hintColor)),
-          ],
-        ),
-      ],
+          ),
+          const SizedBox(height: 8),
+          Text(_locationName,
+              style:
+                  theme.textTheme.bodyMedium?.copyWith(color: theme.hintColor)),
+          const Spacer(),
+        ],
+      ),
     );
   }
 
-  Widget _buildPermissionMessage() {
-    // ... This widget remains the same ...
-    return Center(
-        child: Padding(
-            padding: const EdgeInsets.all(32.0),
-            child:
-                Column(mainAxisAlignment: MainAxisAlignment.center, children: [
-              Icon(Icons.location_off_rounded,
-                  size: 80, color: Theme.of(context).hintColor),
-              const SizedBox(height: 16),
-              Text("Location Required",
-                  style: Theme.of(context)
-                      .textTheme
-                      .titleLarge
-                      ?.copyWith(fontWeight: FontWeight.bold)),
-              const SizedBox(height: 8),
-              Text(_permissionStatus,
-                  textAlign: TextAlign.center,
-                  style: TextStyle(color: Theme.of(context).hintColor)),
-              const SizedBox(height: 24),
-              ElevatedButton(
-                  onPressed: () => Geolocator.openLocationSettings(),
-                  child: const Text("Open Settings"))
-            ])));
-  }
-
   BottomNavigationBar _buildBottomNavBar(ThemeData theme) {
-    // ... This widget remains the same ...
     return BottomNavigationBar(
         currentIndex: _selectedIndex,
         onTap: _onItemTapped,
@@ -252,13 +216,12 @@ class _QiblaCompassPageState extends State<QiblaCompassPage> {
               label: "Chat Bot"),
           BottomNavigationBarItem(
               icon: Icon(Icons.explore_outlined),
-              activeIcon: Icon(Icons.explore),
+              activeIcon: Icon(Icons.apps),
               label: "Sub Apps")
         ]);
   }
 }
 
-// ✅ UI/UX UPDATE: The new, completely custom-drawn compass.
 class _CompassPainter extends CustomPainter {
   final double qiblaAngle;
   final ThemeData theme;
@@ -269,8 +232,10 @@ class _CompassPainter extends CustomPainter {
   void paint(Canvas canvas, Size size) {
     final center = Offset(size.width / 2, size.height / 2);
     final radius = size.width / 2;
+    final textPainter = TextPainter(
+        textAlign: TextAlign.center, textDirection: TextDirection.ltr);
 
-    // --- Draw Dial ---
+    // Dial
     canvas.drawCircle(center, radius, Paint()..color = theme.cardColor);
     canvas.drawCircle(
         center,
@@ -278,11 +243,10 @@ class _CompassPainter extends CustomPainter {
         Paint()
           ..color = theme.dividerColor
           ..style = PaintingStyle.stroke
-          ..strokeWidth = 1);
+          ..strokeWidth = 1
+          ..isAntiAlias = true);
 
-    // --- Draw Ticks and Labels ---
-    final textPainter = TextPainter(
-        textAlign: TextAlign.center, textDirection: TextDirection.ltr);
+    // Ticks and Labels
     for (int i = 0; i < 360; i += 2) {
       final isMajor = i % 30 == 0;
       final angle = (i - 90) * (math.pi / 180);
@@ -297,17 +261,17 @@ class _CompassPainter extends CustomPainter {
           tickEnd,
           Paint()
             ..color = theme.hintColor.withOpacity(0.5)
-            ..strokeWidth = isMajor ? 2 : 1);
+            ..strokeWidth = isMajor ? 2 : 1
+            ..isAntiAlias = true);
 
       if (i % 90 == 0) {
-        String label = '';
-        if (i == 0)
-          label = 'N';
-        else if (i == 90)
-          label = 'E';
-        else if (i == 180)
-          label = 'S';
-        else if (i == 270) label = 'W';
+        String label = (i == 0)
+            ? 'N'
+            : (i == 90)
+                ? 'E'
+                : (i == 180)
+                    ? 'S'
+                    : 'W';
         textPainter.text = TextSpan(
             text: label,
             style: theme.textTheme.bodyMedium
@@ -323,7 +287,7 @@ class _CompassPainter extends CustomPainter {
       }
     }
 
-    // --- ✅ Draw Beautiful North Needle (at the top of the dial) ---
+    // North Needle
     final northAngleRad = (0 - 90) * (math.pi / 180);
     final northPath = Path()
       ..moveTo(center.dx + 10 * math.cos(northAngleRad + math.pi / 2),
@@ -333,9 +297,13 @@ class _CompassPainter extends CustomPainter {
       ..lineTo(center.dx + 10 * math.cos(northAngleRad - math.pi / 2),
           center.dy + 10 * math.sin(northAngleRad - math.pi / 2))
       ..close();
-    canvas.drawPath(northPath, Paint()..color = Colors.red.shade400);
+    canvas.drawPath(
+        northPath,
+        Paint()
+          ..color = Colors.red.shade400
+          ..isAntiAlias = true);
 
-    // --- ✅ Draw Beautiful Qibla Indicator (at the qibla angle on the dial) ---
+    // Qibla Indicator
     final qiblaAngleRad = (qiblaAngle - 90) * (math.pi / 180);
     final qiblaPath = Path()
       ..moveTo(center.dx, center.dy)
@@ -344,23 +312,33 @@ class _CompassPainter extends CustomPainter {
       ..lineTo(center.dx + (radius * 0.5) * math.cos(qiblaAngleRad),
           center.dy + (radius * 0.5) * math.sin(qiblaAngleRad))
       ..close();
-    canvas.drawPath(
-        qiblaPath,
-        Paint()
-          ..color = theme.colorScheme.primary
-          ..style = PaintingStyle.stroke
-          ..strokeWidth = 3);
-    final domePaint = Paint()
+    final qiblaStrokePaint = Paint()
+      ..color = theme.colorScheme.primary
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 3
+      ..isAntiAlias = true;
+    final qiblaFillPaint = Paint()
       ..shader = RadialGradient(colors: [
         theme.colorScheme.primary.withOpacity(0.5),
         Colors.transparent
-      ]).createShader(Rect.fromCircle(center: center, radius: radius));
-    canvas.drawPath(qiblaPath, domePaint);
+      ]).createShader(Rect.fromCircle(center: center, radius: radius))
+      ..isAntiAlias = true;
+    canvas.drawPath(qiblaPath, qiblaStrokePaint);
+    canvas.drawPath(qiblaPath, qiblaFillPaint);
 
-    // --- Draw Center Pin ---
+    // Center Pin
     canvas.drawCircle(
-        center, 8, Paint()..color = theme.scaffoldBackgroundColor);
-    canvas.drawCircle(center, 6, Paint()..color = theme.colorScheme.primary);
+        center,
+        8,
+        Paint()
+          ..color = theme.scaffoldBackgroundColor
+          ..isAntiAlias = true);
+    canvas.drawCircle(
+        center,
+        6,
+        Paint()
+          ..color = theme.colorScheme.primary
+          ..isAntiAlias = true);
   }
 
   @override
@@ -368,7 +346,6 @@ class _CompassPainter extends CustomPainter {
       old.qiblaAngle != qiblaAngle || old.theme != theme;
 }
 
-// ✅ UI/UX UPDATE: A simple painter for the static target marker.
 class _TargetMarkerPainter extends CustomPainter {
   final Color color;
   _TargetMarkerPainter({required this.color});
@@ -377,7 +354,8 @@ class _TargetMarkerPainter extends CustomPainter {
   void paint(Canvas canvas, Size size) {
     final paint = Paint()
       ..color = color
-      ..style = PaintingStyle.fill;
+      ..style = PaintingStyle.fill
+      ..isAntiAlias = true;
     final path = Path()
       ..moveTo(size.width / 2, 0)
       ..lineTo(0, size.height)

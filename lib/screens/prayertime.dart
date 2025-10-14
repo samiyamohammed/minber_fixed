@@ -1,13 +1,11 @@
-// lib/screens/prayer_times_page.dart (Fully Updated & Ready to Paste)
+// lib/screens/prayertime.dart (Fully Updated & Ready to Paste)
 
-import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
-import 'package:geolocator/geolocator.dart';
-import 'package:geocoding/geocoding.dart';
-import 'package:adhan_dart/adhan_dart.dart';
 import 'package:hijri/hijri_calendar.dart';
-import 'package:shimmer/shimmer.dart'; // ✅ UI/UX UPDATE: Import for loading animation
+import 'package:shimmer/shimmer.dart';
+import 'package:provider/provider.dart';
+import '../providers/prayer_provider.dart'; // ✅ SOLUTION: Import the provider
 
 class PrayerTimesPage extends StatefulWidget {
   const PrayerTimesPage({super.key});
@@ -17,17 +15,10 @@ class PrayerTimesPage extends StatefulWidget {
 }
 
 class _PrayerTimesPageState extends State<PrayerTimesPage> {
+  // All business logic and state are now in PrayerProvider.
+  // This widget is only responsible for building the UI.
+
   int _selectedIndex = 2; // For BottomNavBar
-  bool _isLoading = true; // To control shimmer effect
-
-  String _city = "Loading...";
-  String _country = "";
-
-  Map<String, DateTime> _prayerTimesDateTimes =
-      {}; // Store DateTime objects for accurate countdown
-  String _nextPrayer = "Loading...";
-  String _nextPrayerCountdown = "--:--:--";
-  Timer? _timer;
 
   final Map<String, IconData> _prayerIcons = {
     "Fajr": Icons.wb_twilight_rounded,
@@ -38,99 +29,8 @@ class _PrayerTimesPageState extends State<PrayerTimesPage> {
     "Isha": Icons.nights_stay_rounded,
   };
 
-  @override
-  void initState() {
-    super.initState();
-    _initializePage();
-    _timer = Timer.periodic(const Duration(seconds: 1), (_) {
-      if (_prayerTimesDateTimes.isNotEmpty) _updateCountdown();
-    });
-  }
-
-  @override
-  void dispose() {
-    _timer?.cancel();
-    super.dispose();
-  }
-
-  Future<void> _initializePage() async {
-    await _getLocationAndCalculateTimes();
-    if (mounted) setState(() => _isLoading = false);
-  }
-
-  Future<void> _getLocationAndCalculateTimes() async {
-    try {
-      Position position = await Geolocator.getCurrentPosition(
-          desiredAccuracy: LocationAccuracy.high);
-      _calculatePrayerTimes(position.latitude, position.longitude);
-      List<Placemark> placemarks =
-          await placemarkFromCoordinates(position.latitude, position.longitude);
-      if (placemarks.isNotEmpty) {
-        setState(() {
-          _city = placemarks.first.locality ?? "Unknown City";
-          _country = placemarks.first.country ?? "";
-        });
-      }
-    } catch (e) {
-      setState(() {
-        _city = "Location Unavailable";
-        _country = "";
-      });
-    }
-  }
-
-  void _calculatePrayerTimes(double lat, double lng) {
-    final prayerTimesData = PrayerTimes(
-        coordinates: Coordinates(lat, lng),
-        date: DateTime.now(),
-        calculationParameters: CalculationMethod.muslimWorldLeague()
-          ..madhab = Madhab.shafi);
-    setState(() {
-      _prayerTimesDateTimes = {
-        "Fajr": prayerTimesData.fajr!.toLocal(),
-        "Sunrise": prayerTimesData.sunrise!.toLocal(),
-        "Dhuhr": prayerTimesData.dhuhr!.toLocal(),
-        "Asr": prayerTimesData.asr!.toLocal(),
-        "Maghrib": prayerTimesData.maghrib!.toLocal(),
-        "Isha": prayerTimesData.isha!.toLocal(),
-      };
-      _updateNextPrayerAndCountdown();
-    });
-  }
-
-  void _updateNextPrayerAndCountdown() {
-    final now = DateTime.now();
-    String nextPrayer = "Fajr (Tomorrow)";
-    for (var entry in _prayerTimesDateTimes.entries) {
-      if (now.isBefore(entry.value)) {
-        nextPrayer = entry.key;
-        break;
-      }
-    }
-    setState(() => _nextPrayer = nextPrayer);
-    _updateCountdown();
-  }
-
-  void _updateCountdown() {
-    if (_prayerTimesDateTimes.isEmpty) return;
-    final now = DateTime.now();
-    DateTime? targetTime;
-    if (_nextPrayer.contains('Tomorrow')) {
-      targetTime = _prayerTimesDateTimes['Fajr']?.add(const Duration(days: 1));
-    } else {
-      targetTime = _prayerTimesDateTimes[_nextPrayer];
-    }
-    if (targetTime == null) return;
-    if (now.isAfter(targetTime)) {
-      _updateNextPrayerAndCountdown(); // Recalculate next prayer if time has passed
-      return;
-    }
-    final duration = targetTime.difference(now);
-    final countdown =
-        "${duration.inHours.remainder(24).toString().padLeft(2, '0')}:${duration.inMinutes.remainder(60).toString().padLeft(2, '0')}:${duration.inSeconds.remainder(60).toString().padLeft(2, '0')}";
-    if (mounted) setState(() => _nextPrayerCountdown = countdown);
-  }
-
+  // Your navigation logic remains the same. The provider ensures that even if this
+  // page is rebuilt, the data is not re-fetched.
   void _onItemTapped(int index) {
     if (_selectedIndex == index) return;
     String routeName = '';
@@ -142,7 +42,7 @@ class _PrayerTimesPageState extends State<PrayerTimesPage> {
         routeName = '/media';
         break;
       case 2:
-        break;
+        break; // Current page, do nothing
       case 3:
         routeName = '/chatbot';
         break;
@@ -150,24 +50,29 @@ class _PrayerTimesPageState extends State<PrayerTimesPage> {
         routeName = '/subapps';
         break;
     }
-    if (routeName.isNotEmpty)
+    if (routeName.isNotEmpty) {
       Navigator.pushReplacementNamed(context, routeName);
+    }
   }
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    // ✅ SOLUTION: Listen to the PrayerProvider for state changes.
+    // context.watch makes this widget rebuild whenever notifyListeners() is called.
+    final prayerProvider = context.watch<PrayerProvider>();
+
     return Scaffold(
       body: Column(
         children: [
-          _buildHeader(theme),
+          _buildHeader(theme, prayerProvider),
           Expanded(
-            child: _isLoading
+            child: prayerProvider.isLoading
                 ? const _PrayerListShimmer()
                 : ListView(
                     padding: const EdgeInsets.all(16.0),
                     children: [
-                      _buildPrayerList(theme),
+                      _buildPrayerList(theme, prayerProvider),
                       const SizedBox(height: 24),
                       _buildToolsGrid(theme),
                       const SizedBox(height: 16),
@@ -181,8 +86,9 @@ class _PrayerTimesPageState extends State<PrayerTimesPage> {
   }
 
   // --- WIDGET BUILDER METHODS ---
+  // These now take the provider as an argument to get the data they need.
 
-  Widget _buildHeader(ThemeData theme) {
+  Widget _buildHeader(ThemeData theme, PrayerProvider provider) {
     final formattedHijriDate = HijriCalendar.now().toFormat("MMMM d, yyyy");
     return Stack(
       alignment: Alignment.center,
@@ -195,7 +101,6 @@ class _PrayerTimesPageState extends State<PrayerTimesPage> {
                   image: AssetImage("assets/images/mosque.jpg"),
                   fit: BoxFit.cover)),
         ),
-        // ✅ UI/UX UPDATE: Immersive gradient overlay
         Container(
           height: 220,
           width: double.infinity,
@@ -219,19 +124,22 @@ class _PrayerTimesPageState extends State<PrayerTimesPage> {
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
                 Row(mainAxisAlignment: MainAxisAlignment.center, children: [
-                  Icon(Icons.location_on, color: Colors.white, size: 16),
+                  const Icon(Icons.location_on, color: Colors.white, size: 16),
                   const SizedBox(width: 6),
-                  Text("$_city, $_country",
+                  // ✅ SOLUTION: Use data from the provider
+                  Text("${provider.city}, ${provider.country}",
                       style: theme.textTheme.titleSmall?.copyWith(
                           color: Colors.white, fontWeight: FontWeight.w500))
                 ]),
                 const SizedBox(height: 8),
-                Text(_nextPrayer,
+                // ✅ SOLUTION: Use data from the provider
+                Text(provider.nextPrayer,
                     style: theme.textTheme.headlineMedium?.copyWith(
                         color: Colors.white, fontWeight: FontWeight.bold)),
                 const SizedBox(height: 4),
-                if (_nextPrayerCountdown.isNotEmpty)
-                  Text("in $_nextPrayerCountdown",
+                // ✅ SOLUTION: Use data from the provider
+                if (provider.nextPrayerCountdown.isNotEmpty)
+                  Text("in ${provider.nextPrayerCountdown}",
                       style: theme.textTheme.titleLarge
                           ?.copyWith(color: Colors.white70)),
                 const SizedBox(height: 12),
@@ -251,10 +159,11 @@ class _PrayerTimesPageState extends State<PrayerTimesPage> {
     );
   }
 
-  Widget _buildPrayerList(ThemeData theme) {
+  Widget _buildPrayerList(ThemeData theme, PrayerProvider provider) {
+    // ✅ SOLUTION: Use data from the provider
     return Column(
-      children: _prayerTimesDateTimes.entries.map((entry) {
-        final isNext = entry.key == _nextPrayer;
+      children: provider.prayerTimes.entries.map((entry) {
+        final isNext = entry.key == provider.nextPrayer;
         return Container(
           margin: const EdgeInsets.only(bottom: 8),
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
@@ -381,14 +290,15 @@ class _PrayerTimesPageState extends State<PrayerTimesPage> {
             activeIcon: Icon(Icons.chat_bubble),
             label: "Chat Bot"),
         BottomNavigationBarItem(
-            icon: Icon(Icons.explore_outlined),
-            activeIcon: Icon(Icons.explore),
+            icon: Icon(Icons.apps),
+            activeIcon: Icon(Icons.apps),
             label: "Sub Apps"),
       ],
     );
   }
 }
 
+// This shimmer widget remains completely unchanged.
 class _PrayerListShimmer extends StatelessWidget {
   const _PrayerListShimmer();
 

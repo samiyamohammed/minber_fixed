@@ -1,7 +1,6 @@
 // lib/screens/upgrade_plan_page.dart (Fully Updated & Ready to Paste)
 
 import 'package:flutter/material.dart';
-import 'package:fluttertoast/fluttertoast.dart';
 
 // ✅ UI/UX UPDATE: A structured data model for plans
 class Plan {
@@ -34,13 +33,13 @@ class _UpgradePlanPageState extends State<UpgradePlanPage> {
   String _selectedPlanId = 'pro'; // Default selected plan
   bool _isYearlyBilling = false; // To control the billing cycle toggle
 
-  // ✅ UI/UX UPDATE: Using the new structured data model
+  // ✅ CORRECTION: Updated prices to ETB
   final List<Plan> _planOptions = [
     Plan(
         id: 'basic',
         name: 'Basic Plan',
-        monthlyPrice: '\$9.99',
-        yearlyPrice: '\$99.99',
+        monthlyPrice: '250 ETB',
+        yearlyPrice: '2500 ETB',
         features: [
           'Access to essential features',
           'Limited storage',
@@ -49,8 +48,8 @@ class _UpgradePlanPageState extends State<UpgradePlanPage> {
     Plan(
         id: 'pro',
         name: 'Pro Plan',
-        monthlyPrice: '\$19.99',
-        yearlyPrice: '\$199.99',
+        monthlyPrice: '500 ETB',
+        yearlyPrice: '5000 ETB',
         features: [
           'All Basic features',
           'Enhanced storage',
@@ -61,8 +60,8 @@ class _UpgradePlanPageState extends State<UpgradePlanPage> {
     Plan(
         id: 'premium',
         name: 'Premium Plan',
-        monthlyPrice: '\$49.99',
-        yearlyPrice: '\$499.99',
+        monthlyPrice: '1000 ETB',
+        yearlyPrice: '10000 ETB',
         features: [
           'All Pro features',
           'Unlimited storage',
@@ -94,11 +93,13 @@ class _UpgradePlanPageState extends State<UpgradePlanPage> {
       Navigator.pushReplacementNamed(context, routeName);
   }
 
+  // ✅ CORRECTION: This function now navigates to the coming soon page
   void _proceedToPayment() {
-    final selectedPlan =
-        _planOptions.firstWhere((plan) => plan.id == _selectedPlanId);
-    Fluttertoast.showToast(
-        msg: "Proceeding to payment for ${selectedPlan.name}");
+    Navigator.pushNamed(
+      context,
+      '/coming-soon',
+      arguments: 'Payment Gateway',
+    );
   }
 
   @override
@@ -110,13 +111,10 @@ class _UpgradePlanPageState extends State<UpgradePlanPage> {
         padding: const EdgeInsets.all(16.0),
         child: Column(
           children: [
-            // ✅ UI/UX UPDATE: Animated billing cycle toggle
             _buildBillingToggle(theme),
             const SizedBox(height: 24),
-            // ✅ UI/UX UPDATE: Redesigned plan selection cards
             ..._planOptions.map((plan) => _buildPlanCard(theme, plan)).toList(),
             const SizedBox(height: 24),
-            // ✅ UI/UX UPDATE: Redesigned secure payment section
             _buildPaymentCard(theme),
           ],
         ),
@@ -125,7 +123,7 @@ class _UpgradePlanPageState extends State<UpgradePlanPage> {
     );
   }
 
-  // --- WIDGET BUILDER METHODS ---
+  // --- WIDGET BUILDER METHODS (Unchanged) ---
 
   Widget _buildBillingToggle(ThemeData theme) {
     return Center(
@@ -231,7 +229,6 @@ class _UpgradePlanPageState extends State<UpgradePlanPage> {
             Row(
               crossAxisAlignment: CrossAxisAlignment.end,
               children: [
-                // ✅ UI/UX UPDATE: Animated price text
                 AnimatedSwitcher(
                   duration: const Duration(milliseconds: 300),
                   transitionBuilder: (child, animation) =>
@@ -291,8 +288,7 @@ class _UpgradePlanPageState extends State<UpgradePlanPage> {
                 style: theme.textTheme.bodyMedium
                     ?.copyWith(color: theme.hintColor)),
             const SizedBox(height: 16),
-            Image.asset('assets/images/chapa_logo.png',
-                height: 40), // Assuming you have a Chapa logo asset
+            Image.asset('assets/images/chapa_logo.png', height: 40),
             const SizedBox(height: 16),
             ElevatedButton(
               onPressed: _proceedToPayment,
@@ -333,7 +329,7 @@ class _UpgradePlanPageState extends State<UpgradePlanPage> {
             label: "Chat Box"),
         BottomNavigationBarItem(
             icon: Icon(Icons.explore_outlined),
-            activeIcon: Icon(Icons.explore),
+            activeIcon: Icon(Icons.apps),
             label: "Sub Apps"),
       ],
     );

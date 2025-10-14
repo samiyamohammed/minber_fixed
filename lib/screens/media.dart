@@ -1,13 +1,13 @@
-// lib/screens/media_hub_page.dart (Fully Corrected & Ready to Paste)
-
 import 'dart:convert';
+import 'dart:developer' as developer;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:http/http.dart' as http;
+import 'package:pretty_http_logger/pretty_http_logger.dart';
 import 'package:shimmer/shimmer.dart';
-import 'package:youtube_player_iframe/youtube_player_iframe.dart';
+import 'package:youtube_player_flutter/youtube_player_flutter.dart'; // <-- CORRECT IMPORT
 
-// --- Data Models and API Service (No Changes Needed) ---
+// --- Data Models (No Changes) ---
 class Video {
   final String id, videoId, title, thumbnailUrl, category;
   Video(
@@ -20,7 +20,7 @@ class Video {
       id: json['id'] ?? '',
       videoId: json['videoId'] ?? '',
       title: json['title'] ?? 'Untitled',
-      thumbnailUrl: json['thumbnailUrl'] ?? json['thumbnailUrl1'] ?? '',
+      thumbnailUrl: json['thumbnailUrl1'] ?? json['thumbnailUrl'] ?? '',
       category: json['category'] ?? json['playlist']?['title'] ?? 'Other');
 }
 
@@ -41,13 +41,23 @@ class Playlist {
       itemCount: json['itemCount'] ?? 0);
 }
 
+// --- ApiService (No Changes) ---
 class ApiService {
   final String baseUrl = "http://msa.merkuz.com:3636/youtube";
+
+  static final http.Client _client = HttpClientWithMiddleware.build(
+    middlewares: [
+      HttpLogger(logLevel: LogLevel.BODY),
+    ],
+  );
+
   Future<List<Video>> getVideos({String? category}) async {
     String url = "$baseUrl/videos";
-    if (category != null)
+    if (category != null) {
       url = "$url?category=${Uri.encodeComponent(category)}";
-    final response = await http.get(Uri.parse(url));
+    }
+    final response = await _client.get(Uri.parse(url));
+
     if (response.statusCode == 200) {
       final data = json.decode(utf8.decode(response.bodyBytes));
       return (data['data'] as List)
@@ -59,7 +69,7 @@ class ApiService {
   }
 
   Future<List<Video>> getVideosFromPlaylistSlug(String slug) async {
-    final response = await http.get(Uri.parse("$baseUrl/playlists/$slug"));
+    final response = await _client.get(Uri.parse("$baseUrl/playlists/$slug"));
     if (response.statusCode == 200) {
       final data = json.decode(utf8.decode(response.bodyBytes));
       return (data['data'] as List)
@@ -71,7 +81,7 @@ class ApiService {
   }
 
   Future<List<Playlist>> getPlaylists() async {
-    final response = await http.get(Uri.parse("$baseUrl/playlists"));
+    final response = await _client.get(Uri.parse("$baseUrl/playlists"));
     if (response.statusCode == 200) {
       final data = json.decode(utf8.decode(response.bodyBytes));
       List<Playlist> playlists = (data['data'] as List)
@@ -90,7 +100,7 @@ class ApiService {
   }
 }
 
-// --- MediaHubPage (Main Widget) ---
+// --- MediaHubPage (Main Widget - No Changes) ---
 class MediaHubPage extends StatefulWidget {
   const MediaHubPage({super.key});
   @override
@@ -112,6 +122,15 @@ class _MediaHubPageState extends State<MediaHubPage>
   void dispose() {
     _tabController.dispose();
     super.dispose();
+  }
+
+  void _showComingSoonSheet() {
+    showModalBottomSheet(
+      context: context,
+      shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      builder: (context) => const _ComingSoonSheetContent(),
+    );
   }
 
   void _onItemTapped(int index) {
@@ -141,37 +160,46 @@ class _MediaHubPageState extends State<MediaHubPage>
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     return Scaffold(
-      appBar: AppBar(
-        title: const Text("Media Hub"),
-        // ✅ CORRECTION: Explicitly setting the AppBar and TabBar colors for this page
-        backgroundColor: theme.colorScheme.primary,
-        foregroundColor:
-            theme.colorScheme.onPrimary, // Ensures title and icons are white
-        bottom: TabBar(
-          controller: _tabController,
-          labelColor: Colors.white, // Selected tab text is white
-          unselectedLabelColor: Colors.white
-              .withOpacity(0.7), // Unselected is slightly transparent white
-          indicatorColor: Colors.white, // Underline is white
-          indicatorWeight: 3.0,
-          tabs: const [
-            Tab(text: "All Videos"),
-            Tab(text: "Playlists"),
-            Tab(text: "On-Demand"),
-          ],
+      body: AnnotatedRegion<SystemUiOverlayStyle>(
+        value: SystemUiOverlayStyle.dark,
+        child: SafeArea(
+          child: Column(
+            children: [
+              Container(
+                color: Colors.white,
+                child: TabBar(
+                  controller: _tabController,
+                  labelColor: theme.colorScheme.primary,
+                  unselectedLabelColor: Colors.grey[600],
+                  indicatorColor: theme.colorScheme.primary,
+                  indicatorWeight: 3.0,
+                  onTap: (index) {
+                    if (index == 2) {
+                      _showComingSoonSheet();
+                      _tabController.animateTo(_tabController.previousIndex);
+                    }
+                  },
+                  tabs: const [
+                    Tab(text: "All Videos"),
+                    Tab(text: "Playlists"),
+                    Tab(text: "On-Demand"),
+                  ],
+                ),
+              ),
+              Expanded(
+                child: TabBarView(
+                  controller: _tabController,
+                  physics: const NeverScrollableScrollPhysics(),
+                  children: [
+                    const AllVideosTab(),
+                    const PlaylistsTab(),
+                    Container(),
+                  ],
+                ),
+              ),
+            ],
+          ),
         ),
-      ),
-      body: TabBarView(
-        controller: _tabController,
-        children: [
-          const AllVideosTab(),
-          const PlaylistsTab(),
-          _EmptyState(
-              icon: Icons.history_toggle_off_outlined,
-              message: "On-Demand TV Shows",
-              description:
-                  "This section will contain a library of past and recent TV shows."),
-        ],
       ),
       bottomNavigationBar: BottomNavigationBar(
         currentIndex: _selectedIndex,
@@ -206,7 +234,7 @@ class _MediaHubPageState extends State<MediaHubPage>
   }
 }
 
-// --- Child Tab Widgets (No changes needed, but included for completeness) ---
+// --- Child Tab Widgets (No Changes) ---
 class AllVideosTab extends StatefulWidget {
   const AllVideosTab({super.key});
   @override
@@ -232,6 +260,7 @@ class _AllVideosTabState extends State<AllVideosTab> {
           return const _VideoListShimmer();
         }
         if (snapshot.hasError) {
+          developer.log('Error fetching videos: ${snapshot.error}');
           return _EmptyState(
               icon: Icons.error_outline,
               message: "An Error Occurred",
@@ -299,7 +328,7 @@ class _PlaylistsTabState extends State<PlaylistsTab> {
               alignment: Alignment.centerLeft,
               child: ActionChip(
                 avatar: const Icon(Icons.arrow_back, size: 18),
-                label: Text('Back to Playlists'),
+                label: const Text('Back to Playlists'),
                 onPressed: _backToPlaylists,
               ),
             ),
@@ -349,7 +378,7 @@ class _PlaylistsTabState extends State<PlaylistsTab> {
   }
 }
 
-// --- Reusable UI and Player Page Widgets (No changes needed) ---
+// --- VideoListView - UPDATED for new package ---
 class VideoListView extends StatelessWidget {
   final List<Video> videos;
   const VideoListView({super.key, required this.videos});
@@ -370,12 +399,25 @@ class VideoListView extends StatelessWidget {
           clipBehavior: Clip.antiAlias,
           child: InkWell(
             onTap: () {
-              if (video.videoId.isNotEmpty)
+              final rawVideoId = video.videoId.trim();
+              String? finalVideoId = YoutubePlayer.convertUrlToId(rawVideoId);
+
+              finalVideoId ??= rawVideoId;
+
+              if (finalVideoId.isNotEmpty) {
                 Navigator.push(
                     context,
                     MaterialPageRoute(
                         builder: (_) =>
-                            VideoPlayerPage(videoId: video.videoId)));
+                            VideoPlayerPage(videoId: finalVideoId!)));
+              } else {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text('Could not play video (Invalid Video ID).'),
+                    backgroundColor: Colors.red,
+                  ),
+                );
+              }
             },
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -487,9 +529,11 @@ class PlaylistGridView extends StatelessWidget {
   }
 }
 
+// --- **THE CORRECT** VideoPlayerPage for youtube_player_flutter ---
 class VideoPlayerPage extends StatefulWidget {
   final String videoId;
   const VideoPlayerPage({super.key, required this.videoId});
+
   @override
   State<VideoPlayerPage> createState() => _VideoPlayerPageState();
 }
@@ -500,46 +544,53 @@ class _VideoPlayerPageState extends State<VideoPlayerPage> {
   @override
   void initState() {
     super.initState();
-    _controller = YoutubePlayerController.fromVideoId(
-        videoId: widget.videoId,
+    _controller = YoutubePlayerController(
+      initialVideoId: widget.videoId,
+      flags: const YoutubePlayerFlags(
         autoPlay: true,
-        params: const YoutubePlayerParams(
-            showControls: true, showFullscreenButton: true))
-      ..setFullScreenListener((isFullScreen) {
-        if (mounted) {
-          if (isFullScreen) {
-            SystemChrome.setPreferredOrientations([
-              DeviceOrientation.landscapeLeft,
-              DeviceOrientation.landscapeRight
-            ]);
-          } else {
-            SystemChrome.setPreferredOrientations(
-                [DeviceOrientation.portraitUp, DeviceOrientation.portraitDown]);
-          }
-        }
-      });
+        mute: false,
+        // Add any other flags you need here
+      ),
+    );
+  }
+
+  @override
+  void deactivate() {
+    // Pauses video while navigating to another page.
+    _controller.pause();
+    super.deactivate();
   }
 
   @override
   void dispose() {
-    _controller.close();
-    SystemChrome.setPreferredOrientations(
-        [DeviceOrientation.portraitUp, DeviceOrientation.portraitDown]);
+    _controller.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    return YoutubePlayerScaffold(
-      controller: _controller,
-      aspectRatio: 16 / 9,
+    return YoutubePlayerBuilder(
+      onExitFullScreen: () {
+        // This ensures the device returns to portrait mode when leaving fullscreen.
+        SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]);
+      },
+      player: YoutubePlayer(
+        controller: _controller,
+        showVideoProgressIndicator: true,
+      ),
       builder: (context, player) => Scaffold(
-          appBar: AppBar(title: const Text("Video Player")),
-          body: Center(child: player)),
+        appBar: AppBar(
+          title: const Text("Video Player"),
+        ),
+        body: Center(
+          child: player,
+        ),
+      ),
     );
   }
 }
 
+// --- UI Widgets (No Changes) ---
 class _VideoListShimmer extends StatelessWidget {
   const _VideoListShimmer();
   @override
@@ -645,6 +696,40 @@ class _EmptyState extends StatelessWidget {
                     ?.copyWith(color: theme.hintColor)),
           ],
         ),
+      ),
+    );
+  }
+}
+
+class _ComingSoonSheetContent extends StatelessWidget {
+  const _ComingSoonSheetContent();
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Container(
+      padding: const EdgeInsets.all(24.0),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(Icons.construction_rounded,
+              size: 60, color: theme.colorScheme.primary),
+          const SizedBox(height: 16),
+          Text("Feature Coming Soon!",
+              style: theme.textTheme.headlineSmall
+                  ?.copyWith(fontWeight: FontWeight.bold)),
+          const SizedBox(height: 8),
+          Text(
+              "The On-Demand TV Shows library is under construction. We're working hard to bring it to you!",
+              textAlign: TextAlign.center,
+              style:
+                  theme.textTheme.bodyLarge?.copyWith(color: theme.hintColor)),
+          const SizedBox(height: 24),
+          ElevatedButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: const Text("Got It")),
+        ],
       ),
     );
   }

@@ -364,7 +364,7 @@ class _HijriCalendarPageState extends State<HijriCalendarPage> {
               label: "Chat Bot"),
           BottomNavigationBarItem(
               icon: Icon(Icons.explore_outlined),
-              activeIcon: Icon(Icons.explore),
+              activeIcon: Icon(Icons.apps),
               label: "Sub Apps"),
         ],
       ),

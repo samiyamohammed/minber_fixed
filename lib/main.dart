@@ -2,6 +2,11 @@
 
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:minber_super_app_new_fixed/screens/YouTube_screen.dart';
+import 'package:minber_super_app_new_fixed/screens/about_us_page.dart';
+import 'package:minber_super_app_new_fixed/screens/coming_soon_page.dart';
+import 'package:minber_super_app_new_fixed/screens/help_and_support_page.dart';
+import 'package:minber_super_app_new_fixed/screens/notification_settings_page.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
@@ -14,6 +19,7 @@ import 'services/firebase-notification.dart'; // For FIREBASE push notifications
 
 // --- PROVIDER & CORE IMPORTS ---
 import 'providers/user_provider.dart';
+import 'providers/prayer_provider.dart';
 import 'core/app_colors.dart';
 import 'core/theme_notifier.dart';
 
@@ -23,11 +29,11 @@ import 'screens/home_screen.dart';
 import 'screens/login_screen.dart';
 import 'screens/signup_screen.dart';
 import 'screens/Profile & Settings.dart';
-// import 'screens/edit_profile.dart'; // Assuming you will create this later
+// import 'screens/edit_profile.dart';
 import 'screens/change_password.dart';
 import 'screens/live_screen.dart';
 import 'screens/media.dart';
-import 'screens/youtube_screen.dart';
+import 'screens/youtube_screen.dart' hide YouTubePage;
 import 'screens/youtubechannel.dart';
 import 'screens/ondemand.dart';
 import 'screens/prayertime.dart';
@@ -41,6 +47,7 @@ import 'screens/subapps_screen.dart';
 import 'screens/dua_dhikr_page.dart';
 import 'screens/forgot_password_screen.dart';
 import 'screens/reset_password_screen.dart';
+import 'package:video_player/video_player.dart';
 
 // --- BACKGROUND TASK DEFINITION (UNCHANGED) ---
 @pragma('vm:entry-point')
@@ -76,6 +83,7 @@ Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
 // --- MAIN FUNCTION (UNCHANGED) ---
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  // Removed as the package does not exist
 
   final savedThemeMode = await loadThemePreference();
   themeNotifier = ValueNotifier<ThemeMode>(savedThemeMode);
@@ -156,15 +164,18 @@ Future<void> setupFirebasePushNotifications() async {
   }
 }
 
-// --- MAIN APP WIDGET (THEMES UPDATED) ---
+// --- MAIN APP WIDGET (UPDATED) ---
 class MyApp extends StatelessWidget {
   final String initialRoute;
   const MyApp({super.key, required this.initialRoute});
 
   @override
   Widget build(BuildContext context) {
-    return ChangeNotifierProvider(
-      create: (context) => UserProvider(),
+    return MultiProvider(
+      providers: [
+        ChangeNotifierProvider(create: (context) => UserProvider()),
+        ChangeNotifierProvider(create: (context) => PrayerProvider()),
+      ],
       child: ValueListenableBuilder<ThemeMode>(
         valueListenable: themeNotifier,
         builder: (_, ThemeMode currentMode, __) {
@@ -173,26 +184,26 @@ class MyApp extends StatelessWidget {
             debugShowCheckedModeBanner: false,
             title: 'Minber TV',
 
-            // --- ✅ LIGHT THEME: UPDATED WITH BRAND COLORS ---
+            // --- ✅ THEME UPDATED ---
             theme: ThemeData(
               primaryColor: AppColors.primaryBlue,
               scaffoldBackgroundColor: AppColors.backgroundLight,
-             appBarTheme: const AppBarTheme(
-                backgroundColor: AppColors.primaryBlue,
-                foregroundColor: Colors.white,
-                elevation: 2.0,
+              appBarTheme: const AppBarTheme(
+                // Modern white AppBar with blue text/icons
+                backgroundColor: AppColors.backgroundLight,
+                foregroundColor: AppColors.primaryBlue,
+                elevation: 0.0,
+                scrolledUnderElevation: 1.0, // Subtle shadow on scroll
                 titleTextStyle: TextStyle(
-                  color: Colors.white, // ✅ FIX 1: Changed to white
+                  color: AppColors.primaryBlue,
                   fontSize: 20,
                   fontWeight: FontWeight.w600,
                 ),
-                iconTheme: IconThemeData(
-                    color: Colors
-                        .white), // ✅ FIX 2: Changed to white for consistency
+                iconTheme: IconThemeData(color: AppColors.primaryBlue),
               ),
               brightness: Brightness.light,
               colorScheme: const ColorScheme.light(
-                primary: AppColors.primaryBlue,
+                primary: AppColors.primaryBlue, // Consistent primary blue
                 secondary: AppColors.accentBlue,
                 surface: AppColors.backgroundLight,
                 onBackground: AppColors.textGrey,
@@ -204,7 +215,7 @@ class MyApp extends StatelessWidget {
               ),
             ),
 
-            // --- ✅ DARK THEME: UPDATED WITH BRAND COLORS ---
+            // --- ✅ DARK THEME UPDATED ---
             darkTheme: ThemeData(
               primaryColor: AppColors.primaryBlue,
               scaffoldBackgroundColor: AppColors.backgroundDark,
@@ -221,9 +232,9 @@ class MyApp extends StatelessWidget {
               ),
               brightness: Brightness.dark,
               colorScheme: const ColorScheme.dark(
-                primary: AppColors
-                    .accentBlue, // Use brighter blue for better contrast
-                secondary: AppColors.primaryBlue,
+                primary: AppColors.primaryBlue, // Consistent primary blue
+                secondary:
+                    AppColors.accentBlue, // Kept accent for variety if needed
                 surface: AppColors.surfaceDark,
                 onBackground: Colors.white70,
                 onSurface: Colors.white70,
@@ -235,6 +246,7 @@ class MyApp extends StatelessWidget {
             ),
             themeMode: currentMode,
             initialRoute: initialRoute,
+            // --- ROUTES (UNCHANGED) ---
             routes: {
               '/onboarding': (_) => const OnboardingScreen(),
               '/home': (_) => const HomeScreen(),
@@ -247,7 +259,7 @@ class MyApp extends StatelessWidget {
               '/changePassword': (_) => const ChangePasswordPage(),
               '/live': (_) => const LiveStreamPage(),
               '/media': (_) => const MediaHubPage(),
-              '/youtube': (_) => const YouTubePage(),
+              // '/youtube': (_) => const YouTubePage(),
               '/youtubeContent': (_) => const OnDemandPage(),
               '/channel': (_) => const YouTubeChannelDetailPage(),
               '/ondemand': (_) => const OnDemandPage(),
@@ -260,6 +272,10 @@ class MyApp extends StatelessWidget {
               '/upgradeplan': (_) => const UpgradePlanPage(),
               '/subapps': (_) => const KiriyogdeyraPage(),
               '/dua-dhikr': (_) => const DuaDhikrPage(),
+              '/notification-settings': (_) => const NotificationSettingsPage(),
+              '/about-us': (_) => const AboutUsPage(),
+              '/help-and-support': (_) => const HelpAndSupportPage(),
+              '/coming-soon': (_) => const ComingSoonPage(),
             },
           );
         },
