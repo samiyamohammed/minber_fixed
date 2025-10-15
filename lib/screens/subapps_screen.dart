@@ -2,9 +2,8 @@
 
 import 'package:flutter/material.dart';
 import 'package:fluttertoast/fluttertoast.dart';
-import 'package:url_launcher/url_launcher.dart';
 import 'package:webview_flutter/webview_flutter.dart';
-import 'package:flutter_staggered_animations/flutter_staggered_animations.dart'; // ✅ UI/UX UPDATE: Import for list animation
+import 'package:flutter_staggered_animations/flutter_staggered_animations.dart';
 
 // --- Screen for displaying the web content ---
 class EmbeddedWebScreen extends StatefulWidget {
@@ -20,7 +19,6 @@ class EmbeddedWebScreen extends StatefulWidget {
 
 class _EmbeddedWebScreenState extends State<EmbeddedWebScreen> {
   late final WebViewController _controller;
-  // ✅ UI/UX UPDATE: State for loading indicator
   double _loadingProgress = 0;
 
   @override
@@ -50,13 +48,11 @@ class _EmbeddedWebScreenState extends State<EmbeddedWebScreen> {
       appBar: AppBar(
         title: Text(widget.appName),
         actions: [
-          // ✅ UI/UX UPDATE: Added a refresh button for the webview
           IconButton(
             icon: const Icon(Icons.refresh),
             onPressed: () => _controller.reload(),
           ),
         ],
-        // ✅ UI/UX UPDATE: Linear progress indicator for loading
         bottom: _loadingProgress > 0 && _loadingProgress < 1
             ? PreferredSize(
                 preferredSize: const Size.fromHeight(4.0),
@@ -66,7 +62,6 @@ class _EmbeddedWebScreenState extends State<EmbeddedWebScreen> {
               )
             : null,
       ),
-      // ✅ UI/UX UPDATE: Added Pull-to-Refresh for the WebView
       body: RefreshIndicator(
         onRefresh: () async => _controller.reload(),
         child: WebViewWidget(controller: _controller),
@@ -92,14 +87,23 @@ class _KiriyogdeyraPageState extends State<KiriyogdeyraPage> {
       'url': 'https://kirbgebeya.com/'
     },
     {
-      'name': 'Besirah',
-      'description': 'Explore historical and religious content',
-      'image': 'assets/images/besira.jpg'
+      'name': 'almathurat',
+      'description': 'Recite Morning and Evening Adhkar',
+      'image': 'assets/images/almathurat.jpg',
+      'url': 'https://Skylinkict.com/almathurat'
     },
     {
       'name': 'Alfurqan App',
       'description': 'Read, listen, and understand the Quran',
-      'image': 'assets/images/alfuqan.jpg'
+      'image': 'assets/images/alfuqan.jpg',
+      // ✅ UPDATE: Added the URL to open in the webview
+      'url': 'https://skylinkict.com/alfurqan'
+    },
+    {
+      'name': 'Besirah',
+      'description': 'Explore historical and religious content',
+      'image': 'assets/images/besira.jpg'
+      // No URL, will show a toast message
     },
   ];
 
@@ -122,8 +126,9 @@ class _KiriyogdeyraPageState extends State<KiriyogdeyraPage> {
       case 4:
         break;
     }
-    if (routeName.isNotEmpty)
+    if (routeName.isNotEmpty) {
       Navigator.pushReplacementNamed(context, routeName);
+    }
   }
 
   void _openApp(Map<String, dynamic> app) {
@@ -145,13 +150,11 @@ class _KiriyogdeyraPageState extends State<KiriyogdeyraPage> {
     return Scaffold(
       appBar: AppBar(title: const Text("Sub Apps"), centerTitle: true),
       body: AnimationLimiter(
-        // ✅ UI/UX UPDATE: Wrapper for staggered animations
         child: ListView.builder(
           padding: const EdgeInsets.all(16.0),
           itemCount: _featuredApps.length,
           itemBuilder: (context, index) {
             final app = _featuredApps[index];
-            // ✅ UI/UX UPDATE: Each list item is now animated
             return AnimationConfiguration.staggeredList(
               position: index,
               duration: const Duration(milliseconds: 375),
@@ -172,7 +175,6 @@ class _KiriyogdeyraPageState extends State<KiriyogdeyraPage> {
   // --- WIDGET BUILDER METHODS ---
 
   Widget _buildAppCard(ThemeData theme, Map<String, dynamic> app) {
-    // ✅ UI/UX UPDATE: Modernized app card design
     return Card(
       elevation: 0,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),

@@ -6,12 +6,62 @@ import 'package:intl/intl.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:adhan_dart/adhan_dart.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:url_launcher/url_launcher.dart';
 import 'package:video_player/video_player.dart';
 import 'package:chewie/chewie.dart';
 import 'package:shimmer/shimmer.dart';
-
+import 'package:webview_flutter/webview_flutter.dart';
 import '../widgets/app_drawer.dart';
+import './coming_soon_page.dart';
+
+// (The EmbeddedWebScreen widget remains the same as before)
+class EmbeddedWebScreen extends StatefulWidget {
+  final String url;
+  final String appName;
+
+  const EmbeddedWebScreen(
+      {super.key, required this.url, required this.appName});
+
+  @override
+  State<EmbeddedWebScreen> createState() => _EmbeddedWebScreenState();
+}
+
+class _EmbeddedWebScreenState extends State<EmbeddedWebScreen> {
+  late final WebViewController _controller;
+  double _loadingProgress = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = WebViewController()
+      ..setJavaScriptMode(JavaScriptMode.unrestricted)
+      ..setNavigationDelegate(
+        NavigationDelegate(
+          onProgress: (int progress) {
+            setState(() {
+              _loadingProgress = progress / 100.0;
+            });
+          },
+        ),
+      )
+      ..loadRequest(Uri.parse(widget.url));
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: Text(widget.appName),
+        bottom: PreferredSize(
+          preferredSize: const Size.fromHeight(4.0),
+          child: _loadingProgress > 0 && _loadingProgress < 1
+              ? LinearProgressIndicator(value: _loadingProgress)
+              : const SizedBox.shrink(),
+        ),
+      ),
+      body: WebViewWidget(controller: _controller),
+    );
+  }
+}
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -223,7 +273,9 @@ class _HomeScreenState extends State<HomeScreen> {
               const SizedBox(height: 24),
               _buildPrayerTimesSection(theme),
               const SizedBox(height: 24),
-              _buildSectionHeader(theme, "Explore Our Apps", () {}),
+              _buildSectionHeader(theme, "Explore Our Apps", () {
+                Navigator.pushNamed(context, '/subapps');
+              }),
               const SizedBox(height: 12),
               _buildAppsSection(theme),
               const SizedBox(height: 24),
@@ -243,10 +295,131 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  // --- WIDGET BUILDER METHODS ---
+  // --- WIDGET BUILDER METHODS (UPDATED SECTION) ---
+
+  final List<Map<String, dynamic>> _appsData = const [
+    {
+      'name': 'Alfurqan',
+      'image': 'assets/images/alfuqan.jpg',
+      'url': 'https://Skylinkict.com/alfurqan',
+    },
+    {
+      'name': 'Kirbgebeya',
+      'image': 'assets/images/kirbgebeya.png',
+      'url': 'https://kirbgebeya.com/',
+    },
+    {
+      'name': 'Almathurat',
+      'image': 'assets/images/almathurat.jpg',
+      'url': 'https://Skylinkict.com/almathurat',
+    },
+    {
+      'name': 'Besirah',
+      'image': 'assets/images/besira.jpg',
+      'url': null, // This will now navigate to the ComingSoonPage
+    },
+  ];
+
+  Widget _buildAppsSection(ThemeData theme) {
+    return SizedBox(
+      height: 140,
+      child: ListView.builder(
+        scrollDirection: Axis.horizontal,
+        itemCount: _appsData.length,
+        itemBuilder: (context, index) {
+          final app = _appsData[index];
+          return _buildAppCard(theme, app);
+        },
+      ),
+    );
+  }
+
+  Widget _buildAppCard(ThemeData theme, Map<String, dynamic> app) {
+    return SizedBox(
+      width: 110,
+      child: Card(
+        clipBehavior: Clip.antiAlias,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(16),
+        ),
+        elevation: 3,
+        shadowColor: Colors.black.withOpacity(0.2),
+        margin: const EdgeInsets.only(right: 12),
+        child: InkWell(
+          onTap: () {
+            final url = app['url'] as String?;
+            if (url != null) {
+              // Navigate to our EmbeddedWebScreen for apps with a URL
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => EmbeddedWebScreen(
+                    url: url,
+                    appName: app['name'],
+                  ),
+                ),
+              );
+            } else {
+              // ✅ UPDATE: Navigate to the ComingSoonPage for apps without a URL.
+              // We also pass the app's name as an argument so the page can display it.
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => const ComingSoonPage(),
+                  settings: RouteSettings(
+                    arguments: app['name'],
+                  ),
+                ),
+              );
+            }
+          },
+          child: Column(
+            children: [
+              Expanded(
+                flex: 3,
+                child: Image.asset(
+                  app['image'],
+                  fit: BoxFit.cover,
+                  width: double.infinity,
+                  frameBuilder:
+                      (context, child, frame, wasSynchronouslyLoaded) {
+                    if (wasSynchronouslyLoaded) return child;
+                    return AnimatedOpacity(
+                      opacity: frame == null ? 0 : 1,
+                      duration: const Duration(seconds: 1),
+                      curve: Curves.easeOut,
+                      child: child,
+                    );
+                  },
+                ),
+              ),
+              Expanded(
+                flex: 2,
+                child: Center(
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 4.0),
+                    child: Text(
+                      app['name'],
+                      textAlign: TextAlign.center,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: theme.textTheme.bodyMedium?.copyWith(
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  // --- OTHER WIDGET BUILDER METHODS (UNCHANGED) ---
 
   Widget _buildVideoBanner(BuildContext context) {
-    // ... This widget remains the same ...
     return GestureDetector(
         onTap: () => Navigator.pushNamed(context, '/live'),
         child: AspectRatio(
@@ -291,7 +464,6 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Widget _buildHalalPremium(ThemeData theme) {
-    // ... This widget remains the same ...
     return Container(
         padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
@@ -319,7 +491,6 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Widget _buildPrayerTimesSection(ThemeData theme) {
     const prayerOrder = ['Fajr', 'Dhuhr', 'Asr', 'Maghrib', 'Isha'];
-    // ✅ CORRECTION: Create separate formatters for time and period
     final timeFormatter = DateFormat("h:mm");
     final periodFormatter = DateFormat("a");
 
@@ -346,7 +517,6 @@ class _HomeScreenState extends State<HomeScreen> {
                   return _buildPrayerTimeColumn(
                     theme: theme,
                     prayerName: prayerName,
-                    // ✅ CORRECTION: Pass separate time and period strings
                     time: prayerDateTime != null
                         ? timeFormatter.format(prayerDateTime)
                         : "--:--",
@@ -362,7 +532,6 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Widget _buildPrayerTimesShimmer(ThemeData theme) {
-    // ... This widget remains the same ...
     return Shimmer.fromColors(
         baseColor: theme.splashColor,
         highlightColor: theme.cardColor,
@@ -387,7 +556,6 @@ class _HomeScreenState extends State<HomeScreen> {
       required String time,
       required String period,
       required bool isActive}) {
-    // ✅ CORRECTION: Rebuilt the column to handle separate time and period
     return Expanded(
       child: Container(
         padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 4),
@@ -395,7 +563,7 @@ class _HomeScreenState extends State<HomeScreen> {
             ? BoxDecoration(
                 color: theme.colorScheme.primary,
                 borderRadius: BorderRadius.circular(12))
-            : null, // Using a softer corner radius
+            : null,
         child: Column(
           children: [
             Text(prayerName,
@@ -424,7 +592,6 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Widget _buildSectionHeader(
       ThemeData theme, String title, VoidCallback onViewAll) {
-    // ... This widget remains the same ...
     return Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
       Text(title,
           style: theme.textTheme.titleLarge
@@ -433,44 +600,7 @@ class _HomeScreenState extends State<HomeScreen> {
     ]);
   }
 
-  Widget _buildAppsSection(ThemeData theme) {
-    // ... This widget remains the same ...
-    return Row(mainAxisAlignment: MainAxisAlignment.spaceAround, children: [
-      _buildAppCard(theme, "assets/images/alfuqan.jpg", "Alfurqan", () {}),
-      const SizedBox(width: 12),
-      _buildAppCard(theme, "assets/images/kirbgebeya.png", "Kirbgebeya",
-          () async {
-        final url = Uri.parse("https://kirbgebeya.com/");
-        if (!await launchUrl(url, mode: LaunchMode.inAppWebView)) {}
-      }),
-      const SizedBox(width: 12),
-      _buildAppCard(theme, "assets/images/besira.jpg", "Besirah", () {})
-    ]);
-  }
-
-  Widget _buildAppCard(
-      ThemeData theme, String imagePath, String title, VoidCallback onTap) {
-    // ... This widget remains the same ...
-    return Expanded(
-        child: GestureDetector(
-            onTap: onTap,
-            child: Column(children: [
-              AspectRatio(
-                  aspectRatio: 1,
-                  child: ClipRRect(
-                      borderRadius: BorderRadius.circular(16),
-                      child: Image.asset(imagePath, fit: BoxFit.cover))),
-              const SizedBox(height: 8),
-              Text(title,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: theme.textTheme.bodyMedium
-                      ?.copyWith(fontWeight: FontWeight.bold))
-            ])));
-  }
-
   Widget _buildTrendingSection(BuildContext context, ThemeData theme) {
-    // ... This widget remains the same ...
     return SizedBox(
         height: MediaQuery.of(context).size.width * 0.4,
         child: ListView.builder(
@@ -488,7 +618,6 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Widget _buildNewsSection(ThemeData theme) {
-    // ✅ CORRECTION: Data has been updated with placeholder titles and times
     final List<Map<String, String>> news = [
       {
         "title": "Global Relief Efforts Intensify for Recent Disaster",
@@ -530,7 +659,6 @@ class _HomeScreenState extends State<HomeScreen> {
                       child: Image.asset(item['image']!,
                           width: 70, height: 70, fit: BoxFit.cover)),
                   const SizedBox(width: 12),
-                  // ✅ CORRECTION: Added an Expanded Column to hold the placeholder text
                   Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
@@ -561,7 +689,6 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   BottomNavigationBar _buildBottomNavigationBar(ThemeData theme) {
-    // ... This widget remains the same ...
     return BottomNavigationBar(
         currentIndex: _selectedIndex,
         onTap: _onItemTapped,
@@ -590,7 +717,7 @@ class _HomeScreenState extends State<HomeScreen> {
           BottomNavigationBarItem(
               icon: Icon(Icons.apps_outlined),
               activeIcon: Icon(Icons.apps),
-              label: "Sub Apps")
+              label: "Sub Apps"),
         ]);
   }
 
