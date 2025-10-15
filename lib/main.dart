@@ -33,7 +33,6 @@ import 'screens/Profile & Settings.dart';
 import 'screens/change_password.dart';
 import 'screens/live_screen.dart';
 import 'screens/media.dart';
-import 'screens/youtube_screen.dart' hide YouTubePage;
 import 'screens/youtubechannel.dart';
 import 'screens/ondemand.dart';
 import 'screens/prayertime.dart';
