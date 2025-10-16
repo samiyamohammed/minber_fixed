@@ -267,11 +267,20 @@ class _AllVideosTabState extends State<AllVideosTab> {
               description:
                   "Could not load videos. Please check your connection.");
         }
-        if (!snapshot.hasData || snapshot.data!.isEmpty) {
-          return const _EmptyState(
+       if (!snapshot.hasData || snapshot.data!.isEmpty) {
+          return GestureDetector(
+            onTap: () => Navigator.pushNamed(
+              context,
+              '/coming-soon',
+              arguments:
+                  'Videos Library', // This will be received as featureName
+            ),
+            child: const _EmptyState(
               icon: Icons.videocam_off_outlined,
               message: "No Videos Found",
-              description: "There are currently no videos available.");
+              description: "There are currently no videos available.",
+            ),
+          );
         }
         final videos = snapshot.data!;
         return VideoListView(videos: videos);

@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <title>Live Stream Player</title>
+    <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
+    <style>
+      body {
+        margin: 0;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        background: #121212;
+        color: white;
+        font-family: Arial, sans-serif;
+      }
+      video {
+        width: 80%;
+        max-width: 960px;
+        aspect-ratio: 16/9;
+        margin-top: 30px;
+        border: 2px solid #333;
+        border-radius: 10px;
+        background: black;
+      }
+      .info {
+        margin-top: 15px;
+        font-size: 14px;
+        opacity: 0.8;
+      }
+    </style>
+  </head>
+  <body>
+    <h2>📺 Live Stream Test Player</h2>
+    <video id="video" controls autoplay playsinline></video>
+    <div class="info">HLS stream served by MediaMTX</div>
+
+    <script>
+      const video = document.getElementById("video");
+      const hlsUrl = "http://msa.merkuz.com:8888/live/stream1/index.m3u8"; // 👈 change host if needed
+
+      if (Hls.isSupported()) {
+        const hls = new Hls();
+        hls.loadSource(hlsUrl);
+        hls.attachMedia(video);
+      } else if (video.canPlayType("application/vnd.apple.mpegurl")) {
+        // Safari (native HLS support)
+        video.src = hlsUrl;
+      }
+    </script>
+  </body>
+</html>

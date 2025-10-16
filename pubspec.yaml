@@ -63,6 +63,7 @@ flutter:
   uses-material-design: true
   assets:
     - assets/images/
+    - assets/web/hlsplayer.html
 
 flutter_launcher_icons:
   android: "launcher_icon"
