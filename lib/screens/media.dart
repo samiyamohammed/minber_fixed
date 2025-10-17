@@ -267,7 +267,7 @@ class _AllVideosTabState extends State<AllVideosTab> {
               description:
                   "Could not load videos. Please check your connection.");
         }
-       if (!snapshot.hasData || snapshot.data!.isEmpty) {
+        if (!snapshot.hasData || snapshot.data!.isEmpty) {
           return GestureDetector(
             onTap: () => Navigator.pushNamed(
               context,
