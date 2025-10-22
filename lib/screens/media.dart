@@ -1,27 +1,39 @@
+// lib/screens/media.dart (Final Version with Blocklist)
 import 'dart:convert';
 import 'dart:developer' as developer;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:http/http.dart' as http;
+import 'package:intl/intl.dart'; // Keep for potential future use
 import 'package:pretty_http_logger/pretty_http_logger.dart';
 import 'package:shimmer/shimmer.dart';
 import 'package:youtube_player_flutter/youtube_player_flutter.dart';
 
 // --- Data Models (No Changes) ---
 class Video {
-  final String id, videoId, title, thumbnailUrl, category;
-  Video(
-      {required this.id,
-      required this.videoId,
-      required this.title,
-      required this.thumbnailUrl,
-      required this.category});
+  final String id, videoId, title, thumbnailUrl, category, privacyStatus;
+  final DateTime publishedAt;
+
+  Video({
+    required this.id,
+    required this.videoId,
+    required this.title,
+    required this.thumbnailUrl,
+    required this.category,
+    required this.privacyStatus,
+    required this.publishedAt,
+  });
+
   factory Video.fromJson(Map<String, dynamic> json) => Video(
-      id: json['id'] ?? '',
-      videoId: json['videoId'] ?? '',
-      title: json['title'] ?? 'Untitled',
-      thumbnailUrl: json['thumbnailUrl1'] ?? json['thumbnailUrl'] ?? '',
-      category: json['category'] ?? json['playlist']?['title'] ?? 'Other');
+        id: json['id'] ?? '',
+        videoId: json['videoId'] ?? '',
+        title: json['title'] ?? 'Untitled',
+        thumbnailUrl: json['thumbnailUrl1'] ?? json['thumbnailUrl'] ?? '',
+        category: json['category'] ?? json['playlist']?['title'] ?? 'Other',
+        privacyStatus: json['privacyStatus'] ?? 'public',
+        publishedAt:
+            DateTime.tryParse(json['publishedAt'] ?? '') ?? DateTime(1970),
+      );
 }
 
 class Playlist {
@@ -41,9 +53,14 @@ class Playlist {
       itemCount: json['itemCount'] ?? 0);
 }
 
-// --- ApiService (No Changes) ---
+// --- ApiService (UPDATED with Blocklist) ---
 class ApiService {
   final String baseUrl = "http://msa.merkuz.com:3636/youtube";
+
+  // ⭐⭐⭐ ADDED: Blocklist for specific problematic video IDs ⭐⭐⭐
+  final List<String> _videoBlocklist = [
+    'clRQNP4RdUA',
+  ];
 
   static final http.Client _client = HttpClientWithMiddleware.build(
     middlewares: [
@@ -60,9 +77,13 @@ class ApiService {
 
     if (response.statusCode == 200) {
       final data = json.decode(utf8.decode(response.bodyBytes));
-      return (data['data'] as List)
-          .map((json) => Video.fromJson(json))
-          .toList();
+      List<Video> videos =
+          (data['data'] as List).map((json) => Video.fromJson(json)).toList();
+
+      // Apply all filters and sorting
+      videos = _filterAndSortVideos(videos);
+
+      return videos;
     } else {
       throw Exception('Failed to load videos');
     }
@@ -72,12 +93,33 @@ class ApiService {
     final response = await _client.get(Uri.parse("$baseUrl/playlists/$slug"));
     if (response.statusCode == 200) {
       final data = json.decode(utf8.decode(response.bodyBytes));
-      return (data['data'] as List)
-          .map((json) => Video.fromJson(json))
-          .toList();
+      List<Video> videos =
+          (data['data'] as List).map((json) => Video.fromJson(json)).toList();
+
+      // Apply all filters and sorting
+      videos = _filterAndSortVideos(videos);
+
+      return videos;
     } else {
       throw Exception('Failed to load playlist videos');
     }
+  }
+
+  // ⭐⭐⭐ ADDED: Centralized filtering and sorting logic ⭐⭐⭐
+  List<Video> _filterAndSortVideos(List<Video> videos) {
+    // 1. Apply the blocklist FIRST
+    List<Video> filteredList = videos
+        .where((video) => !_videoBlocklist.contains(video.videoId))
+        .toList();
+
+    // 2. Filter for public status
+    filteredList =
+        filteredList.where((video) => video.privacyStatus == 'public').toList();
+
+    // 3. Sort by newest date
+    filteredList.sort((a, b) => b.publishedAt.compareTo(a.publishedAt));
+
+    return filteredList;
   }
 
   Future<List<Playlist>> getPlaylists() async {
@@ -100,7 +142,7 @@ class ApiService {
   }
 }
 
-// --- MediaHubPage (Main Widget - Updated for TabBar background) ---
+// --- MediaHubPage (No Changes) ---
 class MediaHubPage extends StatefulWidget {
   const MediaHubPage({super.key});
   @override
@@ -166,12 +208,10 @@ class _MediaHubPageState extends State<MediaHubPage>
     final theme = Theme.of(context);
     return Scaffold(
       body: AnnotatedRegion<SystemUiOverlayStyle>(
-        value: SystemUiOverlayStyle.dark, // Keep dark status bar icons
+        value: SystemUiOverlayStyle.dark,
         child: SafeArea(
           child: Column(
             children: [
-              // Removed Container with explicit white color for TabBar
-              // Now it inherits the Scaffold's background color, adapting to theme
               TabBar(
                 controller: _tabController,
                 labelColor: theme.colorScheme.primary,
@@ -391,10 +431,10 @@ class _PlaylistsTabState extends State<PlaylistsTab> {
   }
 }
 
-// --- VideoListView - UPDATED for new package & image fit ---
+// --- VideoListView (UPDATED - Removed date display) ---
 class VideoListView extends StatelessWidget {
   final List<Video> videos;
-  final bool enableNavigation; // Added for flexibility
+  final bool enableNavigation;
 
   const VideoListView(
       {super.key, required this.videos, this.enableNavigation = true});
@@ -409,8 +449,7 @@ class VideoListView extends StatelessWidget {
         return Card(
           elevation: 0,
           margin: const EdgeInsets.only(bottom: 16),
-          color: Theme.of(context)
-              .cardColor, // Use cardColor for consistency with theme
+          color: Theme.of(context).cardColor,
           shape:
               RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
           clipBehavior: Clip.antiAlias,
@@ -424,7 +463,6 @@ class VideoListView extends StatelessWidget {
                     finalVideoId ??= rawVideoId;
 
                     if (finalVideoId.isNotEmpty) {
-                      // Pass the entire video object to VideoPlayerPage
                       Navigator.push(
                           context,
                           MaterialPageRoute(
@@ -444,7 +482,7 @@ class VideoListView extends StatelessWidget {
                       );
                     }
                   }
-                : null, // Disable tap if navigation is not enabled
+                : null,
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -454,7 +492,7 @@ class VideoListView extends StatelessWidget {
                   child: video.thumbnailUrl.isNotEmpty
                       ? Image.network(
                           video.thumbnailUrl,
-                          fit: BoxFit.cover, // Changed to cover to fill the box
+                          fit: BoxFit.cover,
                           errorBuilder: (c, e, s) => Container(
                             color: Colors.grey[300],
                             child: const Icon(Icons.broken_image,
@@ -468,13 +506,15 @@ class VideoListView extends StatelessWidget {
                 Expanded(
                   child: Padding(
                     padding: const EdgeInsets.all(12.0),
-                    child: Text(video.title,
-                        maxLines: 3,
-                        overflow: TextOverflow.ellipsis,
-                        style: Theme.of(context)
-                            .textTheme
-                            .bodyMedium
-                            ?.copyWith(fontWeight: FontWeight.bold)),
+                    child: Text(
+                      video.title,
+                      maxLines: 3, // Allow up to 3 lines for the title
+                      overflow: TextOverflow.ellipsis,
+                      style: Theme.of(context)
+                          .textTheme
+                          .bodyMedium
+                          ?.copyWith(fontWeight: FontWeight.bold),
+                    ),
                   ),
                 ),
               ],
@@ -485,6 +525,8 @@ class VideoListView extends StatelessWidget {
     );
   }
 }
+
+// (The rest of the file remains unchanged from the previous version)
 
 class PlaylistGridView extends StatelessWidget {
   final List<Playlist> playlists;
@@ -498,8 +540,8 @@ class PlaylistGridView extends StatelessWidget {
       padding: const EdgeInsets.all(16),
       gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
           crossAxisCount: 2,
-          crossAxisSpacing: 8, // Reduced spacing
-          mainAxisSpacing: 8, // Reduced spacing
+          crossAxisSpacing: 8,
+          mainAxisSpacing: 8,
           childAspectRatio: 1.0),
       itemCount: playlists.length,
       itemBuilder: (context, index) {
@@ -508,7 +550,6 @@ class PlaylistGridView extends StatelessWidget {
           elevation: 0,
           margin: EdgeInsets.zero,
           clipBehavior: Clip.antiAlias,
-          // Set card color to match the theme background for less distinction
           color: Theme.of(context).cardColor,
           shape:
               RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
@@ -519,7 +560,7 @@ class PlaylistGridView extends StatelessWidget {
               children: [
                 if (playlist.thumbnailUrl.isNotEmpty)
                   Image.network(playlist.thumbnailUrl,
-                      fit: BoxFit.cover, // Changed to cover to fill the box
+                      fit: BoxFit.cover,
                       errorBuilder: (c, e, s) => Center(
                             child: Icon(Icons.broken_image,
                                 size: 50, color: Colors.grey[400]),
@@ -564,7 +605,6 @@ class PlaylistGridView extends StatelessWidget {
   }
 }
 
-// --- UPDATED VideoPlayerPage with fixed fullscreen functionality ---
 class VideoPlayerPage extends StatefulWidget {
   final String videoId;
   final Video? initialVideo;
@@ -609,6 +649,8 @@ class _VideoPlayerPageState extends State<VideoPlayerPage> {
       ),
     );
 
+    _controller.addListener(_handlePlayerErrors);
+
     _currentVideoDetails = widget.initialVideo;
     _relatedVideosFuture = _apiService.getVideos();
     _initializeVideoData();
@@ -626,10 +668,33 @@ class _VideoPlayerPageState extends State<VideoPlayerPage> {
                 videoId: _controller.metadata.videoId,
                 quality: ThumbnailQuality.high),
             category: 'YouTube',
+            privacyStatus: 'public',
+            publishedAt: DateTime.now(),
           );
         });
       }
     });
+  }
+
+  void _handlePlayerErrors() {
+    if (mounted && _controller.value.hasError) {
+      developer.log('YouTube Player Error: ${_controller.value.errorCode}');
+      if (_controller.value.errorCode == 150) {
+        _controller.removeListener(_handlePlayerErrors);
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Playback unavailable. Skipping to next video.'),
+            behavior: SnackBarBehavior.floating,
+            margin: EdgeInsets.all(16),
+            duration: Duration(seconds: 2),
+          ),
+        );
+        Future.delayed(const Duration(milliseconds: 500), () {
+          _playNextVideo();
+          _controller.addListener(_handlePlayerErrors);
+        });
+      }
+    }
   }
 
   void _initializeVideoData() async {
@@ -652,20 +717,20 @@ class _VideoPlayerPageState extends State<VideoPlayerPage> {
   }
 
   void _playNextVideo() {
-    if (_allVideos.isEmpty) return;
+    if (!mounted || _allVideos.isEmpty) return;
     int nextIndex = (_currentVideoIndex + 1) % _allVideos.length;
     _playVideoAtIndex(nextIndex);
   }
 
   void _playPreviousVideo() {
-    if (_allVideos.isEmpty) return;
+    if (!mounted || _allVideos.isEmpty) return;
     int prevIndex = (_currentVideoIndex - 1) % _allVideos.length;
     if (prevIndex < 0) prevIndex = _allVideos.length - 1;
     _playVideoAtIndex(prevIndex);
   }
 
   void _playVideoAtIndex(int index) {
-    if (index < 0 || index >= _allVideos.length) return;
+    if (!mounted || index < 0 || index >= _allVideos.length) return;
     final video = _allVideos[index];
     setState(() {
       _currentVideoIndex = index;
@@ -688,7 +753,6 @@ class _VideoPlayerPageState extends State<VideoPlayerPage> {
     });
 
     if (_isFullScreen) {
-      // Enter fullscreen - hide status bar and allow landscape
       SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersive);
       SystemChrome.setPreferredOrientations([
         DeviceOrientation.landscapeLeft,
@@ -696,13 +760,11 @@ class _VideoPlayerPageState extends State<VideoPlayerPage> {
         DeviceOrientation.portraitUp,
       ]);
     } else {
-      // Exit fullscreen - show status bar and lock to portrait
       SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
       SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]);
     }
   }
 
-  // Custom fullscreen button widget
   Widget _buildFullScreenButton() {
     return IconButton(
       icon: Icon(
@@ -715,11 +777,11 @@ class _VideoPlayerPageState extends State<VideoPlayerPage> {
 
   @override
   void dispose() {
-    // Always exit fullscreen when disposing
     if (_isFullScreen) {
       SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
       SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]);
     }
+    _controller.removeListener(_handlePlayerErrors);
     _controller.dispose();
     super.dispose();
   }
@@ -728,7 +790,6 @@ class _VideoPlayerPageState extends State<VideoPlayerPage> {
   Widget build(BuildContext context) {
     return WillPopScope(
       onWillPop: () async {
-        // If in fullscreen, exit fullscreen first
         if (_isFullScreen) {
           _toggleFullScreen();
           return false;
@@ -739,17 +800,8 @@ class _VideoPlayerPageState extends State<VideoPlayerPage> {
         appBar: _isFullScreen
             ? null
             : AppBar(
-                // title: Text(
-                //   _currentVideoDetails?.title ?? "Video Player",
-                //   style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                //         fontWeight: FontWeight.w600,
-                //       ),
-                //   maxLines: 1,
-                //   overflow: TextOverflow.ellipsis,
-                // ),
                 systemOverlayStyle: SystemUiOverlayStyle.dark,
-                centerTitle: true,
-              ),
+                centerTitle: true),
         body: _isFullScreen ? _buildFullScreenPlayer() : _buildNormalLayout(),
       ),
     );
@@ -784,7 +836,6 @@ class _VideoPlayerPageState extends State<VideoPlayerPage> {
   Widget _buildNormalLayout() {
     return Column(
       children: [
-        // Video Player
         AspectRatio(
           aspectRatio: 16 / 9,
           child: YoutubePlayer(
@@ -806,15 +857,12 @@ class _VideoPlayerPageState extends State<VideoPlayerPage> {
             },
           ),
         ),
-
-        // Rest of your content
         Expanded(
           child: SingleChildScrollView(
             physics: const BouncingScrollPhysics(),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // Video Title
                 Padding(
                   padding: const EdgeInsets.all(16.0),
                   child: Text(
@@ -825,10 +873,7 @@ class _VideoPlayerPageState extends State<VideoPlayerPage> {
                         ),
                   ),
                 ),
-
                 const Divider(height: 1),
-
-                // Up Next Section
                 Padding(
                   padding: const EdgeInsets.fromLTRB(16, 20, 16, 12),
                   child: Row(
@@ -841,7 +886,7 @@ class _VideoPlayerPageState extends State<VideoPlayerPage> {
                                   fontSize: 18,
                                 ),
                       ),
-                      SizedBox(width: 8),
+                      const SizedBox(width: 8),
                       Container(
                         padding: const EdgeInsets.symmetric(
                             horizontal: 8, vertical: 2),
@@ -866,15 +911,12 @@ class _VideoPlayerPageState extends State<VideoPlayerPage> {
                     ],
                   ),
                 ),
-
-                // Related Videos List
                 _RelatedVideosList(
                   relatedVideosFuture: _relatedVideosFuture,
                   onVideoTap: _playVideo,
                   currentVideoId: _currentVideoDetails?.videoId,
                 ),
-
-                SizedBox(height: 16),
+                const SizedBox(height: 16),
               ],
             ),
           ),
@@ -884,7 +926,6 @@ class _VideoPlayerPageState extends State<VideoPlayerPage> {
   }
 }
 
-// Updated RelatedVideosList widget with better UI
 class _RelatedVideosList extends StatelessWidget {
   final Future<List<Video>> relatedVideosFuture;
   final Function(Video)? onVideoTap;
@@ -973,7 +1014,6 @@ class _RelatedVideosList extends StatelessWidget {
   }
 }
 
-// Beautiful Video Card Widget
 class _VideoCard extends StatelessWidget {
   final Video video;
   final bool isPlaying;
@@ -1013,7 +1053,6 @@ class _VideoCard extends StatelessWidget {
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Thumbnail
               Container(
                 width: 100,
                 height: 70,
@@ -1033,7 +1072,7 @@ class _VideoCard extends StatelessWidget {
                               .primary
                               .withOpacity(0.7),
                         ),
-                        child: Center(
+                        child: const Center(
                           child: Icon(
                             Icons.play_arrow_rounded,
                             color: Colors.white,
@@ -1043,10 +1082,7 @@ class _VideoCard extends StatelessWidget {
                       )
                     : null,
               ),
-
-              SizedBox(width: 12),
-
-              // Video Info
+              const SizedBox(width: 12),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -1061,7 +1097,7 @@ class _VideoCard extends StatelessWidget {
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,
                     ),
-                    SizedBox(height: 4),
+                    const SizedBox(height: 4),
                     Text(
                       video.category,
                       style: Theme.of(context).textTheme.bodySmall?.copyWith(
@@ -1073,7 +1109,7 @@ class _VideoCard extends StatelessWidget {
                           ),
                     ),
                     if (isPlaying) ...[
-                      SizedBox(height: 4),
+                      const SizedBox(height: 4),
                       Container(
                         padding: const EdgeInsets.symmetric(
                             horizontal: 6, vertical: 2),
@@ -1102,7 +1138,6 @@ class _VideoCard extends StatelessWidget {
   }
 }
 
-// Shimmer loading widget
 class _ShimmerVideoCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
@@ -1125,7 +1160,7 @@ class _ShimmerVideoCard extends StatelessWidget {
                 color: Colors.grey[300],
               ),
             ),
-            SizedBox(width: 12),
+            const SizedBox(width: 12),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -1138,7 +1173,7 @@ class _ShimmerVideoCard extends StatelessWidget {
                       color: Colors.grey[300],
                     ),
                   ),
-                  SizedBox(height: 8),
+                  const SizedBox(height: 8),
                   Container(
                     width: 80,
                     height: 12,
@@ -1157,15 +1192,13 @@ class _ShimmerVideoCard extends StatelessWidget {
   }
 }
 
-// --- UI Widgets (No Changes) ---
 class _VideoListShimmer extends StatelessWidget {
   const _VideoListShimmer();
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     return Shimmer.fromColors(
-      baseColor:
-          theme.splashColor.withOpacity(0.3), // Make shimmer colors less stark
+      baseColor: theme.splashColor.withOpacity(0.3),
       highlightColor: theme.cardColor.withOpacity(0.3),
       child: ListView.builder(
         padding: const EdgeInsets.all(16),
@@ -1214,15 +1247,14 @@ class _PlaylistGridShimmer extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     return Shimmer.fromColors(
-      baseColor:
-          theme.splashColor.withOpacity(0.3), // Make shimmer colors less stark
+      baseColor: theme.splashColor.withOpacity(0.3),
       highlightColor: theme.cardColor.withOpacity(0.3),
       child: GridView.builder(
         padding: const EdgeInsets.all(16),
         gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
             crossAxisCount: 2,
-            crossAxisSpacing: 8, // Reduced spacing
-            mainAxisSpacing: 8, // Reduced spacing
+            crossAxisSpacing: 8,
+            mainAxisSpacing: 8,
             childAspectRatio: 1.0),
         itemCount: 6,
         itemBuilder: (context, index) => Card(
