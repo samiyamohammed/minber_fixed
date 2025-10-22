@@ -216,7 +216,7 @@ class MyApp extends StatelessWidget {
 
             // --- ✅ DARK THEME UPDATED ---
             darkTheme: ThemeData(
-              primaryColor: AppColors.primaryBlue,
+              primaryColor: const Color.fromARGB(255, 27, 127, 209),
               scaffoldBackgroundColor: AppColors.backgroundDark,
               appBarTheme: const AppBarTheme(
                 backgroundColor: AppColors.surfaceDark,

@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:fluttertoast/fluttertoast.dart';
 import 'package:webview_flutter/webview_flutter.dart';
 import 'package:flutter_staggered_animations/flutter_staggered_animations.dart';
+import './coming_soon_page.dart'; // ⭐⭐⭐ ADD THIS IMPORT ⭐⭐⭐
 
 // --- Screen for displaying the web content ---
 class EmbeddedWebScreen extends StatefulWidget {
@@ -131,16 +132,23 @@ class _KiriyogdeyraPageState extends State<KiriyogdeyraPage> {
     }
   }
 
+  // ⭐⭐⭐ UPDATED: _openApp method to navigate to ComingSoonPage ⭐⭐⭐
   void _openApp(Map<String, dynamic> app) {
     final url = app['url'] as String?;
     if (url != null) {
       Navigator.push(
-          context,
-          MaterialPageRoute(
-              builder: (context) =>
-                  EmbeddedWebScreen(url: url, appName: app['name'])));
+        context,
+        MaterialPageRoute(
+            builder: (context) =>
+                EmbeddedWebScreen(url: url, appName: app['name'])),
+      );
     } else {
-      Fluttertoast.showToast(msg: "Opening ${app['name']}");
+      // Navigate to ComingSoonPage for apps without URL (like Besirah)
+      Navigator.pushNamed(
+        context,
+        '/coming-soon',
+        arguments: app['name'], // Pass the app name as argument
+      );
     }
   }
 

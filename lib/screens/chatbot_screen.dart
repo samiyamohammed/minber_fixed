@@ -1,7 +1,9 @@
-// lib/screens/chatbot_screen.dart (Fully Updated & Ready to Paste)
-
-import 'dart:async';
+import 'dart:convert';
 import 'package:flutter/material.dart';
+import 'package:http/http.dart' as http;
+import 'package:flutter_markdown/flutter_markdown.dart';
+import 'package:minber_super_app_new_fixed/screens/chat_history_screen.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 class ChatBotPage extends StatefulWidget {
   const ChatBotPage({super.key});
@@ -11,75 +13,133 @@ class ChatBotPage extends StatefulWidget {
 }
 
 class _ChatBotPageState extends State<ChatBotPage> {
-  final int _selectedIndex = 3; // For BottomNavBar highlighting
-  final TextEditingController _messageController = TextEditingController();
-
-  // ✅ UI/UX UPDATE: Keys for animating the list and controlling scroll
-  final GlobalKey<AnimatedListState> _listKey = GlobalKey<AnimatedListState>();
+  final TextEditingController _controller = TextEditingController();
   final ScrollController _scrollController = ScrollController();
+  final List<Map<String, String>> _messages = [];
+  bool _isTyping = false;
+  int _selectedIndex = 3;
 
-  final List<Map<String, String>> _chatMessages = [];
+  // ⭐ New SharedPreferences instance ⭐
+  late SharedPreferences _prefs;
+  static const String _chatHistoryKey = 'chat_history';
+
+  final List<String> _faqQuestions = [
+    "When is the next prayer time?",
+    "How do I perform Wudu correctly?",
+    "What breaks fasting in Ramadan?",
+    "Can I pray sitting if I'm sick?",
+    "How do I calculate Zakat?",
+    "What is Tahajjud prayer?",
+  ];
 
   @override
   void initState() {
     super.initState();
-    // Start with an initial welcome message from the AI
-    _addInitialMessage();
+    _initSharedPreferencesAndLoadHistory(); // ⭐ Call new init method ⭐
   }
 
-  @override
-  void dispose() {
-    _messageController.dispose();
-    _scrollController.dispose();
-    super.dispose();
+  // ⭐ New method to initialize SharedPreferences and load history ⭐
+  Future<void> _initSharedPreferencesAndLoadHistory() async {
+    _prefs = await SharedPreferences.getInstance();
+    _loadChatHistory();
   }
 
-  void _addInitialMessage() {
-    // Add the first message without animation when the screen loads
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      _chatMessages.add({
-        'sender': 'ai',
-        'text':
-            "Hello! I'm your Minber TV Assistant. How can I help you today?",
-      });
-      setState(() {});
+  // ⭐ New method to load chat history ⭐
+  void _loadChatHistory() {
+    final String? historyString = _prefs.getString(_chatHistoryKey);
+    if (historyString != null && historyString.isNotEmpty) {
+      try {
+        final List<dynamic> decodedHistory = jsonDecode(historyString);
+        setState(() {
+          _messages.clear(); // Clear initial welcome message if history exists
+          _messages.addAll(decodedHistory
+              .map((item) => Map<String, String>.from(item))
+              .toList());
+        });
+        _scrollToBottom();
+      } catch (e) {
+        print("Error loading chat history: $e");
+        _messages.add(
+            {"sender": "bot", "text": "Hello! Ask me anything about Islam."});
+      }
+    } else {
+      // If no history, add the initial welcome message
+      _messages.add(
+          {"sender": "bot", "text": "Hello! Ask me anything about Islam."});
+    }
+  }
+
+  // ⭐ New method to save chat history ⭐
+  Future<void> _saveChatHistory() async {
+    final String encodedHistory = jsonEncode(_messages);
+    await _prefs.setString(_chatHistoryKey, encodedHistory);
+  }
+
+  // ⭐ Callback for when history is cleared from the history screen ⭐
+  void _onHistoryCleared() {
+    setState(() {
+      _messages.clear();
+      _messages.add(
+          {"sender": "bot", "text": "Hello! Ask me anything about Islam."});
     });
-  }
-
-  // Helper function to add a message to the list with an animation
-  void _addMessage(String sender, String text) {
-    // Insert new message into the list
-    final index = _chatMessages.length;
-    _chatMessages.add({'sender': sender, 'text': text});
-
-    // Animate the insertion
-    _listKey.currentState?.insertItem(
-      index,
-      duration: const Duration(milliseconds: 400),
-    );
-
-    // ✅ UI/UX UPDATE: Automatically scroll to the bottom
     _scrollToBottom();
   }
 
-  void _sendMessage() {
-    final text = _messageController.text.trim();
-    if (text.isEmpty) return;
+  Future<void> _sendMessage(String message) async {
+    if (message.trim().isEmpty) return;
 
-    // Add user message
-    _addMessage('user', text);
-    _messageController.clear();
-
-    // Simulate AI response
-    Future.delayed(const Duration(milliseconds: 1000), () {
-      _addMessage(
-          'ai', 'Thank you for your question. I am processing your request...');
+    setState(() {
+      _messages.add({"sender": "user", "text": message});
+      _controller.clear();
+      _isTyping = true;
     });
+
+    _saveChatHistory(); // ⭐ Save after user message ⭐
+    _scrollToBottom();
+
+    try {
+      final response = await http.post(
+        Uri.parse("http://msa.merkuz.com:3636/gemini/chat"),
+        headers: {"Content-Type": "application/json"},
+        body: jsonEncode({"prompt": message}),
+      );
+
+      if (response.statusCode == 200 || response.statusCode == 201) {
+        final data = jsonDecode(response.body);
+        final reply = data["response"] ?? "No response from AI.";
+
+        setState(() {
+          _messages.add({"sender": "bot", "text": reply});
+          _isTyping = false;
+        });
+      } else {
+        setState(() {
+          _messages.add({
+            "sender": "bot",
+            "text":
+                "Error ${response.statusCode}: Failed to get a proper response from the server."
+          });
+          _isTyping = false;
+        });
+      }
+    } catch (e) {
+      setState(() {
+        _messages.add({
+          "sender": "bot",
+          "text":
+              "Sorry, I couldn’t connect to the server. Please check your internet and try again."
+        });
+        _isTyping = false;
+      });
+      print("Network/API Error: $e");
+    }
+
+    _saveChatHistory(); // ⭐ Save after bot message ⭐
+    _scrollToBottom();
   }
 
   void _scrollToBottom() {
-    // Wait a moment for the list to build, then scroll
-    Timer(const Duration(milliseconds: 100), () {
+    Future.delayed(const Duration(milliseconds: 100), () {
       if (_scrollController.hasClients) {
         _scrollController.animateTo(
           _scrollController.position.maxScrollExtent,
@@ -90,253 +150,273 @@ class _ChatBotPageState extends State<ChatBotPage> {
     });
   }
 
-  // --- NAVIGATION (Simplified) ---
+  @override
+  void dispose() {
+    _controller.dispose();
+    _scrollController.dispose();
+    super.dispose();
+  }
+
+  bool get _isDarkMode => Theme.of(context).brightness == Brightness.dark;
+
   void _onItemTapped(int index) {
     if (_selectedIndex == index) return;
+    String routeName = '';
     switch (index) {
       case 0:
-        Navigator.pushReplacementNamed(context, '/home');
+        routeName = '/home';
         break;
       case 1:
-        Navigator.pushReplacementNamed(context, '/media');
+        routeName = '/media';
         break;
       case 2:
-        Navigator.pushReplacementNamed(context, '/prayer');
+        routeName = '/prayer';
         break;
       case 3:
-        break; // Already here
+        break; // Already on Chat Bot page
       case 4:
-        Navigator.pushReplacementNamed(context, '/subapps');
+        routeName = '/subapps';
         break;
     }
+    if (routeName.isNotEmpty) {
+      Navigator.pushReplacementNamed(context, routeName);
+    }
+  }
+
+  BottomNavigationBar _buildBottomNavBar(ThemeData theme) {
+    return BottomNavigationBar(
+      currentIndex: _selectedIndex,
+      onTap: _onItemTapped,
+      selectedItemColor: theme.colorScheme.primary,
+      unselectedItemColor: theme.unselectedWidgetColor,
+      type: BottomNavigationBarType.fixed,
+      items: const [
+        BottomNavigationBarItem(
+            icon: Icon(Icons.home_outlined),
+            activeIcon: Icon(Icons.home),
+            label: "Home"),
+        BottomNavigationBarItem(
+            icon: Icon(Icons.tv_outlined),
+            activeIcon: Icon(Icons.tv),
+            label: "Media"),
+        BottomNavigationBarItem(
+            icon: Icon(Icons.mosque_outlined),
+            activeIcon: Icon(Icons.mosque),
+            label: "Prayer"),
+        BottomNavigationBarItem(
+            icon: Icon(Icons.chat_bubble_outline),
+            activeIcon: Icon(Icons.chat_bubble),
+            label: "Chat Bot"),
+        BottomNavigationBarItem(
+            icon: Icon(Icons.explore_outlined),
+            activeIcon: Icon(Icons.apps),
+            label: "Sub Apps"),
+      ],
+    );
   }
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final colorScheme = theme.colorScheme;
+    final isDark = _isDarkMode;
+
+    final botTextStyle = theme.textTheme.bodyMedium?.copyWith(
+      color: isDark ? Colors.white : Colors.black87,
+      fontSize: 15,
+      height: 1.4,
+    );
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text("AI Assistant"),
-        elevation: 1,
+        title: const Text("Ask Islam Chatbot"),
+        centerTitle: true,
+        actions: [
+          // ⭐ New History Icon ⭐
+          IconButton(
+            icon: const Icon(Icons.history),
+            tooltip: "View Chat History",
+            onPressed: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => ChatHistoryScreen(
+                    initialHistory:
+                        List.from(_messages), // Pass a copy of current messages
+                    onHistoryCleared: _onHistoryCleared, // Pass callback
+                  ),
+                ),
+              );
+            },
+          ),
+        ],
       ),
       body: Column(
         children: [
-          // ✅ UI/UX UPDATE: Quick action suggestion chips
           Container(
-            padding: const EdgeInsets.symmetric(vertical: 8.0),
-            color: theme.scaffoldBackgroundColor,
+            width: double.infinity,
+            padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 10),
+            decoration: BoxDecoration(
+              color: isDark
+                  ? theme.colorScheme.surface.withOpacity(0.7)
+                  : Colors.grey.shade100,
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.05),
+                  blurRadius: 4,
+                  offset: const Offset(0, 2),
+                ),
+              ],
+            ),
             child: SingleChildScrollView(
               scrollDirection: Axis.horizontal,
-              padding: const EdgeInsets.symmetric(horizontal: 12),
+              child: Row(
+                children: _faqQuestions.map((question) {
+                  return Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 4),
+                    child: ActionChip(
+                      label: Text(
+                        question,
+                        style: TextStyle(
+                          color: isDark ? Colors.white : theme.primaryColor,
+                          fontSize: 13,
+                        ),
+                      ),
+                      backgroundColor: isDark
+                          ? Colors.white10
+                          : theme.primaryColor.withOpacity(0.1),
+                      onPressed:
+                          _isTyping ? null : () => _sendMessage(question),
+                      side: BorderSide.none,
+                    ),
+                  );
+                }).toList(),
+              ),
+            ),
+          ),
+          Expanded(
+            child: ListView.builder(
+              controller: _scrollController,
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              itemCount: _messages.length + (_isTyping ? 1 : 0),
+              itemBuilder: (context, index) {
+                if (index == _messages.length && _isTyping) {
+                  return Align(
+                    alignment: Alignment.centerLeft,
+                    child: Container(
+                      margin: const EdgeInsets.symmetric(vertical: 6),
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: isDark
+                            ? Colors.white10
+                            : theme.colorScheme.surfaceVariant,
+                        borderRadius: BorderRadius.circular(14),
+                      ),
+                      child: Text(
+                        "AI is typing...",
+                        style: TextStyle(
+                          color: isDark ? Colors.white70 : Colors.black54,
+                          fontStyle: FontStyle.italic,
+                        ),
+                      ),
+                    ),
+                  );
+                }
+                final message = _messages[index];
+                final isUser = message["sender"] == "user";
+
+                return Align(
+                  alignment:
+                      isUser ? Alignment.centerRight : Alignment.centerLeft,
+                  child: Container(
+                    margin: const EdgeInsets.symmetric(vertical: 6),
+                    padding: const EdgeInsets.all(12),
+                    constraints: BoxConstraints(
+                        maxWidth: MediaQuery.of(context).size.width * 0.75),
+                    decoration: BoxDecoration(
+                      color: isUser
+                          ? theme.primaryColor.withOpacity(0.9)
+                          : (isDark ? Colors.white10 : Colors.grey.shade200),
+                      borderRadius: BorderRadius.only(
+                        topLeft: const Radius.circular(16),
+                        topRight: const Radius.circular(16),
+                        bottomLeft: Radius.circular(isUser ? 16 : 4),
+                        bottomRight: Radius.circular(isUser ? 4 : 16),
+                      ),
+                    ),
+                    child: isUser
+                        ? SelectableText(
+                            message["text"] ?? "",
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 15,
+                            ),
+                          )
+                        : MarkdownBody(
+                            data: message["text"] ?? "",
+                            selectable: true,
+                            styleSheet:
+                                MarkdownStyleSheet.fromTheme(theme).copyWith(
+                              p: botTextStyle,
+                              strong: botTextStyle?.copyWith(
+                                  fontWeight: FontWeight.bold),
+                              listBullet: botTextStyle,
+                              listIndent: 24.0,
+                            ),
+                          ),
+                  ),
+                );
+              },
+            ),
+          ),
+          SafeArea(
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+              color: theme.scaffoldBackgroundColor,
               child: Row(
                 children: [
-                  _buildQuickActionChip(
-                      "Prayer Times", Icons.access_time_filled_rounded),
+                  Expanded(
+                    child: TextField(
+                      controller: _controller,
+                      textInputAction: TextInputAction.send,
+                      onSubmitted: _sendMessage,
+                      enabled: !_isTyping,
+                      style: TextStyle(
+                        color: theme.textTheme.bodyLarge?.color,
+                      ),
+                      decoration: InputDecoration(
+                        hintText: "Ask something...",
+                        hintStyle: TextStyle(
+                          color: theme.hintColor.withOpacity(0.6),
+                        ),
+                        filled: true,
+                        fillColor:
+                            isDark ? Colors.white10 : Colors.grey.shade100,
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(24),
+                          borderSide: BorderSide.none,
+                        ),
+                        contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 16, vertical: 12),
+                      ),
+                    ),
+                  ),
                   const SizedBox(width: 8),
-                  _buildQuickActionChip(
-                      "Find a Show", Icons.movie_filter_rounded),
-                  const SizedBox(width: 8),
-                  _buildQuickActionChip(
-                      "Qibla Direction", Icons.explore_rounded),
+                  CircleAvatar(
+                    backgroundColor: theme.primaryColor,
+                    child: IconButton(
+                      icon: const Icon(Icons.send, color: Colors.white),
+                      onPressed: _isTyping
+                          ? null
+                          : () => _sendMessage(_controller.text),
+                    ),
+                  ),
                 ],
               ),
             ),
           ),
-
-          // ✅ UI/UX UPDATE: Chat messages now use AnimatedList
-          Expanded(
-            child: AnimatedList(
-              key: _listKey,
-              controller: _scrollController,
-              padding: const EdgeInsets.all(16.0),
-              initialItemCount: _chatMessages.length,
-              itemBuilder: (context, index, animation) {
-                final message = _chatMessages[index];
-                return _buildAnimatedMessageItem(message, animation);
-              },
-            ),
-          ),
-
-          // ✅ UI/UX UPDATE: Modern message input bar
-          _buildMessageInputBar(),
         ],
       ),
-      bottomNavigationBar: BottomNavigationBar(
-        currentIndex: _selectedIndex,
-        onTap: _onItemTapped,
-        // ✅ UI/UX UPDATE: Using theme colors for consistency
-        selectedItemColor: colorScheme.primary,
-        unselectedItemColor: theme.unselectedWidgetColor,
-        type: BottomNavigationBarType.fixed,
-        items: const [
-          BottomNavigationBarItem(
-              icon: Icon(Icons.home_outlined),
-              activeIcon: Icon(Icons.home),
-              label: "Home"),
-          BottomNavigationBarItem(
-              icon: Icon(Icons.tv_outlined),
-              activeIcon: Icon(Icons.tv),
-              label: "Watch"),
-          BottomNavigationBarItem(
-              icon: Icon(Icons.mosque_outlined),
-              activeIcon: Icon(Icons.mosque),
-              label: "Prayer"),
-          BottomNavigationBarItem(
-              icon: Icon(Icons.chat_bubble_outline),
-              activeIcon: Icon(Icons.chat_bubble),
-              label: "Chat Box"),
-          BottomNavigationBarItem(
-              icon: Icon(Icons.apps),
-              activeIcon: Icon(Icons.apps),
-              label: "Sub Apps"),
-        ],
-      ),
-    );
-  }
-
-  // --- WIDGET BUILDER METHODS ---
-
-  Widget _buildAnimatedMessageItem(
-      Map<String, String> message, Animation<double> animation) {
-    // This wrapper provides the fade and slide animation for new messages
-    return FadeTransition(
-      opacity: animation,
-      child: SlideTransition(
-        position: Tween<Offset>(
-          begin: const Offset(0, 0.5),
-          end: Offset.zero,
-        ).animate(CurvedAnimation(parent: animation, curve: Curves.easeOut)),
-        child: _ChatMessageBubble(
-          sender: message['sender']!,
-          text: message['text']!,
-        ),
-      ),
-    );
-  }
-
-  Widget _buildMessageInputBar() {
-    final theme = Theme.of(context);
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12.0, vertical: 8.0),
-      decoration: BoxDecoration(
-        color: theme.cardColor,
-        boxShadow: [
-          BoxShadow(
-              color: theme.shadowColor.withOpacity(0.05),
-              blurRadius: 10,
-              offset: const Offset(0, -2)),
-        ],
-      ),
-      child: SafeArea(
-        child: Row(
-          children: [
-            Expanded(
-              child: TextField(
-                controller: _messageController,
-                decoration: InputDecoration(
-                  hintText: "Ask me anything...",
-                  filled: true,
-                  fillColor: theme.colorScheme.surfaceVariant.withOpacity(0.6),
-                  contentPadding:
-                      const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(30),
-                    borderSide: BorderSide.none,
-                  ),
-                ),
-                onSubmitted: (_) => _sendMessage(),
-              ),
-            ),
-            const SizedBox(width: 8),
-            IconButton.filled(
-              style: IconButton.styleFrom(
-                backgroundColor: theme.colorScheme.primary,
-                foregroundColor: theme.colorScheme.onPrimary,
-              ),
-              icon: const Icon(Icons.send_rounded),
-              onPressed: _sendMessage,
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildQuickActionChip(String text, IconData icon) {
-    final theme = Theme.of(context);
-    return ActionChip(
-      avatar: Icon(icon, size: 18, color: theme.colorScheme.primary),
-      label: Text(text),
-      labelStyle: TextStyle(
-          color: theme.colorScheme.primary, fontWeight: FontWeight.w600),
-      onPressed: () {
-        _addMessage('user', text);
-        Future.delayed(const Duration(milliseconds: 500), () {
-          _addMessage(
-              'ai', 'Sure! Let me get the "$text" information for you.');
-        });
-      },
-      backgroundColor: theme.colorScheme.primary.withOpacity(0.1),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-      side: BorderSide.none,
-    );
-  }
-}
-
-// A dedicated widget for the chat bubble UI for cleaner code
-class _ChatMessageBubble extends StatelessWidget {
-  final String sender;
-  final String text;
-
-  const _ChatMessageBubble({required this.sender, required this.text});
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final colorScheme = theme.colorScheme;
-    final bool isUser = sender == 'user';
-
-    return Container(
-      margin: const EdgeInsets.symmetric(vertical: 8.0),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisAlignment:
-            isUser ? MainAxisAlignment.end : MainAxisAlignment.start,
-        children: [
-          if (!isUser)
-            CircleAvatar(
-              backgroundColor: colorScheme.primary.withOpacity(0.1),
-              child: Icon(Icons.smart_toy_rounded,
-                  color: colorScheme.primary, size: 20),
-            ),
-          const SizedBox(width: 12),
-          Flexible(
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-              decoration: BoxDecoration(
-                color:
-                    isUser ? colorScheme.primary : colorScheme.surfaceVariant,
-                borderRadius: BorderRadius.only(
-                  topLeft: const Radius.circular(20),
-                  topRight: const Radius.circular(20),
-                  bottomLeft: Radius.circular(isUser ? 20 : 4),
-                  bottomRight: Radius.circular(isUser ? 4 : 20),
-                ),
-              ),
-              child: Text(
-                text,
-                style: theme.textTheme.bodyMedium?.copyWith(
-                  color: isUser
-                      ? colorScheme.onPrimary
-                      : colorScheme.onSurfaceVariant,
-                ),
-              ),
-            ),
-          ),
-        ],
-      ),
+      bottomNavigationBar: _buildBottomNavBar(theme),
     );
   }
 }

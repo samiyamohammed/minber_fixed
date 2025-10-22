@@ -300,16 +300,16 @@ class ProfilePage extends StatelessWidget {
               ),
               const SizedBox(height: 24),
               _buildSectionHeader(context, "Account"),
-              _buildProfileTile(
-                context,
-                icon: Icons.person_outline,
-                title: "Edit Profile",
-                onTap: () => Navigator.pushNamed(
-                  context,
-                  '/coming-soon',
-                  arguments: 'Edit Profile', // The name of the feature
-                ),
-              ),
+              // _buildProfileTile(
+              //   context,
+              //   icon: Icons.person_outline,
+              //   title: "Edit Profile",
+              //   onTap: () => Navigator.pushNamed(
+              //     context,
+              //     '/coming-soon',
+              //     arguments: 'Edit Profile', // The name of the feature
+              //   ),
+              // ),
               // _buildProfileTile(context,
               //     icon: Icons.lock_outline,
               //     title: "Change Password",
