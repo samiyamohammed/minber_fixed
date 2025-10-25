@@ -6,6 +6,8 @@ import 'package:minber_super_app_new_fixed/screens/YouTube_screen.dart';
 import 'package:minber_super_app_new_fixed/screens/about_us_page.dart';
 import 'package:minber_super_app_new_fixed/screens/coming_soon_page.dart';
 import 'package:minber_super_app_new_fixed/screens/help_and_support_page.dart';
+import 'package:minber_super_app_new_fixed/screens/media/media_hub_screen.dart';
+import 'package:minber_super_app_new_fixed/screens/news_see_all_page.dart';
 import 'package:minber_super_app_new_fixed/screens/notification_settings_page.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:firebase_core/firebase_core.dart';
@@ -32,7 +34,6 @@ import 'screens/Profile & Settings.dart';
 // import 'screens/edit_profile.dart';
 import 'screens/change_password.dart';
 import 'screens/live_screen.dart';
-import 'screens/media.dart';
 import 'screens/youtubechannel.dart';
 import 'screens/ondemand.dart';
 import 'screens/prayertime.dart';
@@ -257,8 +258,20 @@ class MyApp extends StatelessWidget {
               '/reset-password': (_) => const ResetPasswordScreen(),
               '/changePassword': (_) => const ChangePasswordPage(),
               '/live': (_) => const LiveStreamPage(),
-              '/media': (_) => const MediaHubPage(),
-              // '/youtube': (_) => const YouTubePage(),
+              // In your main.dart or app_routes.dart
+              '/media': (_) => const MediaHubScreen(),
+              // NEW, CORRECT CODE
+              '/news': (context) {
+                // First, get the arguments that were sent from the home screen
+                final args = ModalRoute.of(context)!.settings.arguments
+                    as Map<String, dynamic>;
+
+                // Now, create the page and pass the received data to it
+                return NewsSeeAllPage(
+                  newsArticles: args['newsArticles'] as List<dynamic>,
+                  apiBaseUrl: args['apiBaseUrl'] as String,
+                );
+              },
               '/youtubeContent': (_) => const OnDemandPage(),
               '/channel': (_) => const YouTubeChannelDetailPage(),
               '/ondemand': (_) => const OnDemandPage(),

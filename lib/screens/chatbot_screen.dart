@@ -19,9 +19,12 @@ class _ChatBotPageState extends State<ChatBotPage> {
   bool _isTyping = false;
   int _selectedIndex = 3;
 
-  // ⭐ New SharedPreferences instance ⭐
+  // SharedPreferences instance and keys
   late SharedPreferences _prefs;
   static const String _chatHistoryKey = 'chat_history';
+  // ⭐ 1. New state variables for caching ⭐
+  static const String _chatCacheKey = 'chat_cache';
+  final Map<String, String> _chatCache = {};
 
   final List<String> _faqQuestions = [
     "When is the next prayer time?",
@@ -35,107 +38,159 @@ class _ChatBotPageState extends State<ChatBotPage> {
   @override
   void initState() {
     super.initState();
-    _initSharedPreferencesAndLoadHistory(); // ⭐ Call new init method ⭐
+    _initSharedPreferencesAndLoadData();
   }
 
-  // ⭐ New method to initialize SharedPreferences and load history ⭐
-  Future<void> _initSharedPreferencesAndLoadHistory() async {
+  // ⭐ 2. Updated init method to load BOTH history and cache ⭐
+  Future<void> _initSharedPreferencesAndLoadData() async {
     _prefs = await SharedPreferences.getInstance();
-    _loadChatHistory();
+    _loadChatCache(); // Load cache first
+    _loadChatHistory(); // Then load history
   }
 
-  // ⭐ New method to load chat history ⭐
   void _loadChatHistory() {
     final String? historyString = _prefs.getString(_chatHistoryKey);
     if (historyString != null && historyString.isNotEmpty) {
       try {
         final List<dynamic> decodedHistory = jsonDecode(historyString);
-        setState(() {
-          _messages.clear(); // Clear initial welcome message if history exists
-          _messages.addAll(decodedHistory
-              .map((item) => Map<String, String>.from(item))
-              .toList());
-        });
+        if (mounted) {
+          setState(() {
+            _messages.clear();
+            _messages.addAll(decodedHistory
+                .map((item) => Map<String, String>.from(item))
+                .toList());
+          });
+        }
         _scrollToBottom();
       } catch (e) {
         print("Error loading chat history: $e");
-        _messages.add(
-            {"sender": "bot", "text": "Hello! Ask me anything about Islam."});
+        _setDefaultWelcomeMessage();
       }
     } else {
-      // If no history, add the initial welcome message
-      _messages.add(
-          {"sender": "bot", "text": "Hello! Ask me anything about Islam."});
+      _setDefaultWelcomeMessage();
     }
   }
 
-  // ⭐ New method to save chat history ⭐
+  void _setDefaultWelcomeMessage() {
+    if (mounted && _messages.isEmpty) {
+      setState(() {
+        _messages.add(
+            {"sender": "bot", "text": "Hello! Ask me anything about Islam."});
+      });
+    }
+  }
+
+  // ⭐ 3. New method to load the cache from SharedPreferences ⭐
+  void _loadChatCache() {
+    final String? cacheString = _prefs.getString(_chatCacheKey);
+    if (cacheString != null && cacheString.isNotEmpty) {
+      try {
+        final Map<String, dynamic> decodedCache = jsonDecode(cacheString);
+        _chatCache.addAll(decodedCache.cast<String, String>());
+        print(
+            "Chat cache loaded successfully with ${_chatCache.length} items.");
+      } catch (e) {
+        print("Error loading chat cache: $e");
+      }
+    }
+  }
+
   Future<void> _saveChatHistory() async {
     final String encodedHistory = jsonEncode(_messages);
     await _prefs.setString(_chatHistoryKey, encodedHistory);
   }
 
-  // ⭐ Callback for when history is cleared from the history screen ⭐
+  // ⭐ 4. New method to save the cache to SharedPreferences ⭐
+  Future<void> _saveChatCache() async {
+    final String encodedCache = jsonEncode(_chatCache);
+    await _prefs.setString(_chatCacheKey, encodedCache);
+    print("Chat cache saved.");
+  }
+
   void _onHistoryCleared() {
-    setState(() {
-      _messages.clear();
-      _messages.add(
-          {"sender": "bot", "text": "Hello! Ask me anything about Islam."});
-    });
+    if (mounted) {
+      setState(() {
+        _messages.clear();
+        _messages.add(
+            {"sender": "bot", "text": "Hello! Ask me anything about Islam."});
+      });
+    }
     _scrollToBottom();
   }
 
   Future<void> _sendMessage(String message) async {
-    if (message.trim().isEmpty) return;
+    final String trimmedMessage = message.trim();
+    if (trimmedMessage.isEmpty) return;
 
     setState(() {
-      _messages.add({"sender": "user", "text": message});
+      _messages.add({"sender": "user", "text": trimmedMessage});
       _controller.clear();
       _isTyping = true;
     });
 
-    _saveChatHistory(); // ⭐ Save after user message ⭐
+    _saveChatHistory();
     _scrollToBottom();
 
+    // ⭐ 5. Caching Logic Implementation ⭐
+    // Check cache before making a network call
+    if (_chatCache.containsKey(trimmedMessage)) {
+      final cachedResponse = _chatCache[trimmedMessage]!;
+      print("Cache HIT for: '$trimmedMessage'");
+      setState(() {
+        _messages.add({"sender": "bot", "text": cachedResponse});
+        _isTyping = false;
+      });
+      _saveChatHistory(); // Save bot's cached response to history
+      _scrollToBottom();
+      return; // Stop execution here to avoid network call
+    }
+
+    print("Cache MISS for: '$trimmedMessage'. Fetching from API...");
+    // If not in cache, proceed with API call
     try {
       final response = await http.post(
         Uri.parse("http://msa.merkuz.com:3636/gemini/chat"),
         headers: {"Content-Type": "application/json"},
-        body: jsonEncode({"prompt": message}),
+        body: jsonEncode({"prompt": trimmedMessage}),
       );
 
+      String reply;
       if (response.statusCode == 200 || response.statusCode == 201) {
         final data = jsonDecode(response.body);
-        final reply = data["response"] ?? "No response from AI.";
+        reply = data["response"] ?? "No response from AI.";
 
+        // ⭐ 6. Save new response to cache ⭐
+        _chatCache[trimmedMessage] = reply;
+        await _saveChatCache();
+      } else {
+        reply =
+            "Error ${response.statusCode}: Failed to get a proper response from the server.";
+      }
+      if (mounted) {
         setState(() {
           _messages.add({"sender": "bot", "text": reply});
-          _isTyping = false;
         });
-      } else {
+      }
+    } catch (e) {
+      if (mounted) {
         setState(() {
           _messages.add({
             "sender": "bot",
             "text":
-                "Error ${response.statusCode}: Failed to get a proper response from the server."
+                "Sorry, I couldn’t connect to the server. Please check your internet and try again."
           });
+        });
+      }
+      print("Network/API Error: $e");
+    } finally {
+      if (mounted) {
+        setState(() {
           _isTyping = false;
         });
       }
-    } catch (e) {
-      setState(() {
-        _messages.add({
-          "sender": "bot",
-          "text":
-              "Sorry, I couldn’t connect to the server. Please check your internet and try again."
-        });
-        _isTyping = false;
-      });
-      print("Network/API Error: $e");
+      _saveChatHistory();
+      _scrollToBottom();
     }
-
-    _saveChatHistory(); // ⭐ Save after bot message ⭐
-    _scrollToBottom();
   }
 
   void _scrollToBottom() {
@@ -208,7 +263,7 @@ class _ChatBotPageState extends State<ChatBotPage> {
             activeIcon: Icon(Icons.chat_bubble),
             label: "Chat Bot"),
         BottomNavigationBarItem(
-            icon: Icon(Icons.explore_outlined),
+            icon: Icon(Icons.apps),
             activeIcon: Icon(Icons.apps),
             label: "Sub Apps"),
       ],
@@ -231,7 +286,6 @@ class _ChatBotPageState extends State<ChatBotPage> {
         title: const Text("Ask Islam Chatbot"),
         centerTitle: true,
         actions: [
-          // ⭐ New History Icon ⭐
           IconButton(
             icon: const Icon(Icons.history),
             tooltip: "View Chat History",
@@ -240,9 +294,8 @@ class _ChatBotPageState extends State<ChatBotPage> {
                 context,
                 MaterialPageRoute(
                   builder: (context) => ChatHistoryScreen(
-                    initialHistory:
-                        List.from(_messages), // Pass a copy of current messages
-                    onHistoryCleared: _onHistoryCleared, // Pass callback
+                    initialHistory: List.from(_messages),
+                    onHistoryCleared: _onHistoryCleared,
                   ),
                 ),
               );

@@ -1,71 +1,28 @@
-// lib/screens/home_screen.dart (Final Version with Outline News Cards)
+// lib/screens/home_screen.dart
 import 'dart:async';
 import 'dart:convert';
+import 'dart:math';
+
+import 'package:adhan_dart/adhan_dart.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:intl/intl.dart';
 import 'package:geolocator/geolocator.dart';
-import 'package:adhan_dart/adhan_dart.dart';
+import 'package:http/http.dart' as http;
+import 'package:intl/intl.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:shimmer/shimmer.dart';
 import 'package:webview_flutter/webview_flutter.dart';
 import 'package:webview_flutter_android/webview_flutter_android.dart';
 import 'package:webview_flutter_wkwebview/webview_flutter_wkwebview.dart';
-import 'package:http/http.dart' as http;
 import 'package:youtube_player_flutter/youtube_player_flutter.dart';
+
+import '../core/app_colors.dart';
+import '../widgets/animated_list_item.dart';
 import '../widgets/app_drawer.dart';
-import './coming_soon_page.dart';
-import '../core/app_colors.dart'; // Import your app colors
-
-// (The EmbeddedWebScreen, TrendingSeeAllPage, and VideoPlayerPage widgets remain unchanged)
-class EmbeddedWebScreen extends StatefulWidget {
-  final String url;
-  final String appName;
-
-  const EmbeddedWebScreen(
-      {super.key, required this.url, required this.appName});
-
-  @override
-  State<EmbeddedWebScreen> createState() => _EmbeddedWebScreenState();
-}
-
-class _EmbeddedWebScreenState extends State<EmbeddedWebScreen> {
-  late final WebViewController _controller;
-  double _loadingProgress = 0;
-
-  @override
-  void initState() {
-    super.initState();
-    _controller = WebViewController()
-      ..setJavaScriptMode(JavaScriptMode.unrestricted)
-      ..setNavigationDelegate(
-        NavigationDelegate(
-          onProgress: (int progress) {
-            setState(() {
-              _loadingProgress = progress / 100.0;
-            });
-          },
-        ),
-      )
-      ..loadRequest(Uri.parse(widget.url));
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: Text(widget.appName),
-        bottom: PreferredSize(
-          preferredSize: const Size.fromHeight(4.0),
-          child: _loadingProgress > 0 && _loadingProgress < 1
-              ? LinearProgressIndicator(value: _loadingProgress)
-              : const SizedBox.shrink(),
-        ),
-      ),
-      body: WebViewWidget(controller: _controller),
-    );
-  }
-}
+import '../widgets/drawer_indicator.dart';
+import '../widgets/embedded_web_screen.dart';
+import 'trending_see_all_screen.dart';
+import 'video_player_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -74,47 +31,206 @@ class HomeScreen extends StatefulWidget {
   State<HomeScreen> createState() => _HomeScreenState();
 }
 
-class _HomeScreenState extends State<HomeScreen> {
+class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
 
   int _selectedIndex = 0;
   Timer? _timer;
+  Timer? _autoRefreshTimer;
 
+  // Banner State
   WebViewController? _bannerWebViewController;
   bool _isBannerLoading = true;
   bool _hasBannerError = false;
   bool _isMuted = true;
   final String streamUrl = 'http://msa.merkuz.com:8888/live/stream1/index.m3u8';
 
+  // Prayer Times State
   String _nextPrayerName = "";
   String _nextPrayerCountdown = "--:--:--";
   Map<String, DateTime> _prayerTimes = {};
   bool _isLoadingPrayerTimes = true;
 
-  List<dynamic> _trendingVideos = [];
-  bool _isLoadingTrending = true;
-  bool _hasTrendingError = false;
-  final String _trendingApiUrl = 'http://msa.merkuz.com:3636/trending';
+  // Trending & News State (with Enhanced Caching Logic)
+  List<dynamic>? _trendingVideos;
+  List<dynamic>? _newsArticles;
+  String? _trendingError;
+  String? _newsError;
 
-  // --- CORE LOGIC (UNCHANGED) ---
+  static const _trendingCacheKey = 'home_trending_cache';
+  static const _newsCacheKey = 'home_news_cache';
+  static const _trendingTimestampKey = 'home_trending_timestamp';
+  static const _newsTimestampKey = 'home_news_timestamp';
+  static const _cacheValidityMinutes = 5; // Cache for 5 minutes only
+
+  final String _trendingApiUrl = 'http://msa.merkuz.com:3636/trending';
+  final String _newsApiUrl = 'http://msa.merkuz.com:3636/news';
+  final String _apiBaseUrl = 'http://msa.merkuz.com:3636';
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
+
     _initializeBannerWebView();
     _initializePrayerTimes();
-    _fetchTrendingVideos();
+    _loadDataWithCache();
+
     _timer = Timer.periodic(const Duration(seconds: 1), (_) {
       if (_prayerTimes.isNotEmpty) _updateCountdown();
+    });
+
+    // Auto-refresh every 10 minutes
+    _autoRefreshTimer = Timer.periodic(const Duration(minutes: 10), (_) {
+      _refreshData();
     });
   }
 
   @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      // App came to foreground, refresh data to ensure it's up-to-date
+      _refreshData();
+    }
+  }
+
+  @override
   void dispose() {
+    _autoRefreshTimer?.cancel();
     _timer?.cancel();
+    WidgetsBinding.instance.removeObserver(this);
     _bannerWebViewController = null;
     super.dispose();
   }
+
+  // --- ENHANCED DATA FETCHING & CACHING ---
+
+  Future<void> _loadDataWithCache() async {
+    final prefs = await SharedPreferences.getInstance();
+
+    // Check trending cache
+    final lastTrendingTime = prefs.getInt(_trendingTimestampKey) ?? 0;
+    final now = DateTime.now().millisecondsSinceEpoch;
+    final shouldUseTrendingCache =
+        (now - lastTrendingTime) < (_cacheValidityMinutes * 60 * 1000);
+
+    if (shouldUseTrendingCache && mounted) {
+      final cachedTrending = prefs.getString(_trendingCacheKey);
+      if (cachedTrending != null) {
+        setState(() {
+          _trendingVideos = json.decode(cachedTrending);
+        });
+      }
+    } else {
+      await prefs.remove(_trendingCacheKey);
+    }
+
+    // Check news cache
+    final lastNewsTime = prefs.getInt(_newsTimestampKey) ?? 0;
+    final shouldUseNewsCache =
+        (now - lastNewsTime) < (_cacheValidityMinutes * 60 * 1000);
+
+    if (shouldUseNewsCache && mounted) {
+      final cachedNews = prefs.getString(_newsCacheKey);
+      if (cachedNews != null) {
+        setState(() {
+          _newsArticles = json.decode(cachedNews);
+        });
+      }
+    } else {
+      await prefs.remove(_newsCacheKey);
+    }
+
+    // Always fetch fresh data in background
+    await _fetchTrendingVideos();
+    await _fetchNewsArticles();
+  }
+
+  Future<void> _refreshData() async {
+    final prefs = await SharedPreferences.getInstance();
+
+    // Clear all cached data to force fresh fetch
+    await prefs.remove(_trendingCacheKey);
+    await prefs.remove(_newsCacheKey);
+    await prefs.remove(_trendingTimestampKey);
+    await prefs.remove(_newsTimestampKey);
+
+    if (mounted) {
+      setState(() {
+        _trendingVideos = null;
+        _newsArticles = null;
+        _trendingError = null;
+        _newsError = null;
+      });
+    }
+
+    // Refresh all data sources from network
+    await Future.wait([
+      _getLocationAndPrayerTimes(),
+      _fetchTrendingVideos(forceRefresh: true),
+      _fetchNewsArticles(forceRefresh: true),
+    ]);
+  }
+
+  Future<void> _fetchTrendingVideos({bool forceRefresh = false}) async {
+    try {
+      final response = await http.get(Uri.parse(_trendingApiUrl));
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        final prefs = await SharedPreferences.getInstance();
+
+        // Save to cache with timestamp
+        await prefs.setString(_trendingCacheKey, response.body);
+        await prefs.setInt(
+            _trendingTimestampKey, DateTime.now().millisecondsSinceEpoch);
+
+        if (mounted) {
+          setState(() {
+            _trendingVideos = data;
+            _trendingError = null;
+          });
+        }
+      } else {
+        throw Exception('Failed to load trending videos');
+      }
+    } catch (e) {
+      print("Trending fetch error: $e");
+      if (mounted && (_trendingVideos == null || _trendingVideos!.isEmpty)) {
+        setState(() => _trendingError = e.toString());
+      }
+    }
+  }
+
+  Future<void> _fetchNewsArticles({bool forceRefresh = false}) async {
+    try {
+      final response = await http.get(Uri.parse(_newsApiUrl));
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        final prefs = await SharedPreferences.getInstance();
+
+        // Save to cache with timestamp
+        await prefs.setString(_newsCacheKey, response.body);
+        await prefs.setInt(
+            _newsTimestampKey, DateTime.now().millisecondsSinceEpoch);
+
+        if (mounted) {
+          setState(() {
+            _newsArticles = data;
+            _newsError = null;
+          });
+        }
+      } else {
+        throw Exception('Failed to load news articles');
+      }
+    } catch (e) {
+      print("News fetch error: $e");
+      if (mounted && (_newsArticles == null || _newsArticles!.isEmpty)) {
+        setState(() => _newsError = e.toString());
+      }
+    }
+  }
+
+  // --- PRAYER TIMES & BANNER METHODS ---
 
   void _navigateToLivePage() async {
     if (_bannerWebViewController != null) {
@@ -129,43 +245,6 @@ class _HomeScreenState extends State<HomeScreen> {
         });
       }
     });
-  }
-
-  Future<void> _fetchTrendingVideos() async {
-    try {
-      final response = await http.get(
-        Uri.parse(_trendingApiUrl),
-        headers: {
-          'Content-Type': 'application/json',
-        },
-      );
-
-      if (response.statusCode == 200) {
-        final List<dynamic> responseData = json.decode(response.body);
-        if (mounted) {
-          setState(() {
-            _trendingVideos = responseData;
-            _isLoadingTrending = false;
-            _hasTrendingError = false;
-          });
-        }
-      } else {
-        throw Exception(
-            'Failed to load trending videos: ${response.statusCode}');
-      }
-    } catch (e) {
-      if (mounted) {
-        setState(() {
-          _isLoadingTrending = false;
-          _hasTrendingError = true;
-        });
-      }
-    }
-  }
-
-  Future<void> _refreshData() async {
-    await _getLocationAndPrayerTimes();
-    await _fetchTrendingVideos();
   }
 
   Future<void> _initializeBannerWebView() async {
@@ -225,39 +304,39 @@ class _HomeScreenState extends State<HomeScreen> {
 
   String _createBannerHtml() {
     return '''
-<!DOCTYPE html>
-<html>
-<head>
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
-    <style>
-        body, html { margin: 0; padding: 0; width: 100%; height: 100%; background-color: #000; overflow: hidden; }
-        video { width: 100%; height: 100%; object-fit: cover; }
-    </style>
-</head>
-<body>
-    <video id="video" muted autoplay playsinline></video>
-    <script>
-        const video = document.getElementById('video');
-        const hlsUrl = "$streamUrl";
-        if (Hls.isSupported()) {
-            const hls = new Hls();
-            hls.loadSource(hlsUrl);
-            hls.attachMedia(video);
-            hls.on(Hls.Events.MANIFEST_PARSED, function() {
-                video.play().catch(e => console.error("Autoplay failed", e));
-            });
-        } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
-            video.src = hlsUrl;
-            video.addEventListener('loadedmetadata', function() {
-                video.play().catch(e => console.error("Autoplay failed", e));
-            });
-        }
-        document.addEventListener('contextmenu', event => event.preventDefault());
-    </script>
-</body>
-</html>
-''';
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+        <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
+        <style>
+            body, html { margin: 0; padding: 0; width: 100%; height: 100%; background-color: #000; overflow: hidden; }
+            video { width: 100%; height: 100%; object-fit: cover; }
+        </style>
+    </head>
+    <body>
+        <video id="video" muted autoplay playsinline></video>
+        <script>
+            const video = document.getElementById('video');
+            const hlsUrl = "$streamUrl";
+            if (Hls.isSupported()) {
+                const hls = new Hls();
+                hls.loadSource(hlsUrl);
+                hls.attachMedia(video);
+                hls.on(Hls.Events.MANIFEST_PARSED, function() {
+                    video.play().catch(e => console.error("Autoplay failed", e));
+                });
+            } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
+                video.src = hlsUrl;
+                video.addEventListener('loadedmetadata', function() {
+                    video.play().catch(e => console.error("Autoplay failed", e));
+                });
+            }
+            document.addEventListener('contextmenu', event => event.preventDefault());
+        </script>
+    </body>
+    </html>
+    ''';
   }
 
   void _reloadBannerStream() {
@@ -421,6 +500,8 @@ class _HomeScreenState extends State<HomeScreen> {
     if (mounted) setState(() => _nextPrayerCountdown = countdown);
   }
 
+  // --- NAVIGATION & HELPERS ---
+
   void _onItemTapped(int index) {
     if (index == _selectedIndex) return;
     String routeName = '';
@@ -468,213 +549,256 @@ class _HomeScreenState extends State<HomeScreen> {
     },
   ];
 
+  String _formatTimeAgo(String dateString) {
+    try {
+      final dateTime = DateTime.parse(dateString);
+      final now = DateTime.now();
+      final difference = now.difference(dateTime);
+
+      if (difference.inDays > 365) {
+        return '${(difference.inDays / 365).floor()}y ago';
+      } else if (difference.inDays > 30) {
+        return '${(difference.inDays / 30).floor()}mo ago';
+      } else if (difference.inDays > 0) {
+        return '${difference.inDays}d ago';
+      } else if (difference.inHours > 0) {
+        return '${difference.inHours}h ago';
+      } else if (difference.inMinutes > 0) {
+        return '${difference.inMinutes}m ago';
+      } else {
+        return 'Just now';
+      }
+    } catch (e) {
+      return ''; // Return empty string if date is invalid
+    }
+  }
+
+  // --- BUILD METHOD ---
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final isDarkMode = theme.brightness == Brightness.dark;
+    const double bannerHeight = 220.0;
 
-    return Scaffold(
-      key: _scaffoldKey,
-      drawer: const AppDrawer(),
-      body: Stack(
-        children: [
-          RefreshIndicator(
-            onRefresh: _refreshData,
-            edgeOffset: 80.0,
-            child: CustomScrollView(
-              slivers: [
-                SliverToBoxAdapter(
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 16.0),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const SizedBox(height: 52),
-                        _buildVideoBanner(context),
-                        const SizedBox(height: 24),
-                        _buildPrayerTimesSection(theme, isDarkMode),
-                        const SizedBox(height: 24),
-                        _buildSectionHeader(theme, "Trending on Minber", () {
-                          if (_trendingVideos.isNotEmpty) {
-                            Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                builder: (context) => TrendingSeeAllPage(
-                                  trendingVideos: _trendingVideos,
+    return GestureDetector(
+      onHorizontalDragEnd: (details) {
+        const double flingVelocity = 400.0;
+        if ((details.primaryVelocity ?? 0).abs() > flingVelocity) {
+          _scaffoldKey.currentState?.openDrawer();
+        }
+      },
+      child: Scaffold(
+        key: _scaffoldKey,
+        drawer: const AppDrawer(),
+        body: Stack(
+          children: [
+            RefreshIndicator(
+              onRefresh: _refreshData,
+              edgeOffset: 0.0,
+              child: CustomScrollView(
+                slivers: [
+                  SliverAppBar(
+                    expandedHeight: bannerHeight,
+                    pinned: false,
+                    floating: true,
+                    snap: true,
+                    backgroundColor: Colors.transparent,
+                    elevation: 0,
+                    automaticallyImplyLeading: false,
+                    flexibleSpace: FlexibleSpaceBar(
+                      background: _buildVideoBanner(context),
+                    ),
+                  ),
+                  SliverToBoxAdapter(
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 16.0),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const SizedBox(height: 24),
+                          _buildPrayerTimesSection(theme, isDarkMode),
+                          const SizedBox(height: 24),
+                          _buildSectionHeader(theme, "Trending on Minber", () {
+                            if (_trendingVideos != null &&
+                                _trendingVideos!.isNotEmpty) {
+                              Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (context) => TrendingSeeAllScreen(
+                                    trendingVideos: _trendingVideos!,
+                                    apiBaseUrl: _apiBaseUrl,
+                                  ),
                                 ),
-                              ),
-                            );
-                          }
-                        }),
-                        const SizedBox(height: 12),
-                      ],
+                              );
+                            }
+                          }),
+                          const SizedBox(height: 12),
+                        ],
+                      ),
                     ),
                   ),
-                ),
-                _buildTrendingSection(context, theme, isDarkMode),
-                SliverToBoxAdapter(
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 16.0),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const SizedBox(height: 24),
-                        _buildHalalPremium(theme, isDarkMode),
-                        const SizedBox(height: 24),
-                        _buildSectionHeader(theme, "Explore Our Apps", () {
-                          Navigator.pushNamed(context, '/subapps');
-                        }),
-                        const SizedBox(height: 16),
-                        _buildAppsSection(theme),
-                        const SizedBox(height: 20),
-                        _buildSectionHeader(theme, "Latest News", () {}),
-                        const SizedBox(height: 12),
-                        _buildNewsSection(theme),
-                        const SizedBox(height: 24),
-                      ],
+                  _buildTrendingSection(context, theme, isDarkMode),
+                  SliverToBoxAdapter(
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 16.0),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const SizedBox(height: 24),
+                          _buildHalalPremium(theme, isDarkMode),
+                          const SizedBox(height: 24),
+                          _buildSectionHeader(theme, "Explore Our Apps", () {
+                            Navigator.pushNamed(context, '/subapps');
+                          }),
+                          const SizedBox(height: 16),
+                          _buildAppsSection(theme),
+                          const SizedBox(height: 20),
+                          _buildSectionHeader(theme, "Latest News", () {
+                            if (_newsArticles != null &&
+                                _newsArticles!.isNotEmpty) {
+                              Navigator.pushNamed(
+                                context,
+                                '/news',
+                                arguments: {
+                                  'newsArticles': _newsArticles,
+                                  'apiBaseUrl': _apiBaseUrl,
+                                },
+                              );
+                            }
+                          }),
+                          const SizedBox(height: 12),
+                          _buildNewsSection(theme),
+                          const SizedBox(height: 24),
+                        ],
+                      ),
                     ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
-          ),
-          _buildFloatingDrawerButton(theme),
-        ],
+            Positioned(
+              left: -10,
+              top: 0,
+              bottom: 0,
+              child: Center(
+                child: DrawerIndicator(
+                  onTap: () => _scaffoldKey.currentState?.openDrawer(),
+                ),
+              ),
+            ),
+          ],
+        ),
+        bottomNavigationBar: _buildBottomNavigationBar(theme),
       ),
-      bottomNavigationBar: _buildBottomNavigationBar(theme),
     );
   }
 
-  Widget _buildFloatingDrawerButton(ThemeData theme) {
-    return SafeArea(
-      child: Padding(
-        padding: const EdgeInsets.only(left: 16.0, top: 8.0),
-        child: Material(
-          color: theme.cardColor.withOpacity(0.85),
-          shape: const CircleBorder(),
-          clipBehavior: Clip.antiAlias,
-          elevation: 4.0,
-          child: IconButton(
-            tooltip: 'Open menu',
-            icon: Icon(Icons.menu, color: theme.iconTheme.color),
-            onPressed: () => _scaffoldKey.currentState?.openDrawer(),
-          ),
-        ),
-      ),
-    );
-  }
+  // --- BUILD WIDGETS ---
 
   Widget _buildVideoBanner(BuildContext context) {
-    return AspectRatio(
-      aspectRatio: 16 / 9,
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(16),
-        child: Container(
-          color: Colors.black,
-          child: Stack(
-            fit: StackFit.expand,
-            children: [
-              if (_bannerWebViewController != null)
-                WebViewWidget(controller: _bannerWebViewController!),
-              if (_isBannerLoading)
-                Container(
-                  color: Colors.black.withOpacity(0.8),
-                  child: const Center(
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        CircularProgressIndicator(color: Colors.white),
-                        SizedBox(height: 12),
-                        Text('Loading Stream...',
-                            style: TextStyle(color: Colors.white70)),
-                      ],
-                    ),
+    return Container(
+      color: Colors.black,
+      child: Stack(
+        fit: StackFit.expand,
+        children: [
+          if (_bannerWebViewController != null)
+            WebViewWidget(controller: _bannerWebViewController!),
+          if (_isBannerLoading)
+            Container(
+              color: Colors.black.withOpacity(0.8),
+              child: const Center(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    CircularProgressIndicator(color: Colors.white),
+                    SizedBox(height: 12),
+                    Text('Loading Stream...',
+                        style: TextStyle(color: Colors.white70)),
+                  ],
+                ),
+              ),
+            ),
+          if (_hasBannerError)
+            Container(
+              color: Colors.black.withOpacity(0.8),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  const Icon(Icons.error_outline,
+                      color: Colors.white, size: 40),
+                  const SizedBox(height: 12),
+                  const Text('Stream Error',
+                      style: TextStyle(color: Colors.white)),
+                  const SizedBox(height: 12),
+                  ElevatedButton.icon(
+                    onPressed: _reloadBannerStream,
+                    icon: const Icon(Icons.refresh, size: 16),
+                    label: const Text('Retry'),
+                  ),
+                ],
+              ),
+            ),
+          if (!_hasBannerError && !_isBannerLoading) ...[
+            Positioned(
+              top: 40,
+              left: 12,
+              child: Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                decoration: BoxDecoration(
+                  color: Colors.black.withOpacity(0.6),
+                  borderRadius: BorderRadius.circular(20),
+                ),
+                child: const Row(
+                  children: [
+                    Icon(Icons.circle, color: Colors.red, size: 10),
+                    SizedBox(width: 6),
+                    Text("LIVE",
+                        style: TextStyle(color: Colors.white, fontSize: 12)),
+                  ],
+                ),
+              ),
+            ),
+            Positioned(
+              top: 40,
+              right: 12,
+              child: GestureDetector(
+                onTap: _toggleMute,
+                child: Container(
+                  padding: const EdgeInsets.all(6),
+                  decoration: BoxDecoration(
+                    color: Colors.black.withOpacity(0.6),
+                    shape: BoxShape.circle,
+                  ),
+                  child: Icon(
+                    _isMuted ? Icons.volume_off : Icons.volume_up,
+                    color: Colors.white,
+                    size: 20,
                   ),
                 ),
-              if (_hasBannerError)
-                Container(
-                  color: Colors.black.withOpacity(0.8),
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      const Icon(Icons.error_outline,
-                          color: Colors.white, size: 40),
-                      const SizedBox(height: 12),
-                      const Text('Stream Error',
-                          style: TextStyle(color: Colors.white)),
-                      const SizedBox(height: 12),
-                      ElevatedButton.icon(
-                        onPressed: _reloadBannerStream,
-                        icon: const Icon(Icons.refresh, size: 16),
-                        label: const Text('Retry'),
-                      ),
-                    ],
+              ),
+            ),
+            Positioned(
+              bottom: 12,
+              right: 12,
+              child: GestureDetector(
+                onTap: _navigateToLivePage,
+                child: Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                  decoration: BoxDecoration(
+                    color: Colors.black.withOpacity(0.6),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: const Text(
+                    "Tap for full screen →",
+                    style: TextStyle(color: Colors.white, fontSize: 12),
                   ),
                 ),
-              if (!_hasBannerError && !_isBannerLoading) ...[
-                Positioned(
-                  top: 12,
-                  left: 12,
-                  child: Container(
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-                    decoration: BoxDecoration(
-                      color: Colors.black.withOpacity(0.6),
-                      borderRadius: BorderRadius.circular(20),
-                    ),
-                    child: const Row(
-                      children: [
-                        Icon(Icons.circle, color: Colors.red, size: 10),
-                        SizedBox(width: 6),
-                        Text("LIVE",
-                            style:
-                                TextStyle(color: Colors.white, fontSize: 12)),
-                      ],
-                    ),
-                  ),
-                ),
-                Positioned(
-                  top: 12,
-                  right: 12,
-                  child: GestureDetector(
-                    onTap: _toggleMute,
-                    child: Container(
-                      padding: const EdgeInsets.all(6),
-                      decoration: BoxDecoration(
-                        color: Colors.black.withOpacity(0.6),
-                        shape: BoxShape.circle,
-                      ),
-                      child: Icon(
-                        _isMuted ? Icons.volume_off : Icons.volume_up,
-                        color: Colors.white,
-                        size: 20,
-                      ),
-                    ),
-                  ),
-                ),
-                Positioned(
-                  bottom: 12,
-                  right: 12,
-                  child: GestureDetector(
-                    onTap: _navigateToLivePage,
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 10, vertical: 5),
-                      decoration: BoxDecoration(
-                        color: Colors.black.withOpacity(0.6),
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: const Text(
-                        "Tap for full screen →",
-                        style: TextStyle(color: Colors.white, fontSize: 12),
-                      ),
-                    ),
-                  ),
-                ),
-              ],
-            ],
-          ),
-        ),
+              ),
+            ),
+          ],
+        ],
       ),
     );
   }
@@ -843,18 +967,18 @@ class _HomeScreenState extends State<HomeScreen> {
     return SliverToBoxAdapter(
       child: SizedBox(
         height: MediaQuery.of(context).size.width * 0.45,
-        child: _isLoadingTrending
+        child: _trendingVideos == null && _trendingError == null
             ? _buildTrendingShimmer(context)
-            : _hasTrendingError
+            : _trendingError != null
                 ? _buildTrendingError(theme)
-                : _trendingVideos.isEmpty
+                : _trendingVideos!.isEmpty
                     ? _buildNoTrendingContent(theme)
                     : ListView.builder(
                         scrollDirection: Axis.horizontal,
-                        itemCount: _trendingVideos.length,
+                        itemCount: _trendingVideos!.length,
                         padding: const EdgeInsets.symmetric(horizontal: 16.0),
                         itemBuilder: (context, index) {
-                          final video = _trendingVideos[index];
+                          final video = _trendingVideos![index];
                           return _buildTrendingItem(
                               context, theme, video, index, isDarkMode);
                         },
@@ -866,8 +990,14 @@ class _HomeScreenState extends State<HomeScreen> {
   Widget _buildTrendingItem(BuildContext context, ThemeData theme,
       dynamic video, int index, bool isDarkMode) {
     String thumbnailUrl = video['thumbnail'] ?? '';
+
+    // FIXED: Proper URL construction
     if (thumbnailUrl.isNotEmpty && !thumbnailUrl.startsWith('http')) {
-      thumbnailUrl = 'http://msa.merkuz.com:3636/$thumbnailUrl';
+      if (thumbnailUrl.startsWith('/')) {
+        thumbnailUrl = '$_apiBaseUrl$thumbnailUrl';
+      } else {
+        thumbnailUrl = '$_apiBaseUrl/$thumbnailUrl';
+      }
     }
 
     return Container(
@@ -893,7 +1023,7 @@ class _HomeScreenState extends State<HomeScreen> {
             Navigator.push(
               context,
               MaterialPageRoute(
-                  builder: (_) => VideoPlayerPage(videoId: videoId)),
+                  builder: (_) => VideoPlayerScreen(videoId: videoId)),
             );
           } else {
             ScaffoldMessenger.of(context).showSnackBar(
@@ -905,14 +1035,15 @@ class _HomeScreenState extends State<HomeScreen> {
         child: Stack(
           fit: StackFit.expand,
           children: [
-            thumbnailUrl.isNotEmpty
-                ? Image.network(
-                    thumbnailUrl,
-                    fit: BoxFit.cover,
-                    errorBuilder: (context, error, stackTrace) =>
-                        Container(color: theme.splashColor),
-                  )
-                : Container(color: theme.splashColor),
+            if (thumbnailUrl.isNotEmpty)
+              Image.network(
+                thumbnailUrl,
+                fit: BoxFit.cover,
+                errorBuilder: (context, error, stackTrace) =>
+                    Container(color: theme.splashColor),
+              )
+            else
+              Container(color: theme.splashColor),
             Container(
               decoration: BoxDecoration(
                 gradient: LinearGradient(
@@ -978,7 +1109,8 @@ class _HomeScreenState extends State<HomeScreen> {
                   theme.textTheme.bodyMedium?.copyWith(color: theme.hintColor)),
           const SizedBox(height: 8),
           ElevatedButton(
-              onPressed: _fetchTrendingVideos, child: const Text('Retry')),
+              onPressed: () => _fetchTrendingVideos(forceRefresh: true),
+              child: const Text('Retry')),
         ],
       ),
     );
@@ -1107,32 +1239,45 @@ class _HomeScreenState extends State<HomeScreen> {
     ]);
   }
 
-  // ⭐⭐⭐ FINAL POLISH: Redesigned News Section with Outline Cards ⭐⭐⭐
   Widget _buildNewsSection(ThemeData theme) {
-    final List<Map<String, String>> news = [
-      {
-        "title": "Global Relief Efforts Intensify for Recent Disaster",
-        "time": "2h ago",
-        "image": "assets/images/news1.png"
-      },
-      {
-        "title": "New Grand Mosque Opening in Addis Ababa Next Week",
-        "time": "5h ago",
-        "image": "assets/images/news2.png"
-      },
-      {
-        "title": "Minber App Reaches 1 Million Downloads",
-        "time": "1d ago",
-        "image": "assets/images/news3.png"
-      },
-    ];
+    if (_newsArticles == null && _newsError == null) {
+      return _buildNewsShimmer(theme);
+    }
+    if (_newsError != null) {
+      return _buildNewsError(theme);
+    }
+    if (_newsArticles!.isEmpty) {
+      return Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.newspaper, color: theme.hintColor, size: 40),
+            const SizedBox(height: 8),
+            Text('No news available right now.',
+                style: theme.textTheme.bodyMedium
+                    ?.copyWith(color: theme.hintColor)),
+          ],
+        ),
+      );
+    }
+
     return ListView.separated(
       shrinkWrap: true,
       physics: const NeverScrollableScrollPhysics(),
-      itemCount: news.length,
+      itemCount: min(3, _newsArticles!.length),
       separatorBuilder: (context, index) => const SizedBox(height: 12),
       itemBuilder: (context, index) {
-        final item = news[index];
+        final item = _newsArticles![index];
+        final headline = item['headline'] ?? 'No Title';
+        final newsUrl = item['newsUrl'] as String?;
+        String thumbnailUrl = item['thumbnail'] ?? '';
+        if (thumbnailUrl.isNotEmpty && !thumbnailUrl.startsWith('http')) {
+          if (thumbnailUrl.startsWith('/')) {
+            thumbnailUrl = '$_apiBaseUrl$thumbnailUrl';
+          } else {
+            thumbnailUrl = '$_apiBaseUrl/$thumbnailUrl';
+          }
+        }
         final newsCard = Container(
           decoration: BoxDecoration(
             color: theme.cardColor,
@@ -1141,7 +1286,19 @@ class _HomeScreenState extends State<HomeScreen> {
           ),
           child: InkWell(
             borderRadius: BorderRadius.circular(12),
-            onTap: () {},
+            onTap: () {
+              if (newsUrl != null && newsUrl.isNotEmpty) {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => EmbeddedWebScreen(
+                      url: newsUrl,
+                      appName: headline,
+                    ),
+                  ),
+                );
+              }
+            },
             child: Padding(
               padding: const EdgeInsets.all(12.0),
               child: Row(
@@ -1151,7 +1308,7 @@ class _HomeScreenState extends State<HomeScreen> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          item["title"]!,
+                          headline,
                           style: theme.textTheme.bodyLarge
                               ?.copyWith(fontWeight: FontWeight.bold),
                           maxLines: 3,
@@ -1159,7 +1316,7 @@ class _HomeScreenState extends State<HomeScreen> {
                         ),
                         const SizedBox(height: 8),
                         Text(
-                          item["time"]!,
+                          _formatTimeAgo(item["createdAt"] ?? ''),
                           style: theme.textTheme.bodySmall
                               ?.copyWith(color: theme.hintColor),
                         ),
@@ -1168,9 +1325,27 @@ class _HomeScreenState extends State<HomeScreen> {
                   ),
                   const SizedBox(width: 12),
                   ClipRRect(
-                      borderRadius: BorderRadius.circular(8),
-                      child: Image.asset(item['image']!,
-                          width: 80, height: 80, fit: BoxFit.cover)),
+                    borderRadius: BorderRadius.circular(8),
+                    child: thumbnailUrl.isNotEmpty
+                        ? Image.network(
+                            thumbnailUrl,
+                            width: 80,
+                            height: 80,
+                            fit: BoxFit.cover,
+                            errorBuilder: (c, e, s) => Container(
+                              width: 80,
+                              height: 80,
+                              color: theme.splashColor,
+                              child: const Icon(Icons.broken_image, size: 30),
+                            ),
+                          )
+                        : Container(
+                            width: 80,
+                            height: 80,
+                            color: theme.splashColor,
+                            child: const Icon(Icons.image, size: 30),
+                          ),
+                  ),
                 ],
               ),
             ),
@@ -1181,6 +1356,69 @@ class _HomeScreenState extends State<HomeScreen> {
           child: newsCard,
         );
       },
+    );
+  }
+
+  Widget _buildNewsShimmer(ThemeData theme) {
+    return Shimmer.fromColors(
+      baseColor: theme.splashColor,
+      highlightColor: theme.cardColor,
+      child: ListView.separated(
+        shrinkWrap: true,
+        physics: const NeverScrollableScrollPhysics(),
+        itemCount: 3,
+        separatorBuilder: (context, index) => const SizedBox(height: 12),
+        itemBuilder: (context, index) {
+          return Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: theme.dividerColor.withOpacity(0.8)),
+            ),
+            child: Row(
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Container(
+                          width: double.infinity,
+                          height: 16,
+                          color: Colors.white),
+                      const SizedBox(height: 8),
+                      Container(width: 200, height: 16, color: Colors.white),
+                      const SizedBox(height: 8),
+                      Container(width: 80, height: 12, color: Colors.white),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Container(width: 80, height: 80, color: Colors.white),
+              ],
+            ),
+          );
+        },
+      ),
+    );
+  }
+
+  Widget _buildNewsError(ThemeData theme) {
+    return Center(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(Icons.error_outline, color: theme.hintColor, size: 40),
+          const SizedBox(height: 8),
+          Text('Failed to load news',
+              style:
+                  theme.textTheme.bodyMedium?.copyWith(color: theme.hintColor)),
+          const SizedBox(height: 8),
+          ElevatedButton(
+              onPressed: () => _fetchNewsArticles(forceRefresh: true),
+              child: const Text('Retry')),
+        ],
+      ),
     );
   }
 
@@ -1222,221 +1460,6 @@ class _HomeScreenState extends State<HomeScreen> {
                 activeIcon: Icon(Icons.apps),
                 label: "Sub Apps"),
           ]),
-    );
-  }
-}
-
-class AnimatedListItem extends StatefulWidget {
-  final Widget child;
-  final int index;
-  const AnimatedListItem({super.key, required this.child, required this.index});
-  @override
-  State<AnimatedListItem> createState() => _AnimatedListItemState();
-}
-
-class _AnimatedListItemState extends State<AnimatedListItem>
-    with SingleTickerProviderStateMixin {
-  late AnimationController _controller;
-  late Animation<double> _fadeAnimation;
-  late Animation<Offset> _slideAnimation;
-
-  @override
-  void initState() {
-    super.initState();
-    _controller = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 500),
-    );
-
-    _fadeAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
-      CurvedAnimation(parent: _controller, curve: Curves.easeInOut),
-    );
-
-    _slideAnimation =
-        Tween<Offset>(begin: const Offset(0, 0.5), end: Offset.zero).animate(
-      CurvedAnimation(parent: _controller, curve: Curves.easeOutCubic),
-    );
-
-    Future.delayed(Duration(milliseconds: widget.index * 100), () {
-      if (mounted) {
-        _controller.forward();
-      }
-    });
-  }
-
-  @override
-  void dispose() {
-    _controller.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return FadeTransition(
-      opacity: _fadeAnimation,
-      child: SlideTransition(
-        position: _slideAnimation,
-        child: widget.child,
-      ),
-    );
-  }
-}
-
-class TrendingSeeAllPage extends StatelessWidget {
-  final List<dynamic> trendingVideos;
-
-  const TrendingSeeAllPage({super.key, required this.trendingVideos});
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Trending on Minber'),
-      ),
-      body: ListView.builder(
-        padding: const EdgeInsets.all(12.0),
-        itemCount: trendingVideos.length,
-        itemBuilder: (context, index) {
-          final video = trendingVideos[index];
-          return _buildTrendingListItem(context, video);
-        },
-      ),
-    );
-  }
-
-  Widget _buildTrendingListItem(BuildContext context, dynamic video) {
-    final theme = Theme.of(context);
-    String thumbnailUrl = video['thumbnail'] ?? '';
-    if (thumbnailUrl.isNotEmpty && !thumbnailUrl.startsWith('http')) {
-      thumbnailUrl = 'http://msa.merkuz.com:3636/$thumbnailUrl';
-    }
-
-    return Card(
-      elevation: 2,
-      margin: const EdgeInsets.only(bottom: 16),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      clipBehavior: Clip.antiAlias,
-      child: InkWell(
-        onTap: () {
-          final videoUrl = video['videoUrl'] as String?;
-          if (videoUrl == null || videoUrl.isEmpty) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text('No video URL available.')),
-            );
-            return;
-          }
-
-          String? videoId = YoutubePlayer.convertUrlToId(videoUrl);
-          if (videoId != null && videoId.isNotEmpty) {
-            Navigator.push(
-              context,
-              MaterialPageRoute(
-                builder: (_) => VideoPlayerPage(videoId: videoId),
-              ),
-            );
-          } else {
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(
-                content: Text('Could not play video (Invalid URL).'),
-                backgroundColor: Colors.red,
-              ),
-            );
-          }
-        },
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            SizedBox(
-              width: 140,
-              height: 85,
-              child: thumbnailUrl.isNotEmpty
-                  ? Image.network(
-                      thumbnailUrl,
-                      fit: BoxFit.cover,
-                      errorBuilder: (c, e, s) => Container(
-                        color: Colors.grey[300],
-                        child:
-                            const Icon(Icons.broken_image, color: Colors.grey),
-                      ),
-                    )
-                  : Container(
-                      color: Colors.grey[300],
-                      child:
-                          const Icon(Icons.ondemand_video, color: Colors.grey),
-                    ),
-            ),
-            Expanded(
-              child: Padding(
-                padding: const EdgeInsets.all(12.0),
-                child: Text(
-                  video['title'] ?? 'Untitled',
-                  maxLines: 3,
-                  overflow: TextOverflow.ellipsis,
-                  style: theme.textTheme.bodyMedium
-                      ?.copyWith(fontWeight: FontWeight.bold),
-                ),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class VideoPlayerPage extends StatefulWidget {
-  final String videoId;
-  const VideoPlayerPage({super.key, required this.videoId});
-
-  @override
-  State<VideoPlayerPage> createState() => _VideoPlayerPageState();
-}
-
-class _VideoPlayerPageState extends State<VideoPlayerPage> {
-  late YoutubePlayerController _controller;
-
-  @override
-  void initState() {
-    super.initState();
-    _controller = YoutubePlayerController(
-      initialVideoId: widget.videoId,
-      flags: const YoutubePlayerFlags(
-        autoPlay: true,
-        mute: false,
-      ),
-    );
-  }
-
-  @override
-  void deactivate() {
-    _controller.pause();
-    super.deactivate();
-  }
-
-  @override
-  void dispose() {
-    _controller.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return YoutubePlayerBuilder(
-      onExitFullScreen: () {
-        SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]);
-      },
-      player: YoutubePlayer(
-        controller: _controller,
-        showVideoProgressIndicator: true,
-      ),
-      builder: (context, player) => Scaffold(
-        appBar: AppBar(
-          title: const Text("Video Player"),
-        ),
-        body: Center(
-          child: player,
-        ),
-      ),
     );
   }
 }

@@ -75,12 +75,5 @@ flutter_launcher_icons:
 
 # ✅ ADD THIS ENTIRE SECTION - This is your splash screen configuration
 flutter_native_splash:
+  # This creates a simple, blank, white splash screen.
   color: "#FFFFFF"
-  image: assets/images/minber.png
-
-  branding: assets/images/skylink.png
-  branding_mode: bottom
-
-  android_12:
-    color: "#FFFFFF"
-    image: assets/images/minber.png
