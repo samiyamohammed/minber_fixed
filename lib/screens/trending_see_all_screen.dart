@@ -1,6 +1,7 @@
 // lib/screens/trending_see_all_screen.dart
 import 'package:flutter/material.dart';
 import 'package:youtube_player_flutter/youtube_player_flutter.dart';
+import '../models/video_model.dart'; // Import the Video model
 import './video_player_screen.dart';
 
 class TrendingSeeAllScreen extends StatefulWidget {
@@ -45,7 +46,6 @@ class _TrendingSeeAllScreenState extends State<TrendingSeeAllScreen> {
     final theme = Theme.of(context);
     String thumbnailUrl = video['thumbnail'] ?? '';
 
-    // FIXED: Proper URL construction
     if (thumbnailUrl.isNotEmpty && !thumbnailUrl.startsWith('http')) {
       if (thumbnailUrl.startsWith('/')) {
         thumbnailUrl = '${widget.apiBaseUrl}$thumbnailUrl';
@@ -71,12 +71,39 @@ class _TrendingSeeAllScreenState extends State<TrendingSeeAllScreen> {
 
           String? videoId = YoutubePlayer.convertUrlToId(videoUrl);
           if (videoId != null && videoId.isNotEmpty) {
+            // --- START: MODIFICATION ---
+
+            // 1. Convert the dynamic list to a List<Video>
+            final List<Video> videoPlaylist =
+                widget.trendingVideos.map<Video>((item) {
+              final url = item['videoUrl'] as String? ?? '';
+              final id = YoutubePlayer.convertUrlToId(url) ?? '';
+              String thumb = item['thumbnail'] ?? '';
+              if (thumb.isNotEmpty && !thumb.startsWith('http')) {
+                thumb = '${widget.apiBaseUrl}$thumb';
+              }
+              return Video(
+                id: id, // Use videoId as a unique id
+                videoId: id,
+                title: item['title'] ?? 'Untitled',
+                thumbnailUrl: thumb,
+                publishedAt: DateTime.now(), // No date provided, so use now
+              );
+            }).toList();
+
+            // 2. Navigate with all the required parameters
             Navigator.push(
               context,
               MaterialPageRoute(
-                builder: (_) => VideoPlayerScreen(videoId: videoId),
+                builder: (_) => VideoPlayerScreen(
+                  videoId: videoId,
+                  initialIndex: index,
+                  videoList: videoPlaylist,
+                  initialVideo: videoPlaylist[index],
+                ),
               ),
             );
+            // --- END: MODIFICATION ---
           } else {
             ScaffoldMessenger.of(context).showSnackBar(
               const SnackBar(

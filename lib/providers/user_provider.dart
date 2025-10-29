@@ -2,78 +2,81 @@
 
 import 'dart:convert';
 import 'package:flutter/material.dart';
-import 'package:http/http.dart' as http;
 import 'package:logger/logger.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import '../models/user_model.dart'; // Ensure this path is correct
+import 'package:firebase_messaging/firebase_messaging.dart';
+
+import '../models/user_model.dart';
+import '../services/api_service.dart';
 
 class UserProvider extends ChangeNotifier {
   UserModel? _user;
+  String? _accessToken;
   bool _isLoading = false;
   final logger = Logger();
 
   UserModel? get user => _user;
+  String? get accessToken => _accessToken;
   bool get isLoading => _isLoading;
+  bool get isLoggedIn => _accessToken != null && _user != null;
 
   UserProvider() {
-    _loadUserFromPrefs(); // Attempt to load user on app startup
+    _loadUserFromPrefs();
   }
 
-  // ✅ NEW LOGIN LOGIC
-  Future<bool> login(String email, String password) async {
+  /// Logs in the user, then fetches and sends the FCM token to the server.
+  Future<void> login(String email, String password) async {
     _isLoading = true;
     notifyListeners();
 
-    final String apiUrl = "http://msa.merkuz.com:3636/users/login";
-    final body = jsonEncode({"email": email, "password": password});
-
-    logger.d("Attempting login with payload: $body");
-
     try {
-      final response = await http.post(
-        Uri.parse(apiUrl),
-        headers: {"Content-Type": "application/json"},
-        body: body,
-      );
+      final data = await ApiService.loginUser(email, password);
+      logger.i("✅ Login successful from API.");
 
-      logger.i("Login Response Status Code: ${response.statusCode}");
-      logger.d("Login Response Body: ${response.body}");
+      // --- ✅ THE FIX IS HERE ---
+      // Parsing the keys exactly as they appear in your screenshot.
+      _user = UserModel.fromJson(data['user']);
+      _accessToken = data['accessToken']; // Corrected to camelCase
 
-      if (response.statusCode == 201) {
-        final data = jsonDecode(response.body);
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString('accessToken', _accessToken!);
+      await prefs.setString('user', userModelToJson(_user!));
+      await prefs.setBool('isLoggedIn', true);
 
-        // ✅ Correctly parse the nested user object
-        _user = UserModel.fromJson(data['user']);
+      logger.i("User '${_user!.username}' and token stored.");
 
-        final accessToken = data['accessToken'];
-
-        // Save data to SharedPreferences
-        final prefs = await SharedPreferences.getInstance();
-        await prefs.setString('accessToken', accessToken);
-        // Save the entire user object as a JSON string
-        await prefs.setString('user', userModelToJson(_user!));
-
-        logger.i("✅ Login successful. User '${_user!.username}' data stored.");
-
-        _isLoading = false;
-        notifyListeners();
-        return true;
-      } else {
-        logger.e("Login failed. Server returned error.");
-        _isLoading = false;
-        notifyListeners();
-        return false;
-      }
+      await _sendFcmTokenToServer();
     } catch (e, stackTrace) {
       logger.e("An exception occurred during login",
           error: e, stackTrace: stackTrace);
+      throw e; // Re-throw the exception for the UI to handle
+    } finally {
       _isLoading = false;
       notifyListeners();
-      return false;
     }
   }
 
-  // ✅ LOGIC TO PERSIST USER SESSION
+  /// This private helper function gets the token and calls the ApiService.
+  Future<void> _sendFcmTokenToServer() async {
+    if (_accessToken == null) {
+      logger.w("Cannot send FCM token, user is not logged in.");
+      return;
+    }
+
+    try {
+      String? fcmToken = await FirebaseMessaging.instance.getToken();
+      if (fcmToken != null) {
+        logger.i("📲 Retrieved FCM Token. Sending to server...");
+        await ApiService.updateFcmToken(fcmToken, _accessToken!);
+      } else {
+        logger.w("Could not retrieve FCM token from Firebase.");
+      }
+    } catch (e) {
+      logger.e("🔥 Error sending FCM token to server: $e");
+    }
+  }
+
+  /// Loads the user session from device storage when the app starts.
   Future<void> _loadUserFromPrefs() async {
     final prefs = await SharedPreferences.getInstance();
     final userJsonString = prefs.getString('user');
@@ -81,6 +84,7 @@ class UserProvider extends ChangeNotifier {
 
     if (token != null && userJsonString != null) {
       _user = UserModel.fromJson(userModelAsMap(userJsonString));
+      _accessToken = token;
       logger.i("Loaded user '${_user!.username}' from storage.");
       notifyListeners();
     } else {
@@ -88,23 +92,16 @@ class UserProvider extends ChangeNotifier {
     }
   }
 
- // Inside your UserProvider class
-
+  /// Logs the user out and clears all session data.
   Future<void> logout() async {
     _user = null;
+    _accessToken = null;
     final prefs = await SharedPreferences.getInstance();
 
-    //
-    // ▼▼▼▼ THE FIX IS HERE ▼▼▼▼
-    //
-    // You MUST set this flag to false to complete the logout process.
     await prefs.setBool('isLoggedIn', false);
-    //
-    // ▲▲▲▲ END OF FIX ▲▲▲▲
-    //
-
     await prefs.remove('accessToken');
-    await prefs.remove('user'); // Assuming you save user object here
+    await prefs.remove('user');
+
     logger.i("User logged out and all session data cleared.");
     notifyListeners();
   }

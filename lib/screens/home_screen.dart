@@ -17,6 +17,7 @@ import 'package:webview_flutter_wkwebview/webview_flutter_wkwebview.dart';
 import 'package:youtube_player_flutter/youtube_player_flutter.dart';
 
 import '../core/app_colors.dart';
+import '../models/video_model.dart'; // Import the Video model
 import '../widgets/animated_list_item.dart';
 import '../widgets/app_drawer.dart';
 import '../widgets/drawer_indicator.dart';
@@ -1020,11 +1021,39 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
 
           String? videoId = YoutubePlayer.convertUrlToId(videoUrl);
           if (videoId != null && videoId.isNotEmpty) {
+            // --- START: MODIFICATION ---
+
+            // 1. Convert the dynamic list to a List<Video>
+            final List<Video> videoPlaylist =
+                _trendingVideos!.map<Video>((item) {
+              final url = item['videoUrl'] as String? ?? '';
+              final id = YoutubePlayer.convertUrlToId(url) ?? '';
+              String thumb = item['thumbnail'] ?? '';
+              if (thumb.isNotEmpty && !thumb.startsWith('http')) {
+                thumb = '$_apiBaseUrl$thumb';
+              }
+              return Video(
+                id: id,
+                videoId: id,
+                title: item['title'] ?? 'Untitled',
+                thumbnailUrl: thumb,
+                publishedAt: DateTime.now(),
+              );
+            }).toList();
+
+            // 2. Navigate with all the required parameters
             Navigator.push(
               context,
               MaterialPageRoute(
-                  builder: (_) => VideoPlayerScreen(videoId: videoId)),
+                builder: (_) => VideoPlayerScreen(
+                  videoId: videoId,
+                  initialIndex: index,
+                  videoList: videoPlaylist,
+                  initialVideo: videoPlaylist[index],
+                ),
+              ),
             );
+            // --- END: MODIFICATION ---
           } else {
             ScaffoldMessenger.of(context).showSnackBar(
               const SnackBar(

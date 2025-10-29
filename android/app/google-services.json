@@ -1,13 +1,13 @@
 {
   "project_info": {
-    "project_number": "324315994707",
-    "project_id": "minbertv-push-notifications",
-    "storage_bucket": "minbertv-push-notifications.firebasestorage.app"
+    "project_number": "712226370485",
+    "project_id": "minber-super-app-notifications",
+    "storage_bucket": "minber-super-app-notifications.firebasestorage.app"
   },
   "client": [
     {
       "client_info": {
-        "mobilesdk_app_id": "1:324315994707:android:d4726bb266e7307adc04a6",
+        "mobilesdk_app_id": "1:712226370485:android:c880a6fbf94e22ce291ffc",
         "android_client_info": {
           "package_name": "com.example.minber_super_app_new_fixed"
         }
@@ -15,7 +15,7 @@
       "oauth_client": [],
       "api_key": [
         {
-          "current_key": "AIzaSyAheL9pkX19bpBDVxr9_jbPdlZAHl1P85w"
+          "current_key": "AIzaSyCr9Ula0Eja4nviq6xU8cfpE85V7q49iTM"
         }
       ],
       "services": {

@@ -8,7 +8,7 @@ import 'package:fluttertoast/fluttertoast.dart';
 import 'package:http/http.dart' as http;
 import 'package:logger/logger.dart';
 
-class SignUpPage extends StatefulWidget {
+class SignUpPage extends StatefulWidget { 
   const SignUpPage({super.key});
 
   @override

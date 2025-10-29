@@ -27,8 +27,6 @@ class _LoginPageState extends State<LoginPage> {
   bool _isPasswordObscured = true;
   final Logger _logger = Logger();
 
-  // --- CORE LOGIC (Unchanged) ---
-
   @override
   void initState() {
     super.initState();
@@ -70,6 +68,7 @@ class _LoginPageState extends State<LoginPage> {
     }
   }
 
+  // --- 👇 CORE LOGIC UPDATED HERE 👇 ---
   Future<void> _login() async {
     FocusManager.instance.primaryFocus?.unfocus();
     if (!_formKey.currentState!.validate()) return;
@@ -83,36 +82,37 @@ class _LoginPageState extends State<LoginPage> {
     if (mounted) setState(() => _isLoading = true);
 
     try {
-      final userProvider = Provider.of<UserProvider>(context, listen: false);
-      final bool loginSuccess = await userProvider.login(
+      // 1. Call the provider's login method. It will now throw an error on failure.
+      await Provider.of<UserProvider>(context, listen: false).login(
         _emailController.text.trim(),
         _passwordController.text.trim(),
       );
 
+      // 2. If the code reaches here, the login was successful.
+      //    The UserProvider has already handled saving the session data.
+      await _handleRememberMe();
+      _showToast("Login Successful 🎉", bgColor: Colors.green);
       if (mounted) {
-        if (loginSuccess) {
-          final prefs = await SharedPreferences.getInstance();
-          await prefs.setBool('isLoggedIn', true);
-          await _handleRememberMe();
-          _showToast("Login Successful 🎉", bgColor: Colors.green);
-          Navigator.pushReplacementNamed(context, '/home');
-        } else {
-          _showToast("❌ Invalid email or password.");
-        }
+        // Navigate to the home screen after a successful login.
+        Navigator.pushReplacementNamed(context, '/home');
       }
     } catch (e) {
-      _showToast("An unexpected error occurred.");
+      // 3. If an error was thrown, the catch block is executed.
+      _logger.e("Login failed", error: e);
+      // Show a user-friendly error message from the exception.
+      _showToast("❌ Invalid email or password. Please try again.");
     } finally {
+      // 4. This always runs, ensuring the loading indicator is turned off.
       if (mounted) setState(() => _isLoading = false);
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    // ✅ UI/UX UPDATE: Using theme for all colors and styles
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
     final textTheme = theme.textTheme;
+
 
     return Scaffold(
       body: SafeArea(
@@ -125,9 +125,8 @@ class _LoginPageState extends State<LoginPage> {
                 mainAxisAlignment: MainAxisAlignment.center,
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  // ✅ UI/UX UPDATE: Added App Logo
                   Image.asset(
-                    'assets/images/minber.jpg', // Make sure you have your logo here
+                    'assets/images/minber.jpg',
                     height: 80,
                   ),
                   const SizedBox(height: 24),
@@ -145,8 +144,6 @@ class _LoginPageState extends State<LoginPage> {
                         textTheme.bodyLarge?.copyWith(color: theme.hintColor),
                   ),
                   const SizedBox(height: 40),
-
-                  // ✅ UI/UX UPDATE: Modernized TextFields
                   TextFormField(
                     controller: _emailController,
                     keyboardType: TextInputType.emailAddress,
@@ -183,10 +180,12 @@ class _LoginPageState extends State<LoginPage> {
                       ),
                     ),
                     validator: (value) {
-                      if (value == null || value.isEmpty)
+                      if (value == null || value.isEmpty) {
                         return "Please enter your password";
-                      if (value.length < 6)
+                      }
+                      if (value.length < 6) {
                         return "Password must be at least 6 characters";
+                      }
                       return null;
                     },
                   ),
@@ -209,11 +208,10 @@ class _LoginPageState extends State<LoginPage> {
                             Navigator.pushNamed(context, '/forgot-password'),
                         child: const Text("Forgot Password?"),
                       ),
+
                     ],
                   ),
                   const SizedBox(height: 24),
-
-                  // ✅ UI/UX UPDATE: Animated Login Button
                   SizedBox(
                     height: 50,
                     child: ElevatedButton(

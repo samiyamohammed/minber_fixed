@@ -300,20 +300,16 @@ class ProfilePage extends StatelessWidget {
               ),
               const SizedBox(height: 24),
               _buildSectionHeader(context, "Account"),
-              // _buildProfileTile(
-              //   context,
-              //   icon: Icons.person_outline,
-              //   title: "Edit Profile",
-              //   onTap: () => Navigator.pushNamed(
-              //     context,
-              //     '/coming-soon',
-              //     arguments: 'Edit Profile', // The name of the feature
-              //   ),
-              // ),
-              // _buildProfileTile(context,
-              //     icon: Icons.lock_outline,
-              //     title: "Change Password",
-              //     onTap: () => Navigator.pushNamed(context, '/changePassword')),
+              _buildProfileTile(
+                context,
+                icon: Icons.person_outline,
+                title: "Edit Profile",
+                onTap: () => Navigator.pushNamed(
+                  context,
+                  '/coming-soon',
+                  arguments: 'Edit Profile', // The name of the feature
+                ),
+              ),
               _buildProfileTile(context,
                   icon: Icons.credit_card_outlined,
                   title: "Manage Subscription",
@@ -326,11 +322,7 @@ class ProfilePage extends StatelessWidget {
                   title: "Notification preferences",
                   onTap: () =>
                       Navigator.pushNamed(context, '/notification-settings')),
-              _buildProfileTile(context,
-                  icon: Icons.language_outlined,
-                  title: "Language",
-                  trailing: const Text("English"),
-                  onTap: () {}),
+              
               const SizedBox(height: 16),
               _buildSectionHeader(context, "Support"),
               _buildProfileTile(

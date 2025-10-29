@@ -1,12 +1,8 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     package="com.example.minber_super_app_new_fixed">
 
-   
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
-    
-    
     <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM"/> 
-    
     <uses-permission android:name="android.permission.INTERNET"/>
     <uses-permission android:name="android.permission.WAKE_LOCK"/>
     <uses-permission android:name="android.permission.VIBRATE"/>
@@ -40,6 +36,11 @@
             </intent-filter>
         </activity>
 
+        <!-- ✅ THIS IS THE CORRECT LOCATION FOR THE FIREBASE TAG ✅ -->
+        <meta-data
+            android:name="com.google.firebase.messaging.default_notification_channel_id"
+            android:value="fcm_default_channel" />
+
         <service
             android:name="androidx.work.impl.background.systemjob.SystemJobService"
             android:permission="android.permission.BIND_JOB_SERVICE"
@@ -49,11 +50,9 @@
             android:name="flutterEmbedding"
             android:value="2" />
             
-        <!-- 💡 NEW LINE: Receiver required by flutter_local_notifications for scheduled alarms -->
-        <!-- 💡 REVISED RECEIVERS: Using android:exported="true" for older plugin compatibility with newer Android versions -->
-<receiver android:exported="true" android:name="com.dexterous.flutterlocalnotifications.ScheduledNotificationReceiver" />
-<receiver android:exported="true" android:name="com.dexterous.flutterlocalnotifications.ActionBroadcastReceiver" />
-<receiver android:exported="true" android:name="com.dexterous.flutterlocalnotifications.AlarmBroadcastReceiver" />
+        <receiver android:exported="true" android:name="com.dexterous.flutterlocalnotifications.ScheduledNotificationReceiver" />
+        <receiver android:exported="true" android:name="com.dexterous.flutterlocalnotifications.ActionBroadcastReceiver" />
+        <receiver android:exported="true" android:name="com.dexterous.flutterlocalnotifications.AlarmBroadcastReceiver" />
         
     </application>
 
