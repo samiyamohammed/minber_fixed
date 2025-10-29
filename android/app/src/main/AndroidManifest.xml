@@ -36,10 +36,10 @@
             </intent-filter>
         </activity>
 
-        <!-- ✅ THIS IS THE CORRECT LOCATION FOR THE FIREBASE TAG ✅ -->
+        <!-- ✅ THE FIX IS HERE: THE VALUE IS UPDATED TO MATCH THE NEW HIGH-PRIORITY CHANNEL ✅ -->
         <meta-data
             android:name="com.google.firebase.messaging.default_notification_channel_id"
-            android:value="fcm_default_channel" />
+            android:value="high_importance_channel" />
 
         <service
             android:name="androidx.work.impl.background.systemjob.SystemJobService"
@@ -49,6 +49,10 @@
         <meta-data
             android:name="flutterEmbedding"
             android:value="2" />
+
+         <meta-data
+        android:name="com.google.firebase.messaging.default_notification_icon"
+        android:resource="@drawable/notification_icon" />    
             
         <receiver android:exported="true" android:name="com.dexterous.flutterlocalnotifications.ScheduledNotificationReceiver" />
         <receiver android:exported="true" android:name="com.dexterous.flutterlocalnotifications.ActionBroadcastReceiver" />

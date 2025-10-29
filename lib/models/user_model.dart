@@ -1,4 +1,4 @@
-// lib/models/user_model.dart
+// lib/models/user_model.dart (Fully Updated & Ready to Paste)
 
 import 'dart:convert';
 
@@ -42,5 +42,24 @@ class UserModel {
       'isEmailVerified': isEmailVerified,
       'createdAt': createdAt.toIso8601String(),
     };
+  }
+
+  // ✅ --- NEW METHOD ADDED HERE --- ✅
+  /// Creates a new UserModel instance with updated fields.
+  /// This is essential for updating the state in UserProvider immutably.
+  UserModel copyWith({
+    String? id,
+    String? username,
+    String? email,
+    bool? isEmailVerified,
+    DateTime? createdAt,
+  }) {
+    return UserModel(
+      id: id ?? this.id,
+      username: username ?? this.username,
+      email: email ?? this.email,
+      isEmailVerified: isEmailVerified ?? this.isEmailVerified,
+      createdAt: createdAt ?? this.createdAt,
+    );
   }
 }
