@@ -336,7 +336,7 @@
 //     );
 //   }
 // }
-// lib/main.dart (Final Version with Custom Animated Banner)
+// lib/main.dart (FINAL VERSION)
 
 import 'dart:async';
 import 'package:flutter/material.dart';
@@ -347,6 +347,8 @@ import 'package:minber_super_app_new_fixed/screens/help_and_support_page.dart';
 import 'package:minber_super_app_new_fixed/screens/media/media_hub_screen.dart';
 import 'package:minber_super_app_new_fixed/screens/news_see_all_page.dart';
 import 'package:minber_super_app_new_fixed/screens/notification_settings_page.dart';
+import 'package:minber_super_app_new_fixed/screens/update_profile_page.dart';
+import 'package:minber_super_app_new_fixed/widgets/api_client.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
@@ -356,11 +358,12 @@ import 'package:provider/provider.dart';
 // --- SERVICE IMPORTS ---
 import 'services/notification_service.dart'; // For LOCAL prayer notifications
 import 'services/firebase-notification.dart'; // For FIREBASE push notifications
-import 'widgets/in_app_notification_banner.dart'; // ✅ THE NEW BANNER WIDGET
+import 'widgets/in_app_notification_banner.dart'; // THE NEW BANNER WIDGET
 
 // --- PROVIDER & CORE IMPORTS ---
 import 'providers/user_provider.dart';
 import 'providers/prayer_provider.dart';
+import 'providers/notification_provider.dart'; // Import the provider
 import 'core/app_colors.dart';
 import 'core/theme_notifier.dart';
 
@@ -388,6 +391,8 @@ import 'screens/reset_password_screen.dart';
 import 'services/api_service.dart';
 import 'firebase_options.dart';
 
+final RouteObserver<ModalRoute<void>> routeObserver =
+    RouteObserver<ModalRoute<void>>();
 
 // --- BACKGROUND TASK DEFINITION (UNCHANGED) ---
 @pragma('vm:entry-point')
@@ -469,7 +474,7 @@ Future<void> main() async {
   runApp(MyApp(initialRoute: initialRoute));
 }
 
-// --- FIREBASE PUSH NOTIFICATION SETUP (UPDATED) ---
+// --- FIREBASE PUSH NOTIFICATION SETUP (UPDATED & CORRECTED) ---
 Future<void> setupFirebasePushNotifications() async {
   try {
     FirebaseMessaging messaging = FirebaseMessaging.instance;
@@ -501,7 +506,7 @@ Future<void> setupFirebasePushNotifications() async {
       debugPrint("❌ Error in onTokenRefresh listener: $err");
     });
 
-    // --- ✅ FINAL UPDATE: CALLS THE NEW OVERLAY NOTIFICATION MANAGER ---
+    // --- ✅ FIX 1: The provider refresh logic is now correctly INSIDE the listener ---
     FirebaseMessaging.onMessage.listen((RemoteMessage message) {
       debugPrint(
           "💬 Firebase foreground message received: ${message.notification?.title}");
@@ -512,20 +517,29 @@ Future<void> setupFirebasePushNotifications() async {
 
       // Show the new, custom, animated banner from the top
       showOverlayNotification(title: title, body: body);
+
+      // Trigger a live refresh for the badge count
+      final context = NotificationService.navigatorKey.currentContext;
+      if (context != null) {
+        final provider =
+            Provider.of<NotificationProvider>(context, listen: false);
+        provider.fetchNotifications();
+        debugPrint("🔄 Triggered live refresh of notifications provider.");
+      }
     });
 
     FirebaseMessaging.onMessageOpenedApp.listen((RemoteMessage message) {
       debugPrint(
           '🚀 App opened from Firebase notification: ${message.notification?.title}');
-      NotificationService.navigatorKey.currentState?.pushNamed('/notifications');
+      NotificationService.navigatorKey.currentState
+          ?.pushNamed('/notifications');
     });
   } catch (e) {
     debugPrint("❌ ERROR setting up Firebase Push Notifications: $e");
   }
 }
 
-// --- MAIN APP WIDGET (UNCHANGED) ---
-// This uses your existing NotificationService.navigatorKey which is correct.
+// --- MAIN APP WIDGET (UPDATED & CORRECTED) ---
 class MyApp extends StatelessWidget {
   final String initialRoute;
   const MyApp({super.key, required this.initialRoute});
@@ -536,12 +550,22 @@ class MyApp extends StatelessWidget {
       providers: [
         ChangeNotifierProvider(create: (context) => UserProvider()),
         ChangeNotifierProvider(create: (context) => PrayerProvider()),
+        // ✅ FIX 2: Correctly initialize the NotificationProvider.
+        // It now loads its own saved data when created.
+        ChangeNotifierProvider(
+          create: (context) => NotificationProvider()..init(),
+        ),
+        ProxyProvider<UserProvider, ApiClient>(
+          update: (context, userProvider, previousApiClient) =>
+              ApiClient(userProvider),
+        ),
       ],
       child: ValueListenableBuilder<ThemeMode>(
         valueListenable: themeNotifier,
         builder: (_, ThemeMode currentMode, __) {
           return MaterialApp(
             navigatorKey: NotificationService.navigatorKey,
+            navigatorObservers: [routeObserver],
             debugShowCheckedModeBanner: false,
             title: 'Minber TV',
             theme: ThemeData(
@@ -636,6 +660,7 @@ class MyApp extends StatelessWidget {
               '/about-us': (_) => const AboutUsPage(),
               '/help-and-support': (_) => const HelpAndSupportPage(),
               '/coming-soon': (_) => const ComingSoonPage(),
+              '/update-profile': (_) => const UpdateProfilePage(),
             },
           );
         },

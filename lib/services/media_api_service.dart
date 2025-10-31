@@ -71,7 +71,14 @@ class MediaApiService {
   Future<List<Playlist>> getPlaylists(
       {required String channelId, bool fromCache = false}) async {
     final cacheKey = 'cached_playlists_$channelId';
-    if (fromCache) return await _getFromCache(cacheKey, Playlist.fromJson);
+    List<Playlist> allPlaylists;
+
+    if (fromCache) {
+      final cachedPlaylists = await _getFromCache(cacheKey, Playlist.fromJson);
+      if (cachedPlaylists.isNotEmpty) {
+        allPlaylists = cachedPlaylists;
+      }
+    }
 
     try {
       final response = await _client
@@ -79,10 +86,8 @@ class MediaApiService {
       if (response.statusCode == 200) {
         final data = json.decode(utf8.decode(response.bodyBytes));
         await _saveToCache(cacheKey, data);
-        List<Playlist> playlists =
+        allPlaylists =
             (data as List).map((json) => Playlist.fromJson(json)).toList();
-        playlists.sort((a, b) => b.publishedAt.compareTo(a.publishedAt));
-        return playlists;
       } else {
         throw Exception('Failed to load playlists for channel: $channelId');
       }
@@ -92,6 +97,23 @@ class MediaApiService {
       print("getPlaylists error: $e");
       throw Exception('Failed to load playlists');
     }
+
+    // Filter playlists to only include those with at least one public video
+    final List<Playlist> publicPlaylists = [];
+    final checks = allPlaylists.map((playlist) async {
+      final videos = await getVideosForPlaylist(playlistId: playlist.id);
+      return {'playlist': playlist, 'hasPublicVideos': videos.isNotEmpty};
+    }).toList();
+
+    final results = await Future.wait(checks);
+    for (var result in results) {
+      if (result['hasPublicVideos'] as bool) {
+        publicPlaylists.add(result['playlist'] as Playlist);
+      }
+    }
+
+    publicPlaylists.sort((a, b) => b.publishedAt.compareTo(a.publishedAt));
+    return publicPlaylists;
   }
 
   Future<List<Video>> getVideosForPlaylist({required String playlistId}) async {
@@ -100,7 +122,11 @@ class MediaApiService {
           await _client.get(Uri.parse("$baseUrl/playlists/$playlistId/videos"));
       if (response.statusCode == 200) {
         final data = json.decode(utf8.decode(response.bodyBytes));
-        return (data as List).map((json) => Video.fromJson(json)).toList();
+        // Filter out private videos
+        return (data as List)
+            .map((json) => Video.fromJson(json))
+            .where((video) => video.privacyStatus != 'private')
+            .toList();
       } else {
         throw Exception('Failed to load videos for playlist: $playlistId');
       }
@@ -120,6 +146,7 @@ class MediaApiService {
       if (cachedVideos.isNotEmpty) return _filterAndSortVideos(cachedVideos);
     }
 
+    // This now gets playlists that are already pre-filtered to ensure they have public videos
     final playlists = await getPlaylists(channelId: channelId);
     if (playlists.isEmpty) return [];
 
@@ -128,6 +155,7 @@ class MediaApiService {
     final nestedVideos = await Future.wait(videoFutures);
     final allVideos = nestedVideos.expand((list) => list).toList();
 
+    // Include privacyStatus in the cached data
     final encodableData = allVideos
         .map((v) => {
               'id': v.id,
@@ -135,6 +163,7 @@ class MediaApiService {
               'title': v.title,
               'thumbnailUrl': v.thumbnailUrl,
               'publishedAt': v.publishedAt.toIso8601String(),
+              'privacyStatus': v.privacyStatus,
             })
         .toList();
 
@@ -144,7 +173,9 @@ class MediaApiService {
 
   List<Video> _filterAndSortVideos(List<Video> videos) {
     List<Video> filteredList = videos
-        .where((video) => !_videoBlocklist.contains(video.videoId))
+        .where((video) =>
+            !_videoBlocklist.contains(video.videoId) &&
+            video.privacyStatus != 'private')
         .toList();
     filteredList.sort((a, b) => b.publishedAt.compareTo(a.publishedAt));
     return filteredList;

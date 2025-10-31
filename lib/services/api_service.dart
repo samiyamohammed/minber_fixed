@@ -53,4 +53,33 @@ try {
   debugPrint('❌ Network error while updating FCM token: $e');
 }
 }
+// lib/services/api_service.dart (Add this below the other methods)
+
+  static Future<Map<String, dynamic>> updateUserProfile(
+      String name, String email, String accessToken) async {
+    final url = Uri.parse('$_baseUrl/users/profile');
+    final body = jsonEncode({
+      'name': name,
+      'email': email,
+    });
+
+    final response = await http.put(
+      url,
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer $accessToken',
+      },
+      body: body,
+    );
+
+    if (response.statusCode == 200) {
+      debugPrint('✅ Profile updated successfully: ${response.body}');
+      return jsonDecode(response.body);
+    } else {
+      debugPrint('❌ Failed to update profile: ${response.body}');
+      throw Exception(
+          'Failed to update profile. Status: ${response.statusCode}, Body: ${response.body}');
+    }
+  }
+
 }

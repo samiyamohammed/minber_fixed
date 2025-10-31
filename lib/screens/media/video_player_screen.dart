@@ -67,6 +67,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
           thumbnailUrl:
               YoutubePlayer.getThumbnail(videoId: _controller.metadata.videoId),
           publishedAt: DateTime.now(),
+          privacyStatus: '',
         );
       });
     }

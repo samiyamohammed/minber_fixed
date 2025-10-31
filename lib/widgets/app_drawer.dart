@@ -3,6 +3,7 @@
 import 'package:flutter/material.dart';
 import 'package:logger/logger.dart';
 import 'package:provider/provider.dart';
+import 'package:minber_super_app_new_fixed/providers/notification_provider.dart'; // ✅ 1. IMPORT NOTIFICATION PROVIDER
 
 import '../core/theme_notifier.dart';
 import '../core/app_colors.dart';
@@ -11,7 +12,7 @@ import '../providers/user_provider.dart';
 class AppDrawer extends StatelessWidget {
   const AppDrawer({super.key});
 
-  // A simple hashing function to assign a consistent, pleasant color to a user based on their name.
+  // ... (keep your _getUserColor method as is)
   Color _getUserColor(String username) {
     final List<Color> userColors = [
       Colors.red.shade400,
@@ -28,15 +29,14 @@ class AppDrawer extends StatelessWidget {
   Widget build(BuildContext context) {
     final userProvider = Provider.of<UserProvider>(context);
     final isLoggedIn = userProvider.user != null;
-    // Get the current route name to highlight the active item
     final String? currentRoute = ModalRoute.of(context)?.settings.name;
 
     return Drawer(
-      // Use the theme's background color for the drawer itself
       backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       child: ListView(
         padding: EdgeInsets.zero,
         children: [
+          // ... (Your Consumer<UserProvider> header remains the same)
           Consumer<UserProvider>(
             builder: (context, provider, child) {
               final logger = Logger();
@@ -52,14 +52,12 @@ class AppDrawer extends StatelessWidget {
               }
             },
           ),
-          // --- DRAWER ITEMS ---
           _buildDrawerItem(
             context: context,
             icon: Icons.home_outlined,
             text: 'Home',
             onTap: () {
-              Navigator.pop(context); // Close drawer
-              // If not already on home, navigate home. This prevents pushing multiple home screens.
+              Navigator.pop(context);
               if (currentRoute != '/home') {
                 Navigator.pushNamedAndRemoveUntil(
                     context, '/home', (route) => false);
@@ -82,21 +80,51 @@ class AppDrawer extends StatelessWidget {
               routeName: '/profile',
               currentRoute: currentRoute,
             ),
-          _buildDrawerItem(
-            context: context,
-            icon: Icons.notifications_outlined,
-            text: 'Notifications',
-            onTap: () {
-              Navigator.pop(context);
-              if (currentRoute != '/notifications') {
-                Navigator.pushNamed(context, "/notifications");
-              }
+
+          // ✅ 2. REPLACE THE NOTIFICATIONS DRAWER ITEM WITH A CONSUMER
+          Consumer<NotificationProvider>(
+            builder: (context, provider, child) {
+              final bool isSelected = currentRoute == '/notifications';
+              return ListTile(
+                leading: Badge(
+                  // Show the unread count from the provider
+                  label: Text(provider.unreadCount.toString()),
+                  // Only show the badge if there are unread notifications
+                  isLabelVisible: provider.unreadCount > 0,
+                  child: Icon(
+                    Icons.notifications_outlined,
+                    color: isSelected
+                        ? Theme.of(context).colorScheme.primary
+                        : null,
+                  ),
+                ),
+                title: Text(
+                  'Notifications',
+                  style: TextStyle(
+                    fontWeight:
+                        isSelected ? FontWeight.bold : FontWeight.normal,
+                    color: isSelected
+                        ? Theme.of(context).colorScheme.primary
+                        : null,
+                  ),
+                ),
+                onTap: () {
+                  Navigator.pop(context);
+                  if (currentRoute != '/notifications') {
+                    Navigator.pushNamed(context, "/notifications");
+                  }
+                },
+                selected: isSelected,
+                selectedTileColor:
+                    Theme.of(context).colorScheme.primary.withOpacity(0.1),
+                shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(8)),
+                contentPadding: const EdgeInsets.symmetric(horizontal: 24.0),
+              );
             },
-            routeName: '/notifications',
-            currentRoute: currentRoute,
           ),
           const Divider(indent: 16, endIndent: 16),
-          // --- THEME SWITCH ---
+          // ... (The rest of your drawer items: Theme Switch, Logout, etc. remain the same)
           ValueListenableBuilder<ThemeMode>(
             valueListenable: themeNotifier,
             builder: (context, currentMode, child) {
@@ -119,7 +147,6 @@ class AppDrawer extends StatelessWidget {
             },
           ),
           const Divider(indent: 16, endIndent: 16),
-          // --- LOGOUT BUTTON ---
           if (isLoggedIn)
             _buildDrawerItem(
               context: context,
@@ -131,7 +158,7 @@ class AppDrawer extends StatelessWidget {
       ),
     );
   }
-
+  // ... (All your helper methods: _buildLoggedInHeader, _buildLoggedOutHeader, etc. remain exactly the same)
   // --- WIDGET BUILDER METHODS ---
 
   Widget _buildLoggedInHeader(BuildContext context, UserProvider provider) {

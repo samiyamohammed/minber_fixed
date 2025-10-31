@@ -74,11 +74,7 @@ class ProfilePage extends StatelessWidget {
                 context,
                 icon: Icons.person_outline,
                 title: "Edit Profile",
-                onTap: () => Navigator.pushNamed(
-                  context,
-                  '/coming-soon',
-                  arguments: 'Edit Profile', // The name of the feature
-                ),
+                onTap: () => Navigator.pushNamed(context, '/update-profile'),
               ),
               _buildProfileTile(context,
                   icon: Icons.credit_card_outlined,

@@ -1,10 +1,11 @@
+// lib/screens/notification_screen.dart (FIXED)
+
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
-import 'package:logger/logger.dart';
+import 'package:provider/provider.dart';
 import 'package:shimmer/shimmer.dart';
 
-// Assuming NotificationsApi is in this path
-import '../api/notifications_api.dart';
+import '../providers/notification_provider.dart';
 
 class NotificationsPage extends StatefulWidget {
   const NotificationsPage({super.key});
@@ -14,21 +15,17 @@ class NotificationsPage extends StatefulWidget {
 }
 
 class _NotificationsPageState extends State<NotificationsPage> {
-  late Future<List<dynamic>> _notificationsFuture;
-  final logger = Logger();
-  // ✅ UI/UX UPDATE: To track "read" status for UI changes
-  final Set<String> _readNotifications = {};
-
   @override
   void initState() {
     super.initState();
-    _loadNotifications();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _refreshNotifications();
+    });
   }
 
-  void _loadNotifications() {
-    setState(() {
-      _notificationsFuture = NotificationsApi.fetchNotifications();
-    });
+  Future<void> _refreshNotifications() async {
+    await Provider.of<NotificationProvider>(context, listen: false)
+        .fetchNotifications();
   }
 
   String _formatTimestamp(String? dateString) {
@@ -56,7 +53,7 @@ class _NotificationsPageState extends State<NotificationsPage> {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
+    final notificationProvider = context.watch<NotificationProvider>();
 
     return Scaffold(
       appBar: AppBar(
@@ -65,77 +62,57 @@ class _NotificationsPageState extends State<NotificationsPage> {
           IconButton(
             icon: const Icon(Icons.done_all_rounded),
             onPressed: () {
-              // UI-only action to mark all as read
-              setState(() {
-                _notificationsFuture.then((notifications) {
-                  for (var n in notifications) {
-                    _readNotifications.add(n['_id']);
-                  }
-                });
-              });
+              notificationProvider.markAllAsRead();
             },
             tooltip: 'Mark all as read',
           ),
         ],
       ),
       body: RefreshIndicator(
-        onRefresh: () async => _loadNotifications(),
-        child: FutureBuilder<List<dynamic>>(
-          future: _notificationsFuture,
-          builder: (context, snapshot) {
-            if (snapshot.connectionState == ConnectionState.waiting) {
-              // ✅ UI/UX UPDATE: Shimmer loading animation
-              return const _NotificationListShimmer();
-            }
-            if (snapshot.hasError) {
-              // ✅ UI/UX UPDATE: Cleaner error state
-              return _EmptyState(
-                icon: Icons.error_outline_rounded,
-                message: 'Failed to Load',
-                description: 'Please check your connection and try again.',
-                onRetry: _loadNotifications,
-              );
-            }
-            if (!snapshot.hasData || snapshot.data!.isEmpty) {
-              // ✅ UI/UX UPDATE: Cleaner empty state
-              return const _EmptyState(
-                icon: Icons.notifications_off_outlined,
-                message: 'No New Notifications',
-                description: "You're all caught up!",
-              );
-            }
-
-            final notifications = snapshot.data!;
-            return ListView.builder(
-              padding: const EdgeInsets.symmetric(vertical: 8.0),
-              itemCount: notifications.length,
-              itemBuilder: (context, index) {
-                final n = notifications[index];
-                // Use a unique ID for tracking read status, fallback to index
-                final notificationId = n['_id']?.toString() ?? index.toString();
-                final isRead = _readNotifications.contains(notificationId);
-
-                return _NotificationItem(
-                  key: ValueKey(notificationId),
-                  title: n['title'] ?? 'Untitled Notification',
-                  body: n['body'] ?? 'No message content.',
-                  timestamp: _formatTimestamp(n['createdAt']),
-                  isRead: isRead,
-                  onTap: () {
-                    // Mark as read on tap
-                    setState(() => _readNotifications.add(notificationId));
-                  },
-                );
-              },
-            );
-          },
-        ),
+        onRefresh: _refreshNotifications,
+        child: _buildBody(notificationProvider),
       ),
+    );
+  }
+
+  Widget _buildBody(NotificationProvider provider) {
+    if (provider.isLoading && provider.notifications.isEmpty) {
+      return const _NotificationListShimmer();
+    }
+    if (!provider.isLoading && provider.notifications.isEmpty) {
+      return const _EmptyState(
+        icon: Icons.notifications_off_outlined,
+        message: 'No New Notifications',
+        description: "You're all caught up!",
+      );
+    }
+
+    final notifications = provider.notifications;
+    return ListView.builder(
+      padding: const EdgeInsets.symmetric(vertical: 8.0),
+      itemCount: notifications.length,
+      itemBuilder: (context, index) {
+        final n = notifications[index];
+        // ✅ FIXED: Changed '_id' to 'id' to match your API response.
+        final notificationId = n['id']?.toString() ?? index.toString();
+        final isRead = provider.isRead(notificationId);
+
+        return _NotificationItem(
+          key: ValueKey(notificationId),
+          title: n['title'] ?? 'Untitled Notification',
+          body: n['body'] ?? 'No message content.',
+          timestamp: _formatTimestamp(n['createdAt']),
+          isRead: isRead,
+          onTap: () {
+            provider.markAsRead(notificationId);
+          },
+        );
+      },
     );
   }
 }
 
-// --- WIDGETS ---
+// --- WIDGETS (Paste your existing _NotificationItem, _NotificationListShimmer, and _EmptyState widgets here) ---
 
 class _NotificationItem extends StatelessWidget {
   final String title;
@@ -153,10 +130,11 @@ class _NotificationItem extends StatelessWidget {
     required this.onTap,
   });
 
-  // ✅ UI/UX UPDATE: Helper to determine icon based on title content
   IconData _getIconForNotification(String title) {
     title = title.toLowerCase();
-    if (title.contains('live') || title.contains('show') || title.contains('video')) {
+    if (title.contains('live') ||
+        title.contains('show') ||
+        title.contains('video')) {
       return Icons.play_circle_outline_rounded;
     }
     if (title.contains('prayer') || title.contains('adhan')) {
@@ -174,10 +152,10 @@ class _NotificationItem extends StatelessWidget {
     final colorScheme = theme.colorScheme;
     final icon = _getIconForNotification(title);
 
-    // ✅ UI/UX UPDATE: Animated transition for read/unread state
     return AnimatedContainer(
       duration: const Duration(milliseconds: 300),
-      color: isRead ? Colors.transparent : colorScheme.primary.withOpacity(0.05),
+      color:
+          isRead ? Colors.transparent : colorScheme.primary.withOpacity(0.05),
       child: InkWell(
         onTap: onTap,
         child: Padding(
@@ -198,7 +176,8 @@ class _NotificationItem extends StatelessWidget {
                     Text(
                       title,
                       style: theme.textTheme.titleMedium?.copyWith(
-                        fontWeight: isRead ? FontWeight.normal : FontWeight.bold,
+                        fontWeight:
+                            isRead ? FontWeight.normal : FontWeight.bold,
                       ),
                     ),
                     const SizedBox(height: 4),
@@ -212,7 +191,8 @@ class _NotificationItem extends StatelessWidget {
                     if (timestamp.isNotEmpty)
                       Text(
                         timestamp,
-                        style: theme.textTheme.bodySmall?.copyWith(color: theme.hintColor),
+                        style: theme.textTheme.bodySmall
+                            ?.copyWith(color: theme.hintColor),
                       ),
                   ],
                 ),
@@ -248,9 +228,15 @@ class _NotificationListShimmer extends StatelessWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Container(width: double.infinity, height: 16, color: Colors.white),
+                    Container(
+                        width: double.infinity,
+                        height: 16,
+                        color: Colors.white),
                     const SizedBox(height: 8),
-                    Container(width: double.infinity, height: 14, color: Colors.white),
+                    Container(
+                        width: double.infinity,
+                        height: 14,
+                        color: Colors.white),
                     const SizedBox(height: 8),
                     Container(width: 100, height: 12, color: Colors.white),
                   ],
@@ -288,9 +274,14 @@ class _EmptyState extends StatelessWidget {
           children: [
             Icon(icon, size: 80, color: theme.hintColor.withOpacity(0.5)),
             const SizedBox(height: 16),
-            Text(message, style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold)),
+            Text(message,
+                style: theme.textTheme.titleLarge
+                    ?.copyWith(fontWeight: FontWeight.bold)),
             const SizedBox(height: 8),
-            Text(description, textAlign: TextAlign.center, style: theme.textTheme.bodyMedium?.copyWith(color: theme.hintColor)),
+            Text(description,
+                textAlign: TextAlign.center,
+                style: theme.textTheme.bodyMedium
+                    ?.copyWith(color: theme.hintColor)),
             if (onRetry != null) ...[
               const SizedBox(height: 24),
               ElevatedButton.icon(

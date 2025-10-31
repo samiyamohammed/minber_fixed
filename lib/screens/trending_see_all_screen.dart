@@ -87,7 +87,7 @@ class _TrendingSeeAllScreenState extends State<TrendingSeeAllScreen> {
                 videoId: id,
                 title: item['title'] ?? 'Untitled',
                 thumbnailUrl: thumb,
-                publishedAt: DateTime.now(), // No date provided, so use now
+                publishedAt: DateTime.now(), privacyStatus: '', // No date provided, so use now
               );
             }).toList();
 
