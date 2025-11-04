@@ -112,9 +112,14 @@ class _MediaHubScreenState extends State<MediaHubScreen> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     return Scaffold(
+      // REPLACE IT WITH THIS:
+
       appBar: AppBar(
         title: const Text('Media Hub'),
         centerTitle: true,
+        backgroundColor:
+            Colors.transparent, // Makes the app bar background see-through
+        elevation: 0, // Removes the shadow line
       ),
       body: RefreshIndicator(
         onRefresh: _loadData,

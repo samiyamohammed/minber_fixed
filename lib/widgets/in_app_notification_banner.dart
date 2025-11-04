@@ -1,8 +1,8 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
-import 'package:minber_super_app_new_fixed/core/app_colors.dart';
-import 'package:minber_super_app_new_fixed/core/theme_notifier.dart';
-import 'package:minber_super_app_new_fixed/services/notification_service.dart';
+import 'package:minber/core/app_colors.dart';
+import 'package:minber/core/theme_notifier.dart';
+import 'package:minber/services/notification_service.dart';
 
 /// Function to show the in-app notification banner
 void showOverlayNotification({

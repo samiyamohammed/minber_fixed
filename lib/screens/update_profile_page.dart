@@ -1,6 +1,6 @@
 // lib/screens/update_profile_page.dart
 import 'package:flutter/material.dart';
-import 'package:minber_super_app_new_fixed/widgets/api_client.dart';
+import 'package:minber/widgets/api_client.dart';
 import 'package:provider/provider.dart';
 import '../providers/user_provider.dart';
 import 'package:logger/logger.dart';

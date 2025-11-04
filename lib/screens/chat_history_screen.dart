@@ -1,3 +1,5 @@
+// lib/screens/chat_history_screen.dart (Fully Updated & Ready to Paste)
+
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter_markdown/flutter_markdown.dart';
@@ -26,16 +28,56 @@ class _ChatHistoryScreenState extends State<ChatHistoryScreen> {
     _history = List.from(widget.initialHistory); // Create a mutable copy
   }
 
+  // This function is already perfect. It handles all the logic correctly.
   Future<void> _clearChatHistory() async {
     final SharedPreferences prefs = await SharedPreferences.getInstance();
     await prefs.remove('chat_history'); // Remove the key from preferences
     setState(() {
-      _history.clear(); // Clear local history list
+      _history.clear(); // Clear local history list to show the "empty" state
     });
     widget.onHistoryCleared(); // Notify the main chat page to clear its history
+
+    // Check if the widget is still in the tree before navigating or showing a snackbar
+    if (!mounted) return;
+
     Navigator.of(context).pop(); // Go back to the chat page
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(content: Text('Chat history cleared!')),
+    );
+  }
+
+  // ✅ Helper function to show the confirmation dialog
+  void _showClearConfirmationDialog() {
+    showDialog<void>(
+      context: context,
+      builder: (BuildContext dialogContext) {
+        return AlertDialog(
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          title: const Text('Clear History?'),
+          content: const Text(
+              'Are you sure you want to delete all chat history? This action cannot be undone.'),
+          actions: <Widget>[
+            TextButton(
+              child: const Text('Cancel'),
+              onPressed: () {
+                Navigator.of(dialogContext).pop(); // Dismiss the dialog
+              },
+            ),
+            // Use a filled button for the destructive action to make it stand out
+            FilledButton(
+              style: FilledButton.styleFrom(
+                backgroundColor: Colors.red,
+              ),
+              child: const Text('Clear'),
+              onPressed: () {
+                Navigator.of(dialogContext).pop(); // Dismiss the dialog
+                _clearChatHistory(); // Proceed with clearing history
+              },
+            ),
+          ],
+        );
+      },
     );
   }
 
@@ -46,7 +88,6 @@ class _ChatHistoryScreenState extends State<ChatHistoryScreen> {
     final theme = Theme.of(context);
     final isDark = _isDarkMode;
 
-    // Define common text style for bot messages
     final botTextStyle = theme.textTheme.bodyMedium?.copyWith(
       color: isDark ? Colors.white : Colors.black87,
       fontSize: 15,
@@ -57,38 +98,18 @@ class _ChatHistoryScreenState extends State<ChatHistoryScreen> {
       appBar: AppBar(
         title: const Text("Chat History"),
         centerTitle: true,
+        backgroundColor:
+            Colors.transparent, // Makes the app bar background see-through
+        elevation: 0,
+        // ✅ ADDED a clear history button to the AppBar actions
         actions: [
-          IconButton(
-            icon: const Icon(Icons.delete_forever),
-            tooltip: "Clear History",
-            onPressed: () => showDialog<void>(
-              context: context,
-              builder: (BuildContext dialogContext) {
-                return AlertDialog(
-                  title: const Text('Clear History?'),
-                  content: const Text(
-                      'Are you sure you want to delete all chat history? This cannot be undone.'),
-                  actions: <Widget>[
-                    TextButton(
-                      child: const Text('Cancel'),
-                      onPressed: () {
-                        Navigator.of(dialogContext)
-                            .pop(); // Dismiss alert dialog
-                      },
-                    ),
-                    TextButton(
-                      child: const Text('Clear'),
-                      onPressed: () {
-                        Navigator.of(dialogContext)
-                            .pop(); // Dismiss alert dialog
-                        _clearChatHistory(); // Clear history
-                      },
-                    ),
-                  ],
-                );
-              },
+          if (_history.isNotEmpty) // Only show the button if there is history
+            IconButton(
+              icon: const Icon(Icons.delete_forever_outlined),
+              tooltip: "Clear History",
+              onPressed:
+                  _showClearConfirmationDialog, // Call the confirmation dialog
             ),
-          ),
         ],
       ),
       body: _history.isEmpty

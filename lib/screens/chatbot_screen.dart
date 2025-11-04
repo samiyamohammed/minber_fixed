@@ -2,7 +2,7 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:flutter_markdown/flutter_markdown.dart';
-import 'package:minber_super_app_new_fixed/screens/chat_history_screen.dart';
+import 'package:minber/screens/chat_history_screen.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 class ChatBotPage extends StatefulWidget {
@@ -285,6 +285,9 @@ class _ChatBotPageState extends State<ChatBotPage> {
       appBar: AppBar(
         title: const Text("Ask Islam Chatbot"),
         centerTitle: true,
+        backgroundColor:
+            Colors.transparent, // Makes the app bar background see-through
+        elevation: 0,
         actions: [
           IconButton(
             icon: const Icon(Icons.history),

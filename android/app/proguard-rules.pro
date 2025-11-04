@@ -1,15 +1,19 @@
-# Keep Flutter Local Notifications
+# android/app/proguard-rules.pro
+
+# Flutter specific rules
+-keep class io.flutter.app.** { *; }
+-keep class io.flutter.plugin.**  { *; }
+-keep class io.flutter.util.**  { *; }
+-keep class io.flutter.view.**  { *; }
+-keep class io.flutter.**  { *; }
+-keep class io.flutter.plugins.**  { *; }
+
+# Rules for flutter_local_notifications
 -keep class com.dexterous.flutterlocalnotifications.** { *; }
--keep class io.flutter.plugins.flutterlocalnotifications.** { *; }
 
-# Keep Timezone classes
--keep class net.time4j.** { *; }
--keep class org.joda.time.** { *; }
+# Rules for WorkManager
+-keep class androidx.work.** { *; }
 
-# Keep Geolocator & Permission Handler
--keep class com.baseflow.geolocator.** { *; }
--keep class com.baseflow.permissionhandler.** { *; }
-
-# Keep notification channels
--keep class * extends android.app.Service
--keep class * extends android.content.BroadcastReceiver
+# Rules for Firebase
+-keep class com.google.firebase.** { *; }
+-keep class com.google.android.gms.** { *; }

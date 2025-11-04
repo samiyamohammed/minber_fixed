@@ -3,7 +3,7 @@
 import 'package:flutter/material.dart';
 import 'package:logger/logger.dart';
 import 'package:provider/provider.dart';
-import 'package:minber_super_app_new_fixed/providers/notification_provider.dart'; // ✅ 1. IMPORT NOTIFICATION PROVIDER
+import 'package:minber/providers/notification_provider.dart'; // ✅ 1. IMPORT NOTIFICATION PROVIDER
 
 import '../core/theme_notifier.dart';
 import '../core/app_colors.dart';
@@ -128,17 +128,28 @@ class AppDrawer extends StatelessWidget {
           ValueListenableBuilder<ThemeMode>(
             valueListenable: themeNotifier,
             builder: (context, currentMode, child) {
+              // This is the crucial logic fix:
+              // The switch is 'on' if the theme is explicitly dark, OR
+              // if the theme is set to 'system' AND the system itself is currently dark.
+              final isDarkMode = currentMode == ThemeMode.dark ||
+                  (currentMode == ThemeMode.system &&
+                      MediaQuery.of(context).platformBrightness ==
+                          Brightness.dark);
+
               return SwitchListTile(
                 title: const Text('Dark Mode'),
                 secondary: Icon(
-                  currentMode == ThemeMode.dark
-                      ? Icons.dark_mode
-                      : Icons.light_mode,
+                  // Use our new 'isDarkMode' boolean to select the correct icon
+                  isDarkMode ? Icons.dark_mode : Icons.light_mode,
                   color: Theme.of(context).colorScheme.primary,
                 ),
-                value: currentMode == ThemeMode.dark,
-                onChanged: (isDark) {
-                  final newMode = isDark ? ThemeMode.dark : ThemeMode.light;
+                // Use our new 'isDarkMode' boolean for the switch's state
+                value: isDarkMode,
+                onChanged: (isNowDark) {
+                  // When the user interacts, we set an explicit preference,
+                  // moving away from 'system' mode. This logic is correct.
+                  final newMode = isNowDark ? ThemeMode.dark : ThemeMode.light;
+
                   themeNotifier.value = newMode;
                   saveThemePreference(newMode);
                 },

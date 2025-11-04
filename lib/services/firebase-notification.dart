@@ -2,7 +2,7 @@
 
 import 'package:flutter/material.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
-import 'package:minber_super_app_new_fixed/services/notification_service.dart';
+import 'package:minber/services/notification_service.dart';
 
 class FirebaseNotificationService {
   static final FlutterLocalNotificationsPlugin _localNotifications =

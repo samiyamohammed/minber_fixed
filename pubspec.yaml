@@ -1,4 +1,4 @@
-name: minber_super_app_new_fixed
+name: minber
 description: "A new Flutter project."
 publish_to: "none"
 version: 1.0.0+1
@@ -20,7 +20,7 @@ dependencies:
   geolocator: ^13.0.4
   geocoding: ^2.2.0
   adhan_dart: ^1.0.9
-  intl: ^0.18.0
+  intl: ^0.20.2
   timezone: ^0.9.0
   flutter_timezone: ^4.1.1
   url_launcher: ^6.3.2
@@ -32,6 +32,7 @@ dependencies:
   firebase_messaging: ^16.0.2
   flutter_local_notifications: ^18.0.1
   video_player: ^2.10.0
+  better_player_plus: ^1.1.2
   flutter_compass_v2: ^1.0.3
   permission_handler: ^11.3.1
   logger: ^2.6.2
@@ -47,11 +48,11 @@ dependencies:
   font_awesome_flutter: ^10.7.0
   package_info_plus: ^9.0.0
   pretty_http_logger: ^1.0.5
-  better_player: ^0.0.84
   flutter_vlc_player: ^7.4.4
   flutter_inappwebview: ^6.1.5
   flutter_markdown: ^0.7.7+1
   dio: ^5.3.3
+  flutter_slidable: ^4.0.3
   # video_player_avplay: ^0.7.2
 
 dev_dependencies:

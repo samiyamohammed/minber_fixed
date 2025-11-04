@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:minber_super_app_new_fixed/main.dart'; // Correct import
+import 'package:minber/main.dart'; // Correct import
 
 void main() {
   testWidgets('Counter increments smoke test', (WidgetTester tester) async {

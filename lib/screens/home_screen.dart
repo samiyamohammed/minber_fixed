@@ -1,23 +1,21 @@
-// // lib/screens/home_screen.dart
 // import 'dart:async';
 // import 'dart:convert';
 // import 'dart:math';
 
 // import 'package:adhan_dart/adhan_dart.dart';
+// import 'package:better_player_plus/better_player_plus.dart';
 // import 'package:flutter/material.dart';
 // import 'package:flutter/services.dart';
 // import 'package:geolocator/geolocator.dart';
 // import 'package:http/http.dart' as http;
 // import 'package:intl/intl.dart';
+// import 'package:minber/main.dart';
 // import 'package:shared_preferences/shared_preferences.dart';
 // import 'package:shimmer/shimmer.dart';
-// import 'package:webview_flutter/webview_flutter.dart';
-// import 'package:webview_flutter_android/webview_flutter_android.dart';
-// import 'package:webview_flutter_wkwebview/webview_flutter_wkwebview.dart';
 // import 'package:youtube_player_flutter/youtube_player_flutter.dart';
 
 // import '../core/app_colors.dart';
-// import '../models/video_model.dart'; // Import the Video model
+// import '../models/video_model.dart';
 // import '../widgets/animated_list_item.dart';
 // import '../widgets/app_drawer.dart';
 // import '../widgets/drawer_indicator.dart';
@@ -32,39 +30,37 @@
 //   State<HomeScreen> createState() => _HomeScreenState();
 // }
 
-// class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver, RouteAware {
-
+// class _HomeScreenState extends State<HomeScreen>
+//     with WidgetsBindingObserver, RouteAware {
 //   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
 
 //   int _selectedIndex = 0;
 //   Timer? _timer;
 //   Timer? _autoRefreshTimer;
 
-//   // Banner State
-//   WebViewController? _bannerWebViewController;
+//   BetterPlayerController? _bannerPlayerController;
 //   bool _isBannerLoading = true;
 //   bool _hasBannerError = false;
 //   bool _isMuted = true;
 //   final String streamUrl = 'http://msa.merkuz.com:8888/live/stream1/index.m3u8';
 
-//   // Prayer Times State
+//   // ✅ 1. DYNAMIC ASPECT RATIO STATE
+//   // This will hold the video's true aspect ratio. Default to 16:9 to avoid initial errors.
+//   double _bannerAspectRatio = 16 / 9;
+
 //   String _nextPrayerName = "";
 //   String _nextPrayerCountdown = "--:--:--";
 //   Map<String, DateTime> _prayerTimes = {};
 //   bool _isLoadingPrayerTimes = true;
-
-//   // Trending & News State (with Enhanced Caching Logic)
 //   List<dynamic>? _trendingVideos;
 //   List<dynamic>? _newsArticles;
 //   String? _trendingError;
 //   String? _newsError;
-
 //   static const _trendingCacheKey = 'home_trending_cache';
 //   static const _newsCacheKey = 'home_news_cache';
 //   static const _trendingTimestampKey = 'home_trending_timestamp';
 //   static const _newsTimestampKey = 'home_news_timestamp';
-//   static const _cacheValidityMinutes = 5; // Cache for 5 minutes only
-
+//   static const _cacheValidityMinutes = 5;
 //   final String _trendingApiUrl = 'http://msa.merkuz.com:3636/trending';
 //   final String _newsApiUrl = 'http://msa.merkuz.com:3636/news';
 //   final String _apiBaseUrl = 'http://msa.merkuz.com:3636';
@@ -74,7 +70,7 @@
 //     super.initState();
 //     WidgetsBinding.instance.addObserver(this);
 
-//     _initializeBannerWebView();
+//     _initializeBannerPlayer();
 //     _initializePrayerTimes();
 //     _loadDataWithCache();
 
@@ -82,18 +78,25 @@
 //       if (_prayerTimes.isNotEmpty) _updateCountdown();
 //     });
 
-//     // Auto-refresh every 10 minutes
 //     _autoRefreshTimer = Timer.periodic(const Duration(minutes: 10), (_) {
 //       _refreshData();
 //     });
 //   }
-  
+
+//   @override
+//   void didChangeDependencies() {
+//     super.didChangeDependencies();
+//     routeObserver.subscribe(this, ModalRoute.of(context)!);
+//   }
 
 //   @override
 //   void didChangeAppLifecycleState(AppLifecycleState state) {
+//     super.didChangeAppLifecycleState(state);
 //     if (state == AppLifecycleState.resumed) {
-//       // App came to foreground, refresh data to ensure it's up-to-date
+//       _bannerPlayerController?.play();
 //       _refreshData();
+//     } else if (state == AppLifecycleState.paused) {
+//       _bannerPlayerController?.pause();
 //     }
 //   }
 
@@ -102,62 +105,158 @@
 //     _autoRefreshTimer?.cancel();
 //     _timer?.cancel();
 //     WidgetsBinding.instance.removeObserver(this);
-//     _bannerWebViewController = null;
+//     routeObserver.unsubscribe(this);
+//     _bannerPlayerController?.dispose();
+//     _bannerPlayerController = null;
 //     super.dispose();
 //   }
 
-//   // --- ENHANCED DATA FETCHING & CACHING ---
+//   @override
+//   void didPushNext() {
+//     _bannerPlayerController?.pause();
+//   }
+
+//   @override
+//   void didPopNext() {
+//     _bannerPlayerController?.play();
+//   }
+
+//   Future<void> _initializeBannerPlayer() async {
+//     if (mounted) {
+//       setState(() {
+//         _isBannerLoading = true;
+//         _hasBannerError = false;
+//       });
+//     }
+
+//     _bannerPlayerController?.dispose();
+
+//     BetterPlayerDataSource dataSource = BetterPlayerDataSource(
+//       BetterPlayerDataSourceType.network,
+//       streamUrl,
+//       liveStream: true,
+//       notificationConfiguration:
+//           const BetterPlayerNotificationConfiguration(showNotification: false),
+//     );
+
+//     _bannerPlayerController = BetterPlayerController(
+//       const BetterPlayerConfiguration(
+//         autoPlay: true,
+//         looping: true,
+//         // Use contain, as the parent AspectRatio widget will handle the sizing perfectly.
+//         fit: BoxFit.contain,
+//         controlsConfiguration: BetterPlayerControlsConfiguration(
+//           showControls: false,
+//         ),
+//         handleLifecycle: true,
+//       ),
+//       betterPlayerDataSource: dataSource,
+//     );
+
+//     _bannerPlayerController!.setVolume(0.0);
+
+//     _bannerPlayerController!.addEventsListener((BetterPlayerEvent event) {
+//       if (!mounted) return;
+
+//       // ✅ 2. DETECT AND UPDATE THE ASPECT RATIO
+//       // This is the core of the dynamic resizing logic.
+//       if (event.betterPlayerEventType == BetterPlayerEventType.initialized) {
+//         final videoController = _bannerPlayerController!.videoPlayerController;
+//         if (videoController != null && videoController.value.initialized) {
+//           final double newAspectRatio = videoController.value.aspectRatio;
+//           // Trigger a rebuild ONLY if the aspect ratio is valid and has changed.
+//           if (newAspectRatio > 0 && newAspectRatio != _bannerAspectRatio) {
+//             setState(() {
+//               _bannerAspectRatio = newAspectRatio;
+//             });
+//           }
+//         }
+//       }
+
+//       switch (event.betterPlayerEventType) {
+//         case BetterPlayerEventType.initialized:
+//         case BetterPlayerEventType.bufferingEnd:
+//           setState(() {
+//             _isBannerLoading = false;
+//             _hasBannerError = false;
+//           });
+//           break;
+//         case BetterPlayerEventType.exception:
+//           setState(() {
+//             _isBannerLoading = false;
+//             _hasBannerError = true;
+//           });
+//           break;
+//         case BetterPlayerEventType.bufferingStart:
+//           setState(() => _isBannerLoading = true);
+//           break;
+//         default:
+//           break;
+//       }
+//     });
+//   }
+
+//   // ... (The rest of your code remains exactly the same) ...
+
+//   void _reloadBannerStream() {
+//     _initializeBannerPlayer();
+//   }
+
+//   void _toggleMute() {
+//     if (mounted) {
+//       setState(() {
+//         _isMuted = !_isMuted;
+//       });
+//       _bannerPlayerController?.setVolume(_isMuted ? 0.0 : 1.0);
+//     }
+//   }
+
+//   void _navigateToLivePage() async {
+//     await _bannerPlayerController?.pause();
+//     Navigator.pushNamed(context, '/live').then((_) {
+//       if (mounted) {
+//         Future.delayed(const Duration(milliseconds: 500), () {
+//           _bannerPlayerController?.play();
+//         });
+//       }
+//     });
+//   }
 
 //   Future<void> _loadDataWithCache() async {
 //     final prefs = await SharedPreferences.getInstance();
-
-//     // Check trending cache
 //     final lastTrendingTime = prefs.getInt(_trendingTimestampKey) ?? 0;
 //     final now = DateTime.now().millisecondsSinceEpoch;
 //     final shouldUseTrendingCache =
 //         (now - lastTrendingTime) < (_cacheValidityMinutes * 60 * 1000);
-
 //     if (shouldUseTrendingCache && mounted) {
 //       final cachedTrending = prefs.getString(_trendingCacheKey);
 //       if (cachedTrending != null) {
-//         setState(() {
-//           _trendingVideos = json.decode(cachedTrending);
-//         });
+//         setState(() => _trendingVideos = json.decode(cachedTrending));
 //       }
 //     } else {
 //       await prefs.remove(_trendingCacheKey);
 //     }
-
-//     // Check news cache
 //     final lastNewsTime = prefs.getInt(_newsTimestampKey) ?? 0;
 //     final shouldUseNewsCache =
 //         (now - lastNewsTime) < (_cacheValidityMinutes * 60 * 1000);
-
 //     if (shouldUseNewsCache && mounted) {
 //       final cachedNews = prefs.getString(_newsCacheKey);
 //       if (cachedNews != null) {
-//         setState(() {
-//           _newsArticles = json.decode(cachedNews);
-//         });
+//         setState(() => _newsArticles = json.decode(cachedNews));
 //       }
 //     } else {
 //       await prefs.remove(_newsCacheKey);
 //     }
-
-//     // Always fetch fresh data in background
 //     await _fetchTrendingVideos();
 //     await _fetchNewsArticles();
 //   }
 
 //   Future<void> _refreshData() async {
 //     final prefs = await SharedPreferences.getInstance();
-
-//     // Clear all cached data to force fresh fetch
 //     await prefs.remove(_trendingCacheKey);
 //     await prefs.remove(_newsCacheKey);
 //     await prefs.remove(_trendingTimestampKey);
 //     await prefs.remove(_newsTimestampKey);
-
 //     if (mounted) {
 //       setState(() {
 //         _trendingVideos = null;
@@ -166,8 +265,6 @@
 //         _newsError = null;
 //       });
 //     }
-
-//     // Refresh all data sources from network
 //     await Future.wait([
 //       _getLocationAndPrayerTimes(),
 //       _fetchTrendingVideos(forceRefresh: true),
@@ -181,12 +278,9 @@
 //       if (response.statusCode == 200) {
 //         final data = json.decode(response.body);
 //         final prefs = await SharedPreferences.getInstance();
-
-//         // Save to cache with timestamp
 //         await prefs.setString(_trendingCacheKey, response.body);
 //         await prefs.setInt(
 //             _trendingTimestampKey, DateTime.now().millisecondsSinceEpoch);
-
 //         if (mounted) {
 //           setState(() {
 //             _trendingVideos = data;
@@ -210,12 +304,9 @@
 //       if (response.statusCode == 200) {
 //         final data = json.decode(response.body);
 //         final prefs = await SharedPreferences.getInstance();
-
-//         // Save to cache with timestamp
 //         await prefs.setString(_newsCacheKey, response.body);
 //         await prefs.setInt(
 //             _newsTimestampKey, DateTime.now().millisecondsSinceEpoch);
-
 //         if (mounted) {
 //           setState(() {
 //             _newsArticles = data;
@@ -233,153 +324,6 @@
 //     }
 //   }
 
-//   // --- PRAYER TIMES & BANNER METHODS ---
-
-//   void _navigateToLivePage() async {
-//     if (_bannerWebViewController != null) {
-//       await _bannerWebViewController?.runJavaScript("video.pause();");
-//     }
-
-//     Navigator.pushNamed(context, '/live').then((_) {
-//       if (_bannerWebViewController != null && mounted) {
-//         Future.delayed(const Duration(milliseconds: 500), () {
-//           _bannerWebViewController?.runJavaScript(
-//               "video.play().catch(e => console.log('Resume failed:', e));");
-//         });
-//       }
-//     });
-//   }
-
-//   Future<void> _initializeBannerWebView() async {
-//     try {
-//       final htmlContent = _createBannerHtml();
-//       final PlatformWebViewControllerCreationParams params;
-//       if (WebViewPlatform.instance is WebKitWebViewPlatform) {
-//         params = WebKitWebViewControllerCreationParams(
-//           allowsInlineMediaPlayback: true,
-//           mediaTypesRequiringUserAction: const <PlaybackMediaTypes>{},
-//         );
-//       } else {
-//         params = const PlatformWebViewControllerCreationParams();
-//       }
-
-//       _bannerWebViewController =
-//           WebViewController.fromPlatformCreationParams(params)
-//             ..setJavaScriptMode(JavaScriptMode.unrestricted)
-//             ..setBackgroundColor(Colors.black)
-//             ..enableZoom(false)
-//             ..setNavigationDelegate(
-//               NavigationDelegate(
-//                 onProgress: (int progress) {
-//                   if (progress > 80 && mounted) {
-//                     setState(() => _isBannerLoading = false);
-//                   }
-//                 },
-//                 onPageFinished: (String url) {
-//                   if (mounted) setState(() => _isBannerLoading = false);
-//                 },
-//                 onWebResourceError: (WebResourceError error) {
-//                   if (mounted) {
-//                     setState(() {
-//                       _hasBannerError = true;
-//                       _isBannerLoading = false;
-//                     });
-//                   }
-//                 },
-//               ),
-//             );
-
-//       if (_bannerWebViewController!.platform is AndroidWebViewController) {
-//         (_bannerWebViewController!.platform as AndroidWebViewController)
-//             .setMediaPlaybackRequiresUserGesture(false);
-//       }
-
-//       await _bannerWebViewController!.loadHtmlString(htmlContent);
-//     } catch (e) {
-//       if (mounted) {
-//         setState(() {
-//           _hasBannerError = true;
-//           _isBannerLoading = false;
-//         });
-//       }
-//     }
-//   }
-
-//   String _createBannerHtml() {
-//     return '''
-//   <!DOCTYPE html>
-//   <html>
-//   <head>
-//       <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-//       <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
-//       <style>
-//           body, html {
-//               margin: 0;
-//               padding: 0;
-//               width: 100%;
-//               height: 100%;
-//               background-color: #000;
-//               overflow: hidden;
-//               /* Added these lines to center the video */
-//               display: flex;
-//               justify-content: center;
-//               align-items: center;
-//           }
-//           video {
-//               width: 100%;
-//               height: 100%;
-//               /* This is the key change */
-//               object-fit: contain;
-//           }
-//       </style>
-//   </head>
-//   <body>
-//       <video id="video" muted autoplay playsinline></video>
-//       <script>
-//           const video = document.getElementById('video');
-//           const hlsUrl = "$streamUrl";
-//           if (Hls.isSupported()) {
-//               const hls = new Hls();
-//               hls.loadSource(hlsUrl);
-//               hls.attachMedia(video);
-//               hls.on(Hls.Events.MANIFEST_PARSED, function() {
-//                   video.play().catch(e => console.error("Autoplay failed", e));
-//               });
-//           } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
-//               video.src = hlsUrl;
-//               video.addEventListener('loadedmetadata', function() {
-//                   video.play().catch(e => console.error("Autoplay failed", e));
-//               });
-//           }
-//           document.addEventListener('contextmenu', event => event.preventDefault());
-//       </script>
-//   </body>
-//   </html>
-//   ''';
-//   }
-
-//   void _reloadBannerStream() {
-//     if (mounted) {
-//       setState(() {
-//         _isBannerLoading = true;
-//         _hasBannerError = false;
-//       });
-//     }
-//     _bannerWebViewController?.reload();
-//   }
-
-//   void _toggleMute() {
-//     if (mounted) {
-//       setState(() {
-//         _isMuted = !_isMuted;
-//       });
-//     }
-//     final jsCode = _isMuted
-//         ? "video.muted = true;"
-//         : "video.muted = false; video.volume = 1.0;";
-//     _bannerWebViewController?.runJavaScript(jsCode);
-//   }
-
 //   Future<void> _initializePrayerTimes() async {
 //     final bool loadedFromCache = await _loadCachedPrayerTimes();
 //     if (loadedFromCache) {
@@ -394,11 +338,9 @@
 //       final prefs = await SharedPreferences.getInstance();
 //       final savedTimesJson = prefs.getString("prayerTimesIso");
 //       if (savedTimesJson == null) return false;
-
 //       final decodedTimes = jsonDecode(savedTimesJson) as Map<String, dynamic>;
 //       final now = DateTime.now();
 //       final cacheDateStr = decodedTimes['date'];
-
 //       if (cacheDateStr == null ||
 //           DateFormat('yyyy-MM-dd').format(DateTime.parse(cacheDateStr)) !=
 //               DateFormat('yyyy-MM-dd').format(now)) {
@@ -442,7 +384,7 @@
 //         _calculatePrayerTimes(position.latitude, position.longitude);
 //       }
 //     } catch (e) {
-//       // Handle location error silently
+//       // Handle error
 //     } finally {
 //       if (mounted && _isLoadingPrayerTimes) {
 //         setState(() => _isLoadingPrayerTimes = false);
@@ -477,7 +419,6 @@
 //     String nextPrayer = "Fajr (Tomorrow)";
 //     DateTime? nextPrayerDateTime;
 //     final prayerOrder = ['Fajr', 'Dhuhr', 'Asr', 'Maghrib', 'Isha'];
-
 //     for (var prayerName in prayerOrder) {
 //       final prayerTime = _prayerTimes[prayerName];
 //       if (prayerTime != null && now.isBefore(prayerTime)) {
@@ -486,11 +427,9 @@
 //         break;
 //       }
 //     }
-
 //     if (nextPrayerDateTime == null) {
 //       nextPrayerDateTime = _prayerTimes['Fajr']?.add(const Duration(days: 1));
 //     }
-
 //     if (mounted) setState(() => _nextPrayerName = nextPrayer);
 //     _updateCountdown();
 //   }
@@ -499,27 +438,21 @@
 //     if (_prayerTimes.isEmpty) return;
 //     final now = DateTime.now();
 //     DateTime? targetTime;
-
 //     if (_nextPrayerName.contains('Tomorrow')) {
 //       targetTime = _prayerTimes['Fajr']?.add(const Duration(days: 1));
 //     } else {
 //       targetTime = _prayerTimes[_nextPrayerName];
 //     }
-
 //     if (targetTime == null) return;
 //     if (now.isAfter(targetTime)) {
 //       _updateNextPrayerAndCountdown();
 //       return;
 //     }
-
 //     final duration = targetTime.difference(now);
 //     final countdown =
 //         "${duration.inHours.remainder(24).toString().padLeft(2, '0')}:${duration.inMinutes.remainder(60).toString().padLeft(2, '0')}:${duration.inSeconds.remainder(60).toString().padLeft(2, '0')}";
-
 //     if (mounted) setState(() => _nextPrayerCountdown = countdown);
 //   }
-
-//   // --- NAVIGATION & HELPERS ---
 
 //   void _onItemTapped(int index) {
 //     if (index == _selectedIndex) return;
@@ -549,23 +482,19 @@
 //     {
 //       'name': 'Alfurqan',
 //       'image': 'assets/images/alfuqan.jpg',
-//       'url': 'https://Skylinkict.com/alfurqan',
+//       'url': 'https://Skylinkict.com/alfurqan'
 //     },
 //     {
 //       'name': 'Kirbgebeya',
 //       'image': 'assets/images/kirbgebeya.png',
-//       'url': 'https://kirbgebeya.com/',
+//       'url': 'https://kirbgebeya.com/'
 //     },
 //     {
 //       'name': 'Almathurat',
 //       'image': 'assets/images/almathurat.jpg',
-//       'url': 'https://Skylinkict.com/almathurat',
+//       'url': 'https://Skylinkict.com/almathurat'
 //     },
-//     {
-//       'name': 'Besirah',
-//       'image': 'assets/images/besira.jpg',
-//       'url': null,
-//     },
+//     {'name': 'Besirah', 'image': 'assets/images/besira.jpg', 'url': null},
 //   ];
 
 //   String _formatTimeAgo(String dateString) {
@@ -573,36 +502,32 @@
 //       final dateTime = DateTime.parse(dateString);
 //       final now = DateTime.now();
 //       final difference = now.difference(dateTime);
-
-//       if (difference.inDays > 365) {
+//       if (difference.inDays > 365)
 //         return '${(difference.inDays / 365).floor()}y ago';
-//       } else if (difference.inDays > 30) {
+//       if (difference.inDays > 30)
 //         return '${(difference.inDays / 30).floor()}mo ago';
-//       } else if (difference.inDays > 0) {
-//         return '${difference.inDays}d ago';
-//       } else if (difference.inHours > 0) {
-//         return '${difference.inHours}h ago';
-//       } else if (difference.inMinutes > 0) {
-//         return '${difference.inMinutes}m ago';
-//       } else {
-//         return 'Just now';
-//       }
+//       if (difference.inDays > 0) return '${difference.inDays}d ago';
+//       if (difference.inHours > 0) return '${difference.inHours}h ago';
+//       if (difference.inMinutes > 0) return '${difference.inMinutes}m ago';
+//       return 'Just now';
 //     } catch (e) {
-//       return ''; // Return empty string if date is invalid
+//       return '';
 //     }
 //   }
 
-//   // --- BUILD METHOD ---
 //   @override
 //   Widget build(BuildContext context) {
 //     final theme = Theme.of(context);
 //     final isDarkMode = theme.brightness == Brightness.dark;
-//     const double bannerHeight = 220.0;
+
+//     final screenWidth = MediaQuery.of(context).size.width;
+//     // ✅ 3. BUILD THE UI WITH THE DYNAMIC HEIGHT
+//     // The banner's height is now perfectly calculated from the video's true shape.
+//     final bannerHeight = screenWidth / _bannerAspectRatio;
 
 //     return GestureDetector(
 //       onHorizontalDragEnd: (details) {
-//         const double flingVelocity = 400.0;
-//         if ((details.primaryVelocity ?? 0).abs() > flingVelocity) {
+//         if ((details.primaryVelocity ?? 0).abs() > 400.0) {
 //           _scaffoldKey.currentState?.openDrawer();
 //         }
 //       },
@@ -617,6 +542,7 @@
 //               child: CustomScrollView(
 //                 slivers: [
 //                   SliverAppBar(
+//                     // The height is now dynamic.
 //                     expandedHeight: bannerHeight,
 //                     pinned: false,
 //                     floating: true,
@@ -625,7 +551,7 @@
 //                     elevation: 0,
 //                     automaticallyImplyLeading: false,
 //                     flexibleSpace: FlexibleSpaceBar(
-//                       background: _buildVideoBanner(context),
+//                       background: _buildVideoBanner(context, bannerHeight),
 //                     ),
 //                   ),
 //                   SliverToBoxAdapter(
@@ -675,14 +601,10 @@
 //                           _buildSectionHeader(theme, "Latest News", () {
 //                             if (_newsArticles != null &&
 //                                 _newsArticles!.isNotEmpty) {
-//                               Navigator.pushNamed(
-//                                 context,
-//                                 '/news',
-//                                 arguments: {
-//                                   'newsArticles': _newsArticles,
-//                                   'apiBaseUrl': _apiBaseUrl,
-//                                 },
-//                               );
+//                               Navigator.pushNamed(context, '/news', arguments: {
+//                                 'newsArticles': _newsArticles,
+//                                 'apiBaseUrl': _apiBaseUrl
+//                               });
 //                             }
 //                           }),
 //                           const SizedBox(height: 12),
@@ -712,16 +634,24 @@
 //     );
 //   }
 
-//   // --- BUILD WIDGETS ---
-
-//   Widget _buildVideoBanner(BuildContext context) {
+//   Widget _buildVideoBanner(BuildContext context, double bannerHeight) {
 //     return Container(
 //       color: Colors.black,
+//       height: bannerHeight,
 //       child: Stack(
-//         fit: StackFit.expand,
+//         alignment: Alignment.center,
 //         children: [
-//           if (_bannerWebViewController != null)
-//             WebViewWidget(controller: _bannerWebViewController!),
+//           // ✅ 4. WRAP THE PLAYER IN AN AspectRatio WIDGET
+//           // This enforces the container shape and guarantees a perfect fit.
+//           if (_bannerPlayerController != null)
+//             AspectRatio(
+//               aspectRatio: _bannerAspectRatio,
+//               child: BetterPlayer(
+//                 controller: _bannerPlayerController!,
+//               ),
+//             ),
+
+//           // Loading Overlay
 //           if (_isBannerLoading)
 //             Container(
 //               color: Colors.black.withOpacity(0.8),
@@ -737,6 +667,8 @@
 //                 ),
 //               ),
 //             ),
+
+//           // Error Overlay
 //           if (_hasBannerError)
 //             Container(
 //               color: Colors.black.withOpacity(0.8),
@@ -757,6 +689,8 @@
 //                 ],
 //               ),
 //             ),
+
+//           // UI Controls (only show when video is playing)
 //           if (!_hasBannerError && !_isBannerLoading) ...[
 //             Positioned(
 //               top: 40,
@@ -825,7 +759,6 @@
 //   Widget _buildPrayerTimesSection(ThemeData theme, bool isDarkMode) {
 //     const prayerOrder = ['Fajr', 'Dhuhr', 'Asr', 'Maghrib', 'Isha'];
 //     final timeFormatter = DateFormat("h:mm a");
-
 //     return Container(
 //       padding: const EdgeInsets.all(16.0),
 //       decoration: BoxDecoration(
@@ -842,18 +775,13 @@
 //                     Column(
 //                       crossAxisAlignment: CrossAxisAlignment.start,
 //                       children: [
-//                         Text(
-//                           'Next Prayer: $_nextPrayerName',
-//                           style: theme.textTheme.titleMedium?.copyWith(
-//                               fontWeight: FontWeight.bold,
-//                               color: AppColors.primaryBlue),
-//                         ),
-//                         Text(
-//                           'in $_nextPrayerCountdown',
-//                           style: theme.textTheme.bodyLarge?.copyWith(
-//                             fontWeight: FontWeight.w600,
-//                           ),
-//                         ),
+//                         Text('Next Prayer: $_nextPrayerName',
+//                             style: theme.textTheme.titleMedium?.copyWith(
+//                                 fontWeight: FontWeight.bold,
+//                                 color: AppColors.primaryBlue)),
+//                         Text('in $_nextPrayerCountdown',
+//                             style: theme.textTheme.bodyLarge
+//                                 ?.copyWith(fontWeight: FontWeight.w600)),
 //                       ],
 //                     ),
 //                     IconButton(
@@ -897,38 +825,35 @@
 //     final parts = time.split(' ');
 //     final timeString = parts[0];
 //     final periodString = parts.length > 1 ? parts[1] : '';
-
-//     final activeColor = AppColors.primaryBlue;
-//     final inactiveColor = theme.textTheme.bodyMedium?.color;
-//     final inactiveHintColor = theme.hintColor;
-
-//     return Column(
-//       children: [
-//         Text(
-//           prayerName,
-//           style: theme.textTheme.bodyMedium?.copyWith(
-//             fontWeight: isActive ? FontWeight.bold : FontWeight.normal,
-//             color: isActive ? activeColor : inactiveColor,
-//           ),
-//           textAlign: TextAlign.center,
-//         ),
-//         const SizedBox(height: 8),
-//         Text(
-//           timeString,
-//           style: theme.textTheme.titleSmall?.copyWith(
-//             fontWeight: isActive ? FontWeight.bold : FontWeight.normal,
-//             color: isActive ? activeColor : inactiveColor,
-//           ),
-//           textAlign: TextAlign.center,
-//         ),
-//         if (periodString.isNotEmpty)
-//           Text(
-//             periodString,
-//             style: theme.textTheme.bodySmall?.copyWith(
-//               color: isActive ? activeColor : inactiveHintColor,
-//             ),
-//           ),
-//       ],
+//     final Color nameAndPrayerTimeColor =
+//         isActive ? Colors.white : theme.textTheme.bodyLarge!.color!;
+//     final Color periodColor = isActive ? Colors.white70 : theme.hintColor;
+//     final FontWeight fontWeight =
+//         isActive ? FontWeight.bold : FontWeight.normal;
+//     return AnimatedContainer(
+//       duration: const Duration(milliseconds: 400),
+//       curve: Curves.easeInOut,
+//       padding: const EdgeInsets.symmetric(vertical: 8.0, horizontal: 4.0),
+//       decoration: BoxDecoration(
+//         color: isActive ? AppColors.primaryBlue : Colors.transparent,
+//         borderRadius: BorderRadius.circular(12),
+//       ),
+//       child: Column(
+//         children: [
+//           Text(prayerName,
+//               style: theme.textTheme.bodyMedium?.copyWith(
+//                   fontWeight: fontWeight, color: nameAndPrayerTimeColor),
+//               textAlign: TextAlign.center),
+//           const SizedBox(height: 8),
+//           Text(timeString,
+//               style: theme.textTheme.titleSmall?.copyWith(
+//                   fontWeight: fontWeight, color: nameAndPrayerTimeColor),
+//               textAlign: TextAlign.center),
+//           if (periodString.isNotEmpty)
+//             Text(periodString,
+//                 style: theme.textTheme.bodySmall?.copyWith(color: periodColor)),
+//         ],
+//       ),
 //     );
 //   }
 
@@ -963,20 +888,19 @@
 //       child: Row(
 //         mainAxisAlignment: MainAxisAlignment.spaceBetween,
 //         children: List.generate(
-//           5,
-//           (_) => Expanded(
-//             child: Column(
-//               children: [
-//                 Container(
-//                     width: 40,
-//                     height: 12,
-//                     color: Colors.white,
-//                     margin: const EdgeInsets.only(bottom: 6)),
-//                 Container(width: 50, height: 16, color: Colors.white),
-//               ],
-//             ),
-//           ),
-//         ),
+//             5,
+//             (_) => Expanded(
+//                   child: Column(
+//                     children: [
+//                       Container(
+//                           width: 40,
+//                           height: 12,
+//                           color: Colors.white,
+//                           margin: const EdgeInsets.only(bottom: 6)),
+//                       Container(width: 50, height: 16, color: Colors.white),
+//                     ],
+//                   ),
+//                 )),
 //       ),
 //     );
 //   }
@@ -1009,8 +933,6 @@
 //   Widget _buildTrendingItem(BuildContext context, ThemeData theme,
 //       dynamic video, int index, bool isDarkMode) {
 //     String thumbnailUrl = video['thumbnail'] ?? '';
-
-//     // FIXED: Proper URL construction
 //     if (thumbnailUrl.isNotEmpty && !thumbnailUrl.startsWith('http')) {
 //       if (thumbnailUrl.startsWith('/')) {
 //         thumbnailUrl = '$_apiBaseUrl$thumbnailUrl';
@@ -1018,7 +940,6 @@
 //         thumbnailUrl = '$_apiBaseUrl/$thumbnailUrl';
 //       }
 //     }
-
 //     return Container(
 //       width: MediaQuery.of(context).size.width * 0.65,
 //       margin: const EdgeInsets.only(right: 12),
@@ -1032,16 +953,11 @@
 //           final videoUrl = video['videoUrl'] as String?;
 //           if (videoUrl == null || videoUrl.isEmpty) {
 //             ScaffoldMessenger.of(context).showSnackBar(
-//               const SnackBar(content: Text('No video URL available.')),
-//             );
+//                 const SnackBar(content: Text('No video URL available.')));
 //             return;
 //           }
-
 //           String? videoId = YoutubePlayer.convertUrlToId(videoUrl);
 //           if (videoId != null && videoId.isNotEmpty) {
-//             // --- START: MODIFICATION ---
-
-//             // 1. Convert the dynamic list to a List<Video>
 //             final List<Video> videoPlaylist =
 //                 _trendingVideos!.map<Video>((item) {
 //               final url = item['videoUrl'] as String? ?? '';
@@ -1059,8 +975,6 @@
 //                 privacyStatus: '',
 //               );
 //             }).toList();
-
-//             // 2. Navigate with all the required parameters
 //             Navigator.push(
 //               context,
 //               MaterialPageRoute(
@@ -1072,24 +986,19 @@
 //                 ),
 //               ),
 //             );
-//             // --- END: MODIFICATION ---
 //           } else {
-//             ScaffoldMessenger.of(context).showSnackBar(
-//               const SnackBar(
-//                   content: Text('Could not play video (Invalid URL).')),
-//             );
+//             ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+//                 content: Text('Could not play video (Invalid URL).')));
 //           }
 //         },
 //         child: Stack(
 //           fit: StackFit.expand,
 //           children: [
 //             if (thumbnailUrl.isNotEmpty)
-//               Image.network(
-//                 thumbnailUrl,
-//                 fit: BoxFit.cover,
-//                 errorBuilder: (context, error, stackTrace) =>
-//                     Container(color: theme.splashColor),
-//               )
+//               Image.network(thumbnailUrl,
+//                   fit: BoxFit.cover,
+//                   errorBuilder: (context, error, stackTrace) =>
+//                       Container(color: theme.splashColor))
 //             else
 //               Container(color: theme.splashColor),
 //             Container(
@@ -1185,10 +1094,7 @@
 //         decoration: BoxDecoration(
 //             borderRadius: BorderRadius.circular(16),
 //             gradient: const LinearGradient(
-//               colors: [
-//                 AppColors.primaryBlue,
-//                 AppColors.accentBlue,
-//               ],
+//               colors: [AppColors.primaryBlue, AppColors.accentBlue],
 //               begin: Alignment.topLeft,
 //               end: Alignment.bottomRight,
 //             )),
@@ -1253,20 +1159,14 @@
 //         },
 //         child: Column(
 //           children: [
-//             CircleAvatar(
-//               radius: 35,
-//               backgroundImage: AssetImage(app['image']),
-//             ),
+//             CircleAvatar(radius: 35, backgroundImage: AssetImage(app['image'])),
 //             const SizedBox(height: 8),
-//             Text(
-//               app['name'],
-//               textAlign: TextAlign.center,
-//               maxLines: 1,
-//               overflow: TextOverflow.ellipsis,
-//               style: theme.textTheme.bodyMedium?.copyWith(
-//                 fontWeight: FontWeight.w500,
-//               ),
-//             ),
+//             Text(app['name'],
+//                 textAlign: TextAlign.center,
+//                 maxLines: 1,
+//                 overflow: TextOverflow.ellipsis,
+//                 style: theme.textTheme.bodyMedium
+//                     ?.copyWith(fontWeight: FontWeight.w500)),
 //           ],
 //         ),
 //       ),
@@ -1308,7 +1208,6 @@
 //         ),
 //       );
 //     }
-
 //     return ListView.separated(
 //       shrinkWrap: true,
 //       physics: const NeverScrollableScrollPhysics(),
@@ -1326,25 +1225,23 @@
 //             thumbnailUrl = '$_apiBaseUrl/$thumbnailUrl';
 //           }
 //         }
+//         final isDarkMode = theme.brightness == Brightness.dark;
+//         final cardBackgroundColor =
+//             isDarkMode ? AppColors.surfaceDark : const Color(0xFFF7F9FC);
 //         final newsCard = Container(
 //           decoration: BoxDecoration(
-//             color: theme.cardColor,
+//             color: cardBackgroundColor,
 //             borderRadius: BorderRadius.circular(12),
-//             border: Border.all(color: theme.dividerColor.withOpacity(0.8)),
 //           ),
 //           child: InkWell(
 //             borderRadius: BorderRadius.circular(12),
 //             onTap: () {
 //               if (newsUrl != null && newsUrl.isNotEmpty) {
 //                 Navigator.push(
-//                   context,
-//                   MaterialPageRoute(
-//                     builder: (context) => EmbeddedWebScreen(
-//                       url: newsUrl,
-//                       appName: headline,
-//                     ),
-//                   ),
-//                 );
+//                     context,
+//                     MaterialPageRoute(
+//                         builder: (context) => EmbeddedWebScreen(
+//                             url: newsUrl, appName: headline)));
 //               }
 //             },
 //             child: Padding(
@@ -1355,19 +1252,15 @@
 //                     child: Column(
 //                       crossAxisAlignment: CrossAxisAlignment.start,
 //                       children: [
-//                         Text(
-//                           headline,
-//                           style: theme.textTheme.bodyLarge
-//                               ?.copyWith(fontWeight: FontWeight.bold),
-//                           maxLines: 3,
-//                           overflow: TextOverflow.ellipsis,
-//                         ),
+//                         Text(headline,
+//                             style: theme.textTheme.bodyMedium
+//                                 ?.copyWith(fontWeight: FontWeight.bold),
+//                             maxLines: 3,
+//                             overflow: TextOverflow.ellipsis),
 //                         const SizedBox(height: 8),
-//                         Text(
-//                           _formatTimeAgo(item["createdAt"] ?? ''),
-//                           style: theme.textTheme.bodySmall
-//                               ?.copyWith(color: theme.hintColor),
-//                         ),
+//                         Text(_formatTimeAgo(item["createdAt"] ?? ''),
+//                             style: theme.textTheme.bodySmall
+//                                 ?.copyWith(color: theme.hintColor)),
 //                       ],
 //                     ),
 //                   ),
@@ -1375,34 +1268,28 @@
 //                   ClipRRect(
 //                     borderRadius: BorderRadius.circular(8),
 //                     child: thumbnailUrl.isNotEmpty
-//                         ? Image.network(
-//                             thumbnailUrl,
+//                         ? Image.network(thumbnailUrl,
 //                             width: 80,
 //                             height: 80,
 //                             fit: BoxFit.cover,
 //                             errorBuilder: (c, e, s) => Container(
-//                               width: 80,
-//                               height: 80,
-//                               color: theme.splashColor,
-//                               child: const Icon(Icons.broken_image, size: 30),
-//                             ),
-//                           )
+//                                 width: 80,
+//                                 height: 80,
+//                                 color: theme.splashColor,
+//                                 child:
+//                                     const Icon(Icons.broken_image, size: 30)))
 //                         : Container(
 //                             width: 80,
 //                             height: 80,
 //                             color: theme.splashColor,
-//                             child: const Icon(Icons.image, size: 30),
-//                           ),
+//                             child: const Icon(Icons.image, size: 30)),
 //                   ),
 //                 ],
 //               ),
 //             ),
 //           ),
 //         );
-//         return AnimatedListItem(
-//           index: index,
-//           child: newsCard,
-//         );
+//         return AnimatedListItem(index: index, child: newsCard);
 //       },
 //     );
 //   }
@@ -1474,9 +1361,7 @@
 //     return Container(
 //       decoration: BoxDecoration(
 //         color: theme.cardColor,
-//         border: Border(
-//           top: BorderSide(color: theme.dividerColor, width: 1.0),
-//         ),
+//         border: Border(top: BorderSide(color: theme.dividerColor, width: 1.0)),
 //       ),
 //       child: BottomNavigationBar(
 //           currentIndex: _selectedIndex,
@@ -1511,25 +1396,20 @@
 //     );
 //   }
 // }
-// lib/screens/home_screen.dart (FULLY CORRECTED AND READY TO PASTE)
 import 'dart:async';
 import 'dart:convert';
 import 'dart:math';
-
 import 'package:adhan_dart/adhan_dart.dart';
+import 'package:better_player_plus/better_player_plus.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:http/http.dart' as http;
 import 'package:intl/intl.dart';
-import 'package:minber_super_app_new_fixed/main.dart'; // ✅ IMPORTED main.dart
+import 'package:minber/main.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:shimmer/shimmer.dart';
-import 'package:webview_flutter/webview_flutter.dart';
-import 'package:webview_flutter_android/webview_flutter_android.dart';
-import 'package:webview_flutter_wkwebview/webview_flutter_wkwebview.dart';
 import 'package:youtube_player_flutter/youtube_player_flutter.dart';
-
 import '../core/app_colors.dart';
 import '../models/video_model.dart';
 import '../widgets/animated_list_item.dart';
@@ -1538,38 +1418,33 @@ import '../widgets/drawer_indicator.dart';
 import '../widgets/embedded_web_screen.dart';
 import 'trending_see_all_screen.dart';
 import 'video_player_screen.dart';
-import '../main.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
-
   @override
   State<HomeScreen> createState() => _HomeScreenState();
 }
 
-// ✅ ADDED RouteAware
 class _HomeScreenState extends State<HomeScreen>
     with WidgetsBindingObserver, RouteAware {
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
-
   int _selectedIndex = 0;
   Timer? _timer;
   Timer? _autoRefreshTimer;
-
-  // Banner State
-  WebViewController? _bannerWebViewController;
+  BetterPlayerController? _bannerPlayerController;
   bool _isBannerLoading = true;
   bool _hasBannerError = false;
   bool _isMuted = true;
   final String streamUrl = 'http://msa.merkuz.com:8888/live/stream1/index.m3u8';
 
-  // Prayer Times State
+  // Default fallback aspect ratio (16:9)
+  static const double _defaultAspectRatio = 16 / 9;
+  late double _bannerAspectRatio;
+
   String _nextPrayerName = "";
   String _nextPrayerCountdown = "--:--:--";
   Map<String, DateTime> _prayerTimes = {};
   bool _isLoadingPrayerTimes = true;
-
-  // Trending & News State
   List<dynamic>? _trendingVideos;
   List<dynamic>? _newsArticles;
   String? _trendingError;
@@ -1577,7 +1452,7 @@ class _HomeScreenState extends State<HomeScreen>
   static const _trendingCacheKey = 'home_trending_cache';
   static const _newsCacheKey = 'home_news_cache';
   static const _trendingTimestampKey = 'home_trending_timestamp';
-  static const _newsTimestampKey = 'home_news_timestamp';
+  static const _newsTimestampKey = 'home_news_timestamp, timestamp';
   static const _cacheValidityMinutes = 5;
   final String _trendingApiUrl = 'http://msa.merkuz.com:3636/trending';
   final String _newsApiUrl = 'http://msa.merkuz.com:3636/news';
@@ -1587,521 +1462,134 @@ class _HomeScreenState extends State<HomeScreen>
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
-
-    _initializeBannerWebView();
+    _bannerAspectRatio = _defaultAspectRatio; // Start with safe default
+    _initializeBannerPlayer();
     _initializePrayerTimes();
     _loadDataWithCache();
-
     _timer = Timer.periodic(const Duration(seconds: 1), (_) {
       if (_prayerTimes.isNotEmpty) _updateCountdown();
     });
-
     _autoRefreshTimer = Timer.periodic(const Duration(minutes: 10), (_) {
       _refreshData();
     });
   }
 
-  // ✅ ADDED: This method subscribes this page to the RouteObserver.
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
     routeObserver.subscribe(this, ModalRoute.of(context)!);
   }
 
-  // ✅ FIXED: This method handles pausing/resuming when the app is minimized.
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     super.didChangeAppLifecycleState(state);
     if (state == AppLifecycleState.resumed) {
-      _bannerWebViewController?.runJavaScript(
-          "video.play().catch(e => console.log('Resume play failed:', e));");
+      _bannerPlayerController?.play();
       _refreshData();
     } else if (state == AppLifecycleState.paused) {
-      _bannerWebViewController?.runJavaScript("video.pause();");
+      _bannerPlayerController?.pause();
     }
   }
 
-  // ✅ UPDATED: This method now properly unsubscribes and pauses the video.
   @override
   void dispose() {
     _autoRefreshTimer?.cancel();
     _timer?.cancel();
     WidgetsBinding.instance.removeObserver(this);
-    routeObserver.unsubscribe(this); // Important to prevent memory leaks
-    _bannerWebViewController?.runJavaScript("video.pause();");
-    _bannerWebViewController = null;
+    routeObserver.unsubscribe(this);
+    _bannerPlayerController?.dispose();
+    _bannerPlayerController = null;
     super.dispose();
   }
 
-  // ✅ ADDED: This method is called when you navigate AWAY from the HomeScreen.
   @override
   void didPushNext() {
-    print("Navigating away from Home, pausing video.");
-    _bannerWebViewController?.runJavaScript("video.pause();");
+    _bannerPlayerController?.pause();
   }
 
-  // ✅ ADDED: This method is called when you navigate BACK to the HomeScreen.
   @override
   void didPopNext() {
-    print("Navigating back to Home, resuming video.");
-    _bannerWebViewController?.runJavaScript(
-        "video.play().catch(e => console.log('Resume play failed:', e));");
+    _bannerPlayerController?.play();
   }
 
-  // --- ALL YOUR OTHER METHODS BELOW ARE UNCHANGED ---
-
-  Future<void> _loadDataWithCache() async {
-    final prefs = await SharedPreferences.getInstance();
-
-    final lastTrendingTime = prefs.getInt(_trendingTimestampKey) ?? 0;
-    final now = DateTime.now().millisecondsSinceEpoch;
-    final shouldUseTrendingCache =
-        (now - lastTrendingTime) < (_cacheValidityMinutes * 60 * 1000);
-
-    if (shouldUseTrendingCache && mounted) {
-      final cachedTrending = prefs.getString(_trendingCacheKey);
-      if (cachedTrending != null) {
-        setState(() {
-          _trendingVideos = json.decode(cachedTrending);
-        });
-      }
-    } else {
-      await prefs.remove(_trendingCacheKey);
-    }
-
-    final lastNewsTime = prefs.getInt(_newsTimestampKey) ?? 0;
-    final shouldUseNewsCache =
-        (now - lastNewsTime) < (_cacheValidityMinutes * 60 * 1000);
-
-    if (shouldUseNewsCache && mounted) {
-      final cachedNews = prefs.getString(_newsCacheKey);
-      if (cachedNews != null) {
-        setState(() {
-          _newsArticles = json.decode(cachedNews);
-        });
-      }
-    } else {
-      await prefs.remove(_newsCacheKey);
-    }
-
-    await _fetchTrendingVideos();
-    await _fetchNewsArticles();
-  }
-
-  Future<void> _refreshData() async {
-    final prefs = await SharedPreferences.getInstance();
-
-    await prefs.remove(_trendingCacheKey);
-    await prefs.remove(_newsCacheKey);
-    await prefs.remove(_trendingTimestampKey);
-    await prefs.remove(_newsTimestampKey);
-
-    if (mounted) {
-      setState(() {
-        _trendingVideos = null;
-        _newsArticles = null;
-        _trendingError = null;
-        _newsError = null;
-      });
-    }
-
-    await Future.wait([
-      _getLocationAndPrayerTimes(),
-      _fetchTrendingVideos(forceRefresh: true),
-      _fetchNewsArticles(forceRefresh: true),
-    ]);
-  }
-
-  Future<void> _fetchTrendingVideos({bool forceRefresh = false}) async {
-    try {
-      final response = await http.get(Uri.parse(_trendingApiUrl));
-      if (response.statusCode == 200) {
-        final data = json.decode(response.body);
-        final prefs = await SharedPreferences.getInstance();
-        await prefs.setString(_trendingCacheKey, response.body);
-        await prefs.setInt(
-            _trendingTimestampKey, DateTime.now().millisecondsSinceEpoch);
-
-        if (mounted) {
-          setState(() {
-            _trendingVideos = data;
-            _trendingError = null;
-          });
-        }
-      } else {
-        throw Exception('Failed to load trending videos');
-      }
-    } catch (e) {
-      print("Trending fetch error: $e");
-      if (mounted && (_trendingVideos == null || _trendingVideos!.isEmpty)) {
-        setState(() => _trendingError = e.toString());
-      }
-    }
-  }
-
-  Future<void> _fetchNewsArticles({bool forceRefresh = false}) async {
-    try {
-      final response = await http.get(Uri.parse(_newsApiUrl));
-      if (response.statusCode == 200) {
-        final data = json.decode(response.body);
-        final prefs = await SharedPreferences.getInstance();
-        await prefs.setString(_newsCacheKey, response.body);
-        await prefs.setInt(
-            _newsTimestampKey, DateTime.now().millisecondsSinceEpoch);
-
-        if (mounted) {
-          setState(() {
-            _newsArticles = data;
-            _newsError = null;
-          });
-        }
-      } else {
-        throw Exception('Failed to load news articles');
-      }
-    } catch (e) {
-      print("News fetch error: $e");
-      if (mounted && (_newsArticles == null || _newsArticles!.isEmpty)) {
-        setState(() => _newsError = e.toString());
-      }
-    }
-  }
-
-  void _navigateToLivePage() async {
-    if (_bannerWebViewController != null) {
-      await _bannerWebViewController?.runJavaScript("video.pause();");
-    }
-
-    Navigator.pushNamed(context, '/live').then((_) {
-      if (_bannerWebViewController != null && mounted) {
-        Future.delayed(const Duration(milliseconds: 500), () {
-          _bannerWebViewController?.runJavaScript(
-              "video.play().catch(e => console.log('Resume failed:', e));");
-        });
-      }
-    });
-  }
-
-  Future<void> _initializeBannerWebView() async {
-    try {
-      final htmlContent = _createBannerHtml();
-      final PlatformWebViewControllerCreationParams params;
-      if (WebViewPlatform.instance is WebKitWebViewPlatform) {
-        params = WebKitWebViewControllerCreationParams(
-          allowsInlineMediaPlayback: true,
-          mediaTypesRequiringUserAction: const <PlaybackMediaTypes>{},
-        );
-      } else {
-        params = const PlatformWebViewControllerCreationParams();
-      }
-
-      _bannerWebViewController =
-          WebViewController.fromPlatformCreationParams(params)
-            ..setJavaScriptMode(JavaScriptMode.unrestricted)
-            ..setBackgroundColor(Colors.black)
-            ..enableZoom(false)
-            ..setNavigationDelegate(
-              NavigationDelegate(
-                onProgress: (int progress) {
-                  if (progress > 80 && mounted) {
-                    setState(() => _isBannerLoading = false);
-                  }
-                },
-                onPageFinished: (String url) {
-                  if (mounted) setState(() => _isBannerLoading = false);
-                },
-                onWebResourceError: (WebResourceError error) {
-                  if (mounted) {
-                    setState(() {
-                      _hasBannerError = true;
-                      _isBannerLoading = false;
-                    });
-                  }
-                },
-              ),
-            );
-
-      if (_bannerWebViewController!.platform is AndroidWebViewController) {
-        (_bannerWebViewController!.platform as AndroidWebViewController)
-            .setMediaPlaybackRequiresUserGesture(false);
-      }
-
-      await _bannerWebViewController!.loadHtmlString(htmlContent);
-    } catch (e) {
-      if (mounted) {
-        setState(() {
-          _hasBannerError = true;
-          _isBannerLoading = false;
-        });
-      }
-    }
-  }
-
-  String _createBannerHtml() {
-    return '''
-  <!DOCTYPE html>
-  <html>
-  <head>
-      <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-      <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
-      <style>
-          body, html { margin: 0; padding: 0; width: 100%; height: 100%; background-color: #000; overflow: hidden; display: flex; justify-content: center; align-items: center; }
-          video { width: 100%; height: 100%; object-fit: contain; }
-      </style>
-  </head>
-  <body>
-      <video id="video" muted autoplay playsinline></video>
-      <script>
-          const video = document.getElementById('video');
-          const hlsUrl = "$streamUrl";
-          if (Hls.isSupported()) {
-              const hls = new Hls();
-              hls.loadSource(hlsUrl);
-              hls.attachMedia(video);
-              hls.on(Hls.Events.MANIFEST_PARSED, function() {
-                  video.play().catch(e => console.error("Autoplay failed", e));
-              });
-          } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
-              video.src = hlsUrl;
-              video.addEventListener('loadedmetadata', function() {
-                  video.play().catch(e => console.error("Autoplay failed", e));
-              });
-          }
-          document.addEventListener('contextmenu', event => event.preventDefault());
-      </script>
-  </body>
-  </html>
-  ''';
-  }
-
-  void _reloadBannerStream() {
+  Future<void> _initializeBannerPlayer() async {
     if (mounted) {
       setState(() {
         _isBannerLoading = true;
         _hasBannerError = false;
+        _bannerAspectRatio = _defaultAspectRatio; // Reset to default
       });
     }
-    _bannerWebViewController?.reload();
-  }
 
-  void _toggleMute() {
-    if (mounted) {
-      setState(() {
-        _isMuted = !_isMuted;
-      });
-    }
-    final jsCode = _isMuted
-        ? "video.muted = true;"
-        : "video.muted = false; video.volume = 1.0;";
-    _bannerWebViewController?.runJavaScript(jsCode);
-  }
+    _bannerPlayerController?.dispose();
 
-  Future<void> _initializePrayerTimes() async {
-    final bool loadedFromCache = await _loadCachedPrayerTimes();
-    if (loadedFromCache) {
-      _updateNextPrayerAndCountdown();
-      if (mounted) setState(() => _isLoadingPrayerTimes = false);
-    }
-    await _getLocationAndPrayerTimes();
-  }
-
-  Future<bool> _loadCachedPrayerTimes() async {
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      final savedTimesJson = prefs.getString("prayerTimesIso");
-      if (savedTimesJson == null) return false;
-
-      final decodedTimes = jsonDecode(savedTimesJson) as Map<String, dynamic>;
-      final now = DateTime.now();
-      final cacheDateStr = decodedTimes['date'];
-
-      if (cacheDateStr == null ||
-          DateFormat('yyyy-MM-dd').format(DateTime.parse(cacheDateStr)) !=
-              DateFormat('yyyy-MM-dd').format(now)) {
-        return false;
-      }
-      if (mounted) {
-        setState(() {
-          _prayerTimes = {
-            'Fajr': DateTime.parse(decodedTimes['Fajr']),
-            'Dhuhr': DateTime.parse(decodedTimes['Dhuhr']),
-            'Asr': DateTime.parse(decodedTimes['Asr']),
-            'Maghrib': DateTime.parse(decodedTimes['Maghrib']),
-            'Isha': DateTime.parse(decodedTimes['Isha']),
-          };
-        });
-      }
-      return true;
-    } catch (e) {
-      return false;
-    }
-  }
-
-  Future<void> _savePrayerTimes() async {
-    final prefs = await SharedPreferences.getInstance();
-    final timesToSave = _prayerTimes
-        .map((key, value) => MapEntry(key, value.toIso8601String()));
-    timesToSave['date'] = DateTime.now().toIso8601String();
-    await prefs.setString("prayerTimesIso", jsonEncode(timesToSave));
-  }
-
-  Future<void> _getLocationAndPrayerTimes() async {
-    try {
-      LocationPermission permission = await Geolocator.checkPermission();
-      if (permission == LocationPermission.denied) {
-        permission = await Geolocator.requestPermission();
-      }
-      if (permission == LocationPermission.whileInUse ||
-          permission == LocationPermission.always) {
-        Position position = await Geolocator.getCurrentPosition(
-            desiredAccuracy: LocationAccuracy.high);
-        _calculatePrayerTimes(position.latitude, position.longitude);
-      }
-    } catch (e) {
-      // Handle location error silently
-    } finally {
-      if (mounted && _isLoadingPrayerTimes) {
-        setState(() => _isLoadingPrayerTimes = false);
-      }
-    }
-  }
-
-  void _calculatePrayerTimes(double lat, double lng) {
-    final prayerTimesData = PrayerTimes(
-      coordinates: Coordinates(lat, lng),
-      date: DateTime.now(),
-      calculationParameters: CalculationMethod.muslimWorldLeague()
-        ..madhab = Madhab.shafi,
+    BetterPlayerDataSource dataSource = BetterPlayerDataSource(
+      BetterPlayerDataSourceType.network,
+      streamUrl,
+      liveStream: true,
+      notificationConfiguration:
+          const BetterPlayerNotificationConfiguration(showNotification: false),
     );
-    if (mounted) {
-      setState(() {
-        _prayerTimes = {
-          'Fajr': prayerTimesData.fajr!.toLocal(),
-          'Dhuhr': prayerTimesData.dhuhr!.toLocal(),
-          'Asr': prayerTimesData.asr!.toLocal(),
-          'Maghrib': prayerTimesData.maghrib!.toLocal(),
-          'Isha': prayerTimesData.isha!.toLocal(),
-        };
-        _updateNextPrayerAndCountdown();
-        _savePrayerTimes();
-      });
-    }
+
+    _bannerPlayerController = BetterPlayerController(
+      BetterPlayerConfiguration(
+        autoPlay: true,
+        looping: true,
+        fit: BoxFit.fill, // Will be perfect once ratio is set
+        controlsConfiguration: const BetterPlayerControlsConfiguration(
+          showControls: false,
+        ),
+        handleLifecycle: true,
+        aspectRatio: _bannerAspectRatio,
+      ),
+      betterPlayerDataSource: dataSource,
+    );
+
+    _bannerPlayerController!.setVolume(0.0);
+    _bannerPlayerController!.addEventsListener(_onPlayerEvent);
   }
 
-  void _updateNextPrayerAndCountdown() {
-    final now = DateTime.now();
-    String nextPrayer = "Fajr (Tomorrow)";
-    DateTime? nextPrayerDateTime;
-    final prayerOrder = ['Fajr', 'Dhuhr', 'Asr', 'Maghrib', 'Isha'];
+  void _onPlayerEvent(BetterPlayerEvent event) async {
+    if (!mounted) return;
 
-    for (var prayerName in prayerOrder) {
-      final prayerTime = _prayerTimes[prayerName];
-      if (prayerTime != null && now.isBefore(prayerTime)) {
-        nextPrayer = prayerName;
-        nextPrayerDateTime = prayerTime;
+    switch (event.betterPlayerEventType) {
+      case BetterPlayerEventType.initialized:
+      case BetterPlayerEventType.bufferingEnd:
+        final controller = _bannerPlayerController?.videoPlayerController;
+        if (controller != null && controller.value.initialized) {
+          final double? videoAspectRatio = controller.value.aspectRatio;
+          if (videoAspectRatio != null &&
+              videoAspectRatio > 0.5 &&
+              videoAspectRatio < 3.0) {
+            // Only update if significantly different
+            if ((videoAspectRatio - _bannerAspectRatio).abs() > 0.01) {
+              setState(() {
+                _bannerAspectRatio = videoAspectRatio;
+                _bannerPlayerController
+                    ?.setOverriddenAspectRatio(videoAspectRatio);
+              });
+            }
+          }
+        }
+        setState(() {
+          _isBannerLoading = false;
+          _hasBannerError = false;
+        });
         break;
-      }
-    }
 
-    if (nextPrayerDateTime == null) {
-      nextPrayerDateTime = _prayerTimes['Fajr']?.add(const Duration(days: 1));
-    }
-
-    if (mounted) setState(() => _nextPrayerName = nextPrayer);
-    _updateCountdown();
-  }
-
-  void _updateCountdown() {
-    if (_prayerTimes.isEmpty) return;
-    final now = DateTime.now();
-    DateTime? targetTime;
-
-    if (_nextPrayerName.contains('Tomorrow')) {
-      targetTime = _prayerTimes['Fajr']?.add(const Duration(days: 1));
-    } else {
-      targetTime = _prayerTimes[_nextPrayerName];
-    }
-
-    if (targetTime == null) return;
-    if (now.isAfter(targetTime)) {
-      _updateNextPrayerAndCountdown();
-      return;
-    }
-
-    final duration = targetTime.difference(now);
-    final countdown =
-        "${duration.inHours.remainder(24).toString().padLeft(2, '0')}:${duration.inMinutes.remainder(60).toString().padLeft(2, '0')}:${duration.inSeconds.remainder(60).toString().padLeft(2, '0')}";
-
-    if (mounted) setState(() => _nextPrayerCountdown = countdown);
-  }
-
-  void _onItemTapped(int index) {
-    if (index == _selectedIndex) return;
-    String routeName = '';
-    switch (index) {
-      case 0:
+      case BetterPlayerEventType.exception:
+        setState(() {
+          _isBannerLoading = false;
+          _hasBannerError = true;
+        });
         break;
-      case 1:
-        routeName = '/media';
-        break;
-      case 2:
-        routeName = '/prayer';
-        break;
-      case 3:
-        routeName = '/chatbot';
-        break;
-      case 4:
-        routeName = '/subapps';
-        break;
-    }
-    if (routeName.isNotEmpty) {
-      Navigator.pushReplacementNamed(context, routeName);
-    }
-  }
 
-  final List<Map<String, dynamic>> _appsData = const [
-    {
-      'name': 'Alfurqan',
-      'image': 'assets/images/alfuqan.jpg',
-      'url': 'https://Skylinkict.com/alfurqan',
-    },
-    {
-      'name': 'Kirbgebeya',
-      'image': 'assets/images/kirbgebeya.png',
-      'url': 'https://kirbgebeya.com/',
-    },
-    {
-      'name': 'Almathurat',
-      'image': 'assets/images/almathurat.jpg',
-      'url': 'https://Skylinkict.com/almathurat',
-    },
-    {
-      'name': 'Besirah',
-      'image': 'assets/images/besira.jpg',
-      'url': null,
-    },
-  ];
+      case BetterPlayerEventType.bufferingStart:
+        setState(() => _isBannerLoading = true);
+        break;
 
-  String _formatTimeAgo(String dateString) {
-    try {
-      final dateTime = DateTime.parse(dateString);
-      final now = DateTime.now();
-      final difference = now.difference(dateTime);
-
-      if (difference.inDays > 365) {
-        return '${(difference.inDays / 365).floor()}y ago';
-      } else if (difference.inDays > 30) {
-        return '${(difference.inDays / 30).floor()}mo ago';
-      } else if (difference.inDays > 0) {
-        return '${difference.inDays}d ago';
-      } else if (difference.inHours > 0) {
-        return '${difference.inHours}h ago';
-      } else if (difference.inMinutes > 0) {
-        return '${difference.inMinutes}m ago';
-      } else {
-        return 'Just now';
-      }
-    } catch (e) {
-      return '';
+      default:
+        break;
     }
   }
 
@@ -2109,12 +1597,12 @@ class _HomeScreenState extends State<HomeScreen>
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final isDarkMode = theme.brightness == Brightness.dark;
-    const double bannerHeight = 220.0;
+    final screenWidth = MediaQuery.of(context).size.width;
+    final bannerHeight = screenWidth / _bannerAspectRatio;
 
     return GestureDetector(
       onHorizontalDragEnd: (details) {
-        const double flingVelocity = 400.0;
-        if ((details.primaryVelocity ?? 0).abs() > flingVelocity) {
+        if ((details.primaryVelocity ?? 0).abs() > 400.0) {
           _scaffoldKey.currentState?.openDrawer();
         }
       },
@@ -2137,7 +1625,7 @@ class _HomeScreenState extends State<HomeScreen>
                     elevation: 0,
                     automaticallyImplyLeading: false,
                     flexibleSpace: FlexibleSpaceBar(
-                      background: _buildVideoBanner(context),
+                      background: _buildVideoBanner(context, bannerHeight),
                     ),
                   ),
                   SliverToBoxAdapter(
@@ -2187,14 +1675,10 @@ class _HomeScreenState extends State<HomeScreen>
                           _buildSectionHeader(theme, "Latest News", () {
                             if (_newsArticles != null &&
                                 _newsArticles!.isNotEmpty) {
-                              Navigator.pushNamed(
-                                context,
-                                '/news',
-                                arguments: {
-                                  'newsArticles': _newsArticles,
-                                  'apiBaseUrl': _apiBaseUrl,
-                                },
-                              );
+                              Navigator.pushNamed(context, '/news', arguments: {
+                                'newsArticles': _newsArticles,
+                                'apiBaseUrl': _apiBaseUrl
+                              });
                             }
                           }),
                           const SizedBox(height: 12),
@@ -2224,16 +1708,23 @@ class _HomeScreenState extends State<HomeScreen>
     );
   }
 
-  // --- BUILD WIDGETS ---
-
-  Widget _buildVideoBanner(BuildContext context) {
+  Widget _buildVideoBanner(BuildContext context, double bannerHeight) {
     return Container(
       color: Colors.black,
+      height: bannerHeight,
+      width: MediaQuery.of(context).size.width,
       child: Stack(
-        fit: StackFit.expand,
+        alignment: Alignment.center,
         children: [
-          if (_bannerWebViewController != null)
-            WebViewWidget(controller: _bannerWebViewController!),
+          if (_bannerPlayerController != null)
+            AspectRatio(
+              aspectRatio: _bannerAspectRatio,
+              child: BetterPlayer(
+                controller: _bannerPlayerController!,
+              ),
+            ),
+
+          // Loading Overlay
           if (_isBannerLoading)
             Container(
               color: Colors.black.withOpacity(0.8),
@@ -2249,6 +1740,8 @@ class _HomeScreenState extends State<HomeScreen>
                 ),
               ),
             ),
+
+          // Error Overlay
           if (_hasBannerError)
             Container(
               color: Colors.black.withOpacity(0.8),
@@ -2269,6 +1762,8 @@ class _HomeScreenState extends State<HomeScreen>
                 ],
               ),
             ),
+
+          // UI Controls (only show when playing)
           if (!_hasBannerError && !_isBannerLoading) ...[
             Positioned(
               top: 40,
@@ -2322,7 +1817,7 @@ class _HomeScreenState extends State<HomeScreen>
                     borderRadius: BorderRadius.circular(8),
                   ),
                   child: const Text(
-                    "Tap for full screen →",
+                    "Tap for full screen",
                     style: TextStyle(color: Colors.white, fontSize: 12),
                   ),
                 ),
@@ -2334,10 +1829,329 @@ class _HomeScreenState extends State<HomeScreen>
     );
   }
 
+  void _reloadBannerStream() {
+    _initializeBannerPlayer();
+  }
+
+  void _toggleMute() {
+    if (mounted) {
+      setState(() {
+        _isMuted = !_isMuted;
+      });
+      _bannerPlayerController?.setVolume(_isMuted ? 0.0 : 1.0);
+    }
+  }
+
+  void _navigateToLivePage() async {
+    await _bannerPlayerController?.pause();
+    Navigator.pushNamed(context, '/live').then((_) {
+      if (mounted) {
+        Future.delayed(const Duration(milliseconds: 500), () {
+          _bannerPlayerController?.play();
+        });
+      }
+    });
+  }
+
+  // === REST OF YOUR CODE (UNCHANGED BELOW) ===
+  // ... (All other methods: _loadDataWithCache, _refreshData, prayer times, etc.) ...
+
+  Future<void> _loadDataWithCache() async {
+    final prefs = await SharedPreferences.getInstance();
+    final lastTrendingTime = prefs.getInt(_trendingTimestampKey) ?? 0;
+    final now = DateTime.now().millisecondsSinceEpoch;
+    final shouldUseTrendingCache =
+        (now - lastTrendingTime) < (_cacheValidityMinutes * 60 * 1000);
+    if (shouldUseTrendingCache && mounted) {
+      final cachedTrending = prefs.getString(_trendingCacheKey);
+      if (cachedTrending != null) {
+        setState(() => _trendingVideos = json.decode(cachedTrending));
+      }
+    } else {
+      await prefs.remove(_trendingCacheKey);
+    }
+    final lastNewsTime = prefs.getInt(_newsTimestampKey) ?? 0;
+    final shouldUseNewsCache =
+        (now - lastNewsTime) < (_cacheValidityMinutes * 60 * 1000);
+    if (shouldUseNewsCache && mounted) {
+      final cachedNews = prefs.getString(_newsCacheKey);
+      if (cachedNews != null) {
+        setState(() => _newsArticles = json.decode(cachedNews));
+      }
+    } else {
+      await prefs.remove(_newsCacheKey);
+    }
+    await _fetchTrendingVideos();
+    await _fetchNewsArticles();
+  }
+
+  Future<void> _refreshData() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove(_trendingCacheKey);
+    await prefs.remove(_newsCacheKey);
+    await prefs.remove(_trendingTimestampKey);
+    await prefs.remove(_newsTimestampKey);
+    if (mounted) {
+      setState(() {
+        _trendingVideos = null;
+        _newsArticles = null;
+        _trendingError = null;
+        _newsError = null;
+      });
+    }
+    await Future.wait([
+      _getLocationAndPrayerTimes(),
+      _fetchTrendingVideos(forceRefresh: true),
+      _fetchNewsArticles(forceRefresh: true),
+    ]);
+  }
+
+  Future<void> _fetchTrendingVideos({bool forceRefresh = false}) async {
+    try {
+      final response = await http.get(Uri.parse(_trendingApiUrl));
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.setString(_trendingCacheKey, response.body);
+        await prefs.setInt(
+            _trendingTimestampKey, DateTime.now().millisecondsSinceEpoch);
+        if (mounted) {
+          setState(() {
+            _trendingVideos = data;
+            _trendingError = null;
+          });
+        }
+      } else {
+        throw Exception('Failed to load trending videos');
+      }
+    } catch (e) {
+      print("Trending fetch error: $e");
+      if (mounted && (_trendingVideos == null || _trendingVideos!.isEmpty)) {
+        setState(() => _trendingError = e.toString());
+      }
+    }
+  }
+
+  Future<void> _fetchNewsArticles({bool forceRefresh = false}) async {
+    try {
+      final response = await http.get(Uri.parse(_newsApiUrl));
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.setString(_newsCacheKey, response.body);
+        await prefs.setInt(
+            _newsTimestampKey, DateTime.now().millisecondsSinceEpoch);
+        if (mounted) {
+          setState(() {
+            _newsArticles = data;
+            _newsError = null;
+          });
+        }
+      } else {
+        throw Exception('Failed to load news articles');
+      }
+    } catch (e) {
+      print("News fetch error: $e");
+      if (mounted && (_newsArticles == null || _newsArticles!.isEmpty)) {
+        setState(() => _newsError = e.toString());
+      }
+    }
+  }
+
+  Future<void> _initializePrayerTimes() async {
+    final bool loadedFromCache = await _loadCachedPrayerTimes();
+    if (loadedFromCache) {
+      _updateNextPrayerAndCountdown();
+      if (mounted) setState(() => _isLoadingPrayerTimes = false);
+    }
+    await _getLocationAndPrayerTimes();
+  }
+
+  Future<bool> _loadCachedPrayerTimes() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final savedTimesJson = prefs.getString("prayerTimesIso");
+      if (savedTimesJson == null) return false;
+      final decodedTimes = jsonDecode(savedTimesJson) as Map<String, dynamic>;
+      final now = DateTime.now();
+      final cacheDateStr = decodedTimes['date'];
+      if (cacheDateStr == null ||
+          DateFormat('yyyy-MM-dd').format(DateTime.parse(cacheDateStr)) !=
+              DateFormat('yyyy-MM-dd').format(now)) {
+        return false;
+      }
+      if (mounted) {
+        setState(() {
+          _prayerTimes = {
+            'Fajr': DateTime.parse(decodedTimes['Fajr']),
+            'Dhuhr': DateTime.parse(decodedTimes['Dhuhr']),
+            'Asr': DateTime.parse(decodedTimes['Asr']),
+            'Maghrib': DateTime.parse(decodedTimes['Maghrib']),
+            'Isha': DateTime.parse(decodedTimes['Isha']),
+          };
+        });
+      }
+      return true;
+    } catch (e) {
+      return false;
+    }
+  }
+
+  Future<void> _savePrayerTimes() async {
+    final prefs = await SharedPreferences.getInstance();
+    final timesToSave = _prayerTimes
+        .map((key, value) => MapEntry(key, value.toIso8601String()));
+    timesToSave['date'] = DateTime.now().toIso8601String();
+    await prefs.setString("prayerTimesIso", jsonEncode(timesToSave));
+  }
+
+  Future<void> _getLocationAndPrayerTimes() async {
+    try {
+      LocationPermission permission = await Geolocator.checkPermission();
+      if (permission == LocationPermission.denied) {
+        permission = await Geolocator.requestPermission();
+      }
+      if (permission == LocationPermission.whileInUse ||
+          permission == LocationPermission.always) {
+        Position position = await Geolocator.getCurrentPosition(
+            desiredAccuracy: LocationAccuracy.high);
+        _calculatePrayerTimes(position.latitude, position.longitude);
+      }
+    } catch (e) {
+      // Handle error
+    } finally {
+      if (mounted && _isLoadingPrayerTimes) {
+        setState(() => _isLoadingPrayerTimes = false);
+      }
+    }
+  }
+
+  void _calculatePrayerTimes(double lat, double lng) {
+    final prayerTimesData = PrayerTimes(
+      coordinates: Coordinates(lat, lng),
+      date: DateTime.now(),
+      calculationParameters: CalculationMethod.muslimWorldLeague()
+        ..madhab = Madhab.shafi,
+    );
+    if (mounted) {
+      setState(() {
+        _prayerTimes = {
+          'Fajr': prayerTimesData.fajr!.toLocal(),
+          'Dhuhr': prayerTimesData.dhuhr!.toLocal(),
+          'Asr': prayerTimesData.asr!.toLocal(),
+          'Maghrib': prayerTimesData.maghrib!.toLocal(),
+          'Isha': prayerTimesData.isha!.toLocal(),
+        };
+        _updateNextPrayerAndCountdown();
+        _savePrayerTimes();
+      });
+    }
+  }
+
+  void _updateNextPrayerAndCountdown() {
+    final now = DateTime.now();
+    String nextPrayer = "Fajr (Tomorrow)";
+    DateTime? nextPrayerDateTime;
+    final prayerOrder = ['Fajr', 'Dhuhr', 'Asr', 'Maghrib', 'Isha'];
+    for (var prayerName in prayerOrder) {
+      final prayerTime = _prayerTimes[prayerName];
+      if (prayerTime != null && now.isBefore(prayerTime)) {
+        nextPrayer = prayerName;
+        nextPrayerDateTime = prayerTime;
+        break;
+      }
+    }
+    if (nextPrayerDateTime == null) {
+      nextPrayerDateTime = _prayerTimes['Fajr']?.add(const Duration(days: 1));
+    }
+    if (mounted) setState(() => _nextPrayerName = nextPrayer);
+    _updateCountdown();
+  }
+
+  void _updateCountdown() {
+    if (_prayerTimes.isEmpty) return;
+    final now = DateTime.now();
+    DateTime? targetTime;
+    if (_nextPrayerName.contains('Tomorrow')) {
+      targetTime = _prayerTimes['Fajr']?.add(const Duration(days: 1));
+    } else {
+      targetTime = _prayerTimes[_nextPrayerName];
+    }
+    if (targetTime == null) return;
+    if (now.isAfter(targetTime)) {
+      _updateNextPrayerAndCountdown();
+      return;
+    }
+    final duration = targetTime.difference(now);
+    final countdown =
+        "${duration.inHours.remainder(24).toString().padLeft(2, '0')}:${duration.inMinutes.remainder(60).toString().padLeft(2, '0')}:${duration.inSeconds.remainder(60).toString().padLeft(2, '0')}";
+    if (mounted) setState(() => _nextPrayerCountdown = countdown);
+  }
+
+  void _onItemTapped(int index) {
+    if (index == _selectedIndex) return;
+    String routeName = '';
+    switch (index) {
+      case 0:
+        break;
+      case 1:
+        routeName = '/media';
+        break;
+      case 2:
+        routeName = '/prayer';
+        break;
+      case 3:
+        routeName = '/chatbot';
+        break;
+      case 4:
+        routeName = '/subapps';
+        break;
+    }
+    if (routeName.isNotEmpty) {
+      Navigator.pushReplacementNamed(context, routeName);
+    }
+  }
+
+  final List<Map<String, dynamic>> _appsData = const [
+    {
+      'name': 'Alfurqan',
+      'image': 'assets/images/alfuqan.jpg',
+      'url': 'https://Skylinkict.com/alfurqan'
+    },
+    {
+      'name': 'Kirbgebeya',
+      'image': 'assets/images/kirbgebeya.png',
+      'url': 'https://kirbgebeya.com/'
+    },
+    {
+      'name': 'Almathurat',
+      'image': 'assets/images/almathurat.jpg',
+      'url': 'https://Skylinkict.com/almathurat'
+    },
+    {'name': 'Besirah', 'image': 'assets/images/besira.jpg', 'url': null},
+  ];
+
+  String _formatTimeAgo(String dateString) {
+    try {
+      final dateTime = DateTime.parse(dateString);
+      final now = DateTime.now();
+      final difference = now.difference(dateTime);
+      if (difference.inDays > 365)
+        return '${(difference.inDays / 365).floor()}y ago';
+      if (difference.inDays > 30)
+        return '${(difference.inDays / 30).floor()}mo ago';
+      if (difference.inDays > 0) return '${difference.inDays}d ago';
+      if (difference.inHours > 0) return '${difference.inHours}h ago';
+      if (difference.inMinutes > 0) return '${difference.inMinutes}m ago';
+      return 'Just now';
+    } catch (e) {
+      return '';
+    }
+  }
+
   Widget _buildPrayerTimesSection(ThemeData theme, bool isDarkMode) {
     const prayerOrder = ['Fajr', 'Dhuhr', 'Asr', 'Maghrib', 'Isha'];
     final timeFormatter = DateFormat("h:mm a");
-
     return Container(
       padding: const EdgeInsets.all(16.0),
       decoration: BoxDecoration(
@@ -2354,18 +2168,13 @@ class _HomeScreenState extends State<HomeScreen>
                     Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(
-                          'Next Prayer: $_nextPrayerName',
-                          style: theme.textTheme.titleMedium?.copyWith(
-                              fontWeight: FontWeight.bold,
-                              color: AppColors.primaryBlue),
-                        ),
-                        Text(
-                          'in $_nextPrayerCountdown',
-                          style: theme.textTheme.bodyLarge?.copyWith(
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
+                        Text('Next Prayer: $_nextPrayerName',
+                            style: theme.textTheme.titleMedium?.copyWith(
+                                fontWeight: FontWeight.bold,
+                                color: AppColors.primaryBlue)),
+                        Text('in $_nextPrayerCountdown',
+                            style: theme.textTheme.bodyLarge
+                                ?.copyWith(fontWeight: FontWeight.w600)),
                       ],
                     ),
                     IconButton(
@@ -2409,38 +2218,35 @@ class _HomeScreenState extends State<HomeScreen>
     final parts = time.split(' ');
     final timeString = parts[0];
     final periodString = parts.length > 1 ? parts[1] : '';
-
-    final activeColor = AppColors.primaryBlue;
-    final inactiveColor = theme.textTheme.bodyMedium?.color;
-    final inactiveHintColor = theme.hintColor;
-
-    return Column(
-      children: [
-        Text(
-          prayerName,
-          style: theme.textTheme.bodyMedium?.copyWith(
-            fontWeight: isActive ? FontWeight.bold : FontWeight.normal,
-            color: isActive ? activeColor : inactiveColor,
-          ),
-          textAlign: TextAlign.center,
-        ),
-        const SizedBox(height: 8),
-        Text(
-          timeString,
-          style: theme.textTheme.titleSmall?.copyWith(
-            fontWeight: isActive ? FontWeight.bold : FontWeight.normal,
-            color: isActive ? activeColor : inactiveColor,
-          ),
-          textAlign: TextAlign.center,
-        ),
-        if (periodString.isNotEmpty)
-          Text(
-            periodString,
-            style: theme.textTheme.bodySmall?.copyWith(
-              color: isActive ? activeColor : inactiveHintColor,
-            ),
-          ),
-      ],
+    final Color nameAndPrayerTimeColor =
+        isActive ? Colors.white : theme.textTheme.bodyLarge!.color!;
+    final Color periodColor = isActive ? Colors.white70 : theme.hintColor;
+    final FontWeight fontWeight =
+        isActive ? FontWeight.bold : FontWeight.normal;
+    return AnimatedContainer(
+      duration: const Duration(milliseconds: 400),
+      curve: Curves.easeInOut,
+      padding: const EdgeInsets.symmetric(vertical: 8.0, horizontal: 4.0),
+      decoration: BoxDecoration(
+        color: isActive ? AppColors.primaryBlue : Colors.transparent,
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Column(
+        children: [
+          Text(prayerName,
+              style: theme.textTheme.bodyMedium?.copyWith(
+                  fontWeight: fontWeight, color: nameAndPrayerTimeColor),
+              textAlign: TextAlign.center),
+          const SizedBox(height: 8),
+          Text(timeString,
+              style: theme.textTheme.titleSmall?.copyWith(
+                  fontWeight: fontWeight, color: nameAndPrayerTimeColor),
+              textAlign: TextAlign.center),
+          if (periodString.isNotEmpty)
+            Text(periodString,
+                style: theme.textTheme.bodySmall?.copyWith(color: periodColor)),
+        ],
+      ),
     );
   }
 
@@ -2475,20 +2281,19 @@ class _HomeScreenState extends State<HomeScreen>
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: List.generate(
-          5,
-          (_) => Expanded(
-            child: Column(
-              children: [
-                Container(
-                    width: 40,
-                    height: 12,
-                    color: Colors.white,
-                    margin: const EdgeInsets.only(bottom: 6)),
-                Container(width: 50, height: 16, color: Colors.white),
-              ],
-            ),
-          ),
-        ),
+            5,
+            (_) => Expanded(
+                  child: Column(
+                    children: [
+                      Container(
+                          width: 40,
+                          height: 12,
+                          color: Colors.white,
+                          margin: const EdgeInsets.only(bottom: 6)),
+                      Container(width: 50, height: 16, color: Colors.white),
+                    ],
+                  ),
+                )),
       ),
     );
   }
@@ -2521,7 +2326,6 @@ class _HomeScreenState extends State<HomeScreen>
   Widget _buildTrendingItem(BuildContext context, ThemeData theme,
       dynamic video, int index, bool isDarkMode) {
     String thumbnailUrl = video['thumbnail'] ?? '';
-
     if (thumbnailUrl.isNotEmpty && !thumbnailUrl.startsWith('http')) {
       if (thumbnailUrl.startsWith('/')) {
         thumbnailUrl = '$_apiBaseUrl$thumbnailUrl';
@@ -2529,7 +2333,6 @@ class _HomeScreenState extends State<HomeScreen>
         thumbnailUrl = '$_apiBaseUrl/$thumbnailUrl';
       }
     }
-
     return Container(
       width: MediaQuery.of(context).size.width * 0.65,
       margin: const EdgeInsets.only(right: 12),
@@ -2543,11 +2346,9 @@ class _HomeScreenState extends State<HomeScreen>
           final videoUrl = video['videoUrl'] as String?;
           if (videoUrl == null || videoUrl.isEmpty) {
             ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text('No video URL available.')),
-            );
+                const SnackBar(content: Text('No video URL available.')));
             return;
           }
-
           String? videoId = YoutubePlayer.convertUrlToId(videoUrl);
           if (videoId != null && videoId.isNotEmpty) {
             final List<Video> videoPlaylist =
@@ -2564,10 +2365,9 @@ class _HomeScreenState extends State<HomeScreen>
                 title: item['title'] ?? 'Untitled',
                 thumbnailUrl: thumb,
                 publishedAt: DateTime.now(),
-                privacyStatus: '', // privacyStatus is not available here
+                privacyStatus: '',
               );
             }).toList();
-
             Navigator.push(
               context,
               MaterialPageRoute(
@@ -2580,22 +2380,18 @@ class _HomeScreenState extends State<HomeScreen>
               ),
             );
           } else {
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(
-                  content: Text('Could not play video (Invalid URL).')),
-            );
+            ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+                content: Text('Could not play video (Invalid URL).')));
           }
         },
         child: Stack(
           fit: StackFit.expand,
           children: [
             if (thumbnailUrl.isNotEmpty)
-              Image.network(
-                thumbnailUrl,
-                fit: BoxFit.cover,
-                errorBuilder: (context, error, stackTrace) =>
-                    Container(color: theme.splashColor),
-              )
+              Image.network(thumbnailUrl,
+                  fit: BoxFit.cover,
+                  errorBuilder: (context, error, stackTrace) =>
+                      Container(color: theme.splashColor))
             else
               Container(color: theme.splashColor),
             Container(
@@ -2691,10 +2487,7 @@ class _HomeScreenState extends State<HomeScreen>
         decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(16),
             gradient: const LinearGradient(
-              colors: [
-                AppColors.primaryBlue,
-                AppColors.accentBlue,
-              ],
+              colors: [AppColors.primaryBlue, AppColors.accentBlue],
               begin: Alignment.topLeft,
               end: Alignment.bottomRight,
             )),
@@ -2759,20 +2552,14 @@ class _HomeScreenState extends State<HomeScreen>
         },
         child: Column(
           children: [
-            CircleAvatar(
-              radius: 35,
-              backgroundImage: AssetImage(app['image']),
-            ),
+            CircleAvatar(radius: 35, backgroundImage: AssetImage(app['image'])),
             const SizedBox(height: 8),
-            Text(
-              app['name'],
-              textAlign: TextAlign.center,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: theme.textTheme.bodyMedium?.copyWith(
-                fontWeight: FontWeight.w500,
-              ),
-            ),
+            Text(app['name'],
+                textAlign: TextAlign.center,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: theme.textTheme.bodyMedium
+                    ?.copyWith(fontWeight: FontWeight.w500)),
           ],
         ),
       ),
@@ -2814,7 +2601,6 @@ class _HomeScreenState extends State<HomeScreen>
         ),
       );
     }
-
     return ListView.separated(
       shrinkWrap: true,
       physics: const NeverScrollableScrollPhysics(),
@@ -2832,25 +2618,23 @@ class _HomeScreenState extends State<HomeScreen>
             thumbnailUrl = '$_apiBaseUrl/$thumbnailUrl';
           }
         }
+        final isDarkMode = theme.brightness == Brightness.dark;
+        final cardBackgroundColor =
+            isDarkMode ? AppColors.surfaceDark : const Color(0xFFF7F9FC);
         final newsCard = Container(
           decoration: BoxDecoration(
-            color: theme.cardColor,
+            color: cardBackgroundColor,
             borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: theme.dividerColor.withOpacity(0.8)),
           ),
           child: InkWell(
             borderRadius: BorderRadius.circular(12),
             onTap: () {
               if (newsUrl != null && newsUrl.isNotEmpty) {
                 Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (context) => EmbeddedWebScreen(
-                      url: newsUrl,
-                      appName: headline,
-                    ),
-                  ),
-                );
+                    context,
+                    MaterialPageRoute(
+                        builder: (context) => EmbeddedWebScreen(
+                            url: newsUrl, appName: headline)));
               }
             },
             child: Padding(
@@ -2861,19 +2645,15 @@ class _HomeScreenState extends State<HomeScreen>
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(
-                          headline,
-                          style: theme.textTheme.bodyLarge
-                              ?.copyWith(fontWeight: FontWeight.bold),
-                          maxLines: 3,
-                          overflow: TextOverflow.ellipsis,
-                        ),
+                        Text(headline,
+                            style: theme.textTheme.bodyMedium
+                                ?.copyWith(fontWeight: FontWeight.bold),
+                            maxLines: 3,
+                            overflow: TextOverflow.ellipsis),
                         const SizedBox(height: 8),
-                        Text(
-                          _formatTimeAgo(item["createdAt"] ?? ''),
-                          style: theme.textTheme.bodySmall
-                              ?.copyWith(color: theme.hintColor),
-                        ),
+                        Text(_formatTimeAgo(item["createdAt"] ?? ''),
+                            style: theme.textTheme.bodySmall
+                                ?.copyWith(color: theme.hintColor)),
                       ],
                     ),
                   ),
@@ -2881,34 +2661,28 @@ class _HomeScreenState extends State<HomeScreen>
                   ClipRRect(
                     borderRadius: BorderRadius.circular(8),
                     child: thumbnailUrl.isNotEmpty
-                        ? Image.network(
-                            thumbnailUrl,
+                        ? Image.network(thumbnailUrl,
                             width: 80,
                             height: 80,
                             fit: BoxFit.cover,
                             errorBuilder: (c, e, s) => Container(
-                              width: 80,
-                              height: 80,
-                              color: theme.splashColor,
-                              child: const Icon(Icons.broken_image, size: 30),
-                            ),
-                          )
+                                width: 80,
+                                height: 80,
+                                color: theme.splashColor,
+                                child:
+                                    const Icon(Icons.broken_image, size: 30)))
                         : Container(
                             width: 80,
                             height: 80,
                             color: theme.splashColor,
-                            child: const Icon(Icons.image, size: 30),
-                          ),
+                            child: const Icon(Icons.image, size: 30)),
                   ),
                 ],
               ),
             ),
           ),
         );
-        return AnimatedListItem(
-          index: index,
-          child: newsCard,
-        );
+        return AnimatedListItem(index: index, child: newsCard);
       },
     );
   }
@@ -2980,9 +2754,7 @@ class _HomeScreenState extends State<HomeScreen>
     return Container(
       decoration: BoxDecoration(
         color: theme.cardColor,
-        border: Border(
-          top: BorderSide(color: theme.dividerColor, width: 1.0),
-        ),
+        border: Border(top: BorderSide(color: theme.dividerColor, width: 1.0)),
       ),
       child: BottomNavigationBar(
           currentIndex: _selectedIndex,
