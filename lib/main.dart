@@ -1,6 +1,20 @@
-// lib/main.dart (FINAL VERSION)
-import 'dart:async';
+// lib/main.dart (FINAL STABLE VERSION)
+
+import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:flutter_background_service/flutter_background_service.dart';
+import 'package:logger/logger.dart';
+import 'package:audioplayers/audioplayers.dart';
+import 'package:flutter_local_notifications/flutter_local_notifications.dart';
+import 'package:android_alarm_manager_plus/android_alarm_manager_plus.dart';
+import 'package:minber/services/adhan_background_service.dart';
+import 'package:permission_handler/permission_handler.dart';
+import 'package:flutter_timezone/flutter_timezone.dart';
+import 'package:timezone/timezone.dart' as tz;
+import 'package:timezone/data/latest_all.dart' as tz;
+
+// --- Your other project imports ---
+import 'dart:async';
 import 'package:minber/screens/about_us_page.dart';
 import 'package:minber/screens/coming_soon_page.dart';
 import 'package:minber/screens/help_and_support_page.dart';
@@ -14,20 +28,14 @@ import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:workmanager/workmanager.dart';
 import 'package:provider/provider.dart';
-
-// --- SERVICE IMPORTS ---
-import 'services/notification_service.dart'; // For LOCAL prayer notifications
-import 'services/firebase-notification.dart'; // For FIREBASE push notifications
-import 'widgets/in_app_notification_banner.dart'; // THE NEW BANNER WIDGET
-
-// --- PROVIDER & CORE IMPORTS ---
+import 'services/notification_service.dart';
+import 'services/firebase-notification.dart';
+import 'widgets/in_app_notification_banner.dart';
 import 'providers/user_provider.dart';
 import 'providers/prayer_provider.dart';
-import 'providers/notification_provider.dart'; // Import the provider
+import 'providers/notification_provider.dart';
 import 'core/app_colors.dart';
 import 'core/theme_notifier.dart';
-
-// --- SCREEN IMPORTS ---
 import 'screens/onboarding_screen.dart';
 import 'screens/home_screen.dart';
 import 'screens/login_screen.dart';
@@ -51,16 +59,93 @@ import 'screens/reset_password_screen.dart';
 import 'services/api_service.dart';
 import 'firebase_options.dart';
 
+// --- SHARED TOP-LEVEL OBJECTS AND CALLBACKS ---
+final logger = Logger();
+final audioPlayer = AudioPlayer();
+final flutterLocalNotificationsPlugin = FlutterLocalNotificationsPlugin();
 final RouteObserver<ModalRoute<void>> routeObserver =
     RouteObserver<ModalRoute<void>>();
 
-// --- BACKGROUND TASK DEFINITION (UNCHANGED) ---
+/// This shared function initializes all notification-related plugins.
+Future<void> initializeNotifications() async {
+  tz.initializeTimeZones();
+  try {
+    final String timeZoneName = await FlutterTimezone.getLocalTimezone();
+    tz.setLocalLocation(tz.getLocation(timeZoneName));
+  } catch (e) {
+    logger.e("Error getting local timezone: $e");
+  }
+
+  const android = AndroidInitializationSettings('@drawable/notification_icon');
+  const settings = InitializationSettings(android: android);
+  await flutterLocalNotificationsPlugin.initialize(settings,
+      onDidReceiveBackgroundNotificationResponse: notificationTapBackground);
+
+  final androidImplementation =
+      flutterLocalNotificationsPlugin.resolvePlatformSpecificImplementation<
+          AndroidFlutterLocalNotificationsPlugin>();
+
+  const AndroidNotificationChannel adhanChannel = AndroidNotificationChannel(
+    'adhan_channel',
+    'Adhan Notifications',
+    description: 'Plays the full Adhan for prayer times.',
+    importance: Importance.max,
+    playSound: false,
+  );
+  await androidImplementation?.createNotificationChannel(adhanChannel);
+
+  const AndroidNotificationChannel weeklyChannel = AndroidNotificationChannel(
+    'weekly_channel',
+    'Weekly Notifications',
+    description: 'Reminder for Salawat Askār.',
+    importance: Importance.max,
+  );
+  await androidImplementation?.createNotificationChannel(weeklyChannel);
+}
+
+/// The function that the AlarmManager will call when a prayer time is reached.
+@pragma('vm:entry-point')
+void fireAdhanAlarm(int id, Map<String, dynamic> params) async {
+  WidgetsFlutterBinding.ensureInitialized();
+  await initializeAdhanService();
+
+  final logger = Logger();
+  final prayerName = params['prayerName'] ?? 'Prayer Time';
+  logger.i("⏰ ALARM FIRED for $prayerName. Starting Adhan background service.");
+
+  final service = FlutterBackgroundService();
+  final isRunning = await service.startService();
+  if (isRunning) {
+    service.invoke('startAdhan', {'prayerName': prayerName});
+  } else {
+    logger.e("Failed to start the background service.");
+  }
+}
+
+// /// This function handles taps or dismissals of our Adhan notification.
+// @pragma('vm:entry-point')
+// void notificationTapBackground(NotificationResponse notificationResponse) {
+//   final payload = notificationResponse.payload;
+//   if (payload != null && payload.startsWith('silence_')) {
+//     final id = int.tryParse(payload.split('_')[1]);
+//     logger.i(
+//         "ACTION: Notification interaction for Adhan ID: $id. Stopping audio.");
+//     audioPlayer.stop();
+//     if (id != null) {
+//       flutterLocalNotificationsPlugin.cancel(id);
+//     }
+//   } else if (payload == "salawat") {
+//     // Handle other background taps if needed
+//   }
+// }
+
+// --- Your other top-level functions (callbackDispatcher, _firebaseMessagingBackgroundHandler) ---
 @pragma('vm:entry-point')
 void callbackDispatcher() {
   Workmanager().executeTask((task, inputData) async {
     debugPrint("🌍 Native WorkManager task executing: $task");
     WidgetsFlutterBinding.ensureInitialized();
-    await NotificationService.init();
+    await initializeNotifications(); // Use the shared initializer
 
     try {
       await NotificationService.scheduleDailyAndWeeklyNotifications();
@@ -73,7 +158,6 @@ void callbackDispatcher() {
   });
 }
 
-// --- FIREBASE BACKGROUND HANDLER (UNCHANGED) ---
 @pragma('vm:entry-point')
 Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
   await Firebase.initializeApp(
@@ -87,10 +171,21 @@ Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
   );
 }
 
-// --- MAIN FUNCTION (UNCHANGED) ---
+// --- UPDATED main() FUNCTION ---
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
+  // Initialize background systems
+  if (Platform.isAndroid) {
+    await AndroidAlarmManager.initialize();
+  }
+  await initializeAdhanService(); // For the Adhan player
+
+  // ✅ RESTORED: Call the proper init functions for each service.
+  await NotificationService.init();
+  await FirebaseNotificationService.init();
+
+  // The rest of your main function is correct
   final savedThemeMode = await loadThemePreference();
   themeNotifier = ValueNotifier<ThemeMode>(savedThemeMode);
 
@@ -98,8 +193,6 @@ Future<void> main() async {
     await Firebase.initializeApp(
       options: DefaultFirebaseOptions.currentPlatform,
     );
-    debugPrint(
-        "✅ Firebase Core initialized successfully with project options.");
     FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
   } catch (e) {
     debugPrint("🔥 FATAL: Firebase Core initialization failed: $e");
@@ -113,13 +206,10 @@ Future<void> main() async {
     constraints: Constraints(networkType: NetworkType.connected),
   );
 
-  final prefs = await SharedPreferences.getInstance();
-  await NotificationService.init();
-  await FirebaseNotificationService.init();
-
   NotificationService.scheduleDailyAndWeeklyNotifications();
   setupFirebasePushNotifications();
 
+  final prefs = await SharedPreferences.getInstance();
   final isLoggedIn = prefs.getBool('isLoggedIn') ?? false;
   final seenOnboarding = prefs.getBool('onboarding_complete') ?? false;
 
@@ -134,6 +224,8 @@ Future<void> main() async {
   runApp(MyApp(initialRoute: initialRoute));
 }
 
+// --- The rest of your file (setupFirebasePushNotifications, MyApp, etc.) is unchanged ---
+// ...
 // --- FIREBASE PUSH NOTIFICATION SETUP (UPDATED & CORRECTED) ---
 Future<void> setupFirebasePushNotifications() async {
   try {
