@@ -6,7 +6,6 @@ import 'package:flutter_background_service/flutter_background_service.dart';
 import 'package:logger/logger.dart';
 import 'package:audioplayers/audioplayers.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
-import 'package:android_alarm_manager_plus/android_alarm_manager_plus.dart';
 import 'package:minber/services/adhan_background_service.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:flutter_timezone/flutter_timezone.dart';
@@ -103,89 +102,91 @@ Future<void> initializeNotifications() async {
   await androidImplementation?.createNotificationChannel(weeklyChannel);
 }
 
-/// The function that the AlarmManager will call when a prayer time is reached.
 @pragma('vm:entry-point')
-void fireAdhanAlarm(int id, Map<String, dynamic> params) async {
-  WidgetsFlutterBinding.ensureInitialized();
-  await initializeAdhanService();
-
+void notificationTapBackground(NotificationResponse notificationResponse) {
   final logger = Logger();
-  final prayerName = params['prayerName'] ?? 'Prayer Time';
-  logger.i("⏰ ALARM FIRED for $prayerName. Starting Adhan background service.");
-
-  final service = FlutterBackgroundService();
-  final isRunning = await service.startService();
-  if (isRunning) {
-    service.invoke('startAdhan', {'prayerName': prayerName});
-  } else {
-    logger.e("Failed to start the background service.");
+  // This is the handler for the Adhan notification's "Silence" button
+  if (notificationResponse.actionId == 'silence_action') {
+    logger.i(
+        "ACTION: 'Silence' button tapped in background. Invoking stopService.");
+    FlutterBackgroundService().invoke('stopService');
+  }
+  // This handles taps on the weekly Salawat notification
+  else if (notificationResponse.payload == "salawat") {
+    logger.i("ACTION: Salawat notification tapped in background.");
+    // Note: Navigation from here is not reliable. Tapping the notification
+    // should bring the app to the foreground, where onMessageOpenedApp handles navigation.
   }
 }
 
-// /// This function handles taps or dismissals of our Adhan notification.
-// @pragma('vm:entry-point')
-// void notificationTapBackground(NotificationResponse notificationResponse) {
-//   final payload = notificationResponse.payload;
-//   if (payload != null && payload.startsWith('silence_')) {
-//     final id = int.tryParse(payload.split('_')[1]);
-//     logger.i(
-//         "ACTION: Notification interaction for Adhan ID: $id. Stopping audio.");
-//     audioPlayer.stop();
-//     if (id != null) {
-//       flutterLocalNotificationsPlugin.cancel(id);
-//     }
-//   } else if (payload == "salawat") {
-//     // Handle other background taps if needed
-//   }
-// }
-
-// --- Your other top-level functions (callbackDispatcher, _firebaseMessagingBackgroundHandler) ---
 @pragma('vm:entry-point')
 void callbackDispatcher() {
   Workmanager().executeTask((task, inputData) async {
-    debugPrint("🌍 Native WorkManager task executing: $task");
-    WidgetsFlutterBinding.ensureInitialized();
-    await initializeNotifications(); // Use the shared initializer
-
-    try {
-      await NotificationService.scheduleDailyAndWeeklyNotifications();
-      debugPrint("✅ Background prayer notification scheduling complete.");
-      return Future.value(true);
-    } catch (err) {
-      debugPrint("❌ Error in background prayer task: $err");
-      return Future.value(false);
-    }
+    debugPrint("WorkManager: Task executing ($task)");
+    // We will create this function in the next step.
+    // This is the new brain of our scheduling.
+    await NotificationService.scheduleDailyAndWeeklyNotifications();
+    debugPrint("WorkManager: Task completed.");
+    return Future.value(true);
   });
 }
 
 @pragma('vm:entry-point')
 Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
+  // Standard initialization
   await Firebase.initializeApp(
     options: DefaultFirebaseOptions.currentPlatform,
   );
   await FirebaseNotificationService.init();
-  debugPrint("📲 Handling a background Firebase message: ${message.messageId}");
+  logger.i("📲 Handling a background Firebase message: ${message.messageId}");
+
+  final notificationId = message.data['id']?.toString();
+
+  // --- 🔥 THE CORE FIX: MANIPULATE STORED STATE DIRECTLY ---
+  // If a notification arrives with an ID, we assume it's new or re-triggered,
+  // and we must ensure it is not marked as 'read'.
+  if (notificationId != null) {
+    logger.i("Background Push for ID: $notificationId. Ensuring it's unread.");
+    try {
+      // Directly access the device's storage from the background.
+      final prefs = await SharedPreferences.getInstance();
+
+      // Use the EXACT same key the NotificationProvider uses.
+      const key = 'read_notifications_set';
+
+      // Load the list of read IDs that are currently saved.
+      final List<String> readIds = prefs.getStringList(key) ?? [];
+
+      // If the ID of the incoming notification was in the list, remove it.
+      if (readIds.contains(notificationId)) {
+        readIds.remove(notificationId);
+        // Save the modified list back to storage.
+        await prefs.setStringList(key, readIds);
+        logger.i(
+            "✅ State Fixed: Removed '$notificationId' from read list in background.");
+      } else {
+        logger.i(
+            "'$notificationId' was not in the read list. No state change needed.");
+      }
+    } catch (e) {
+      logger.e("❌ Error updating read status in background: $e");
+    }
+  }
+
+  // Finally, show the local notification to the user as before.
   FirebaseNotificationService.showLocalNotification(
     title: message.data['title'] ?? 'New Message',
     body: message.data['body'] ?? 'You have a new message from Minber TV.',
   );
 }
 
-// --- UPDATED main() FUNCTION ---
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  // Initialize background systems
-  if (Platform.isAndroid) {
-    await AndroidAlarmManager.initialize();
-  }
-  await initializeAdhanService(); // For the Adhan player
-
-  // ✅ RESTORED: Call the proper init functions for each service.
+  await initializeAdhanService();
   await NotificationService.init();
   await FirebaseNotificationService.init();
 
-  // The rest of your main function is correct
   final savedThemeMode = await loadThemePreference();
   themeNotifier = ValueNotifier<ThemeMode>(savedThemeMode);
 
@@ -198,15 +199,24 @@ Future<void> main() async {
     debugPrint("🔥 FATAL: Firebase Core initialization failed: $e");
   }
 
+  // --- WORKMANAGER REGISTRATION (REMAINS THE SAME) ---
   await Workmanager().initialize(callbackDispatcher, isInDebugMode: true);
   await Workmanager().registerPeriodicTask(
-    "1",
-    "dailyPrayerNotificationScheduler",
-    frequency: const Duration(hours: 24),
-    constraints: Constraints(networkType: NetworkType.connected),
+    "prayer_notification_scheduler",
+    "schedulePrayerNotifications",
+    frequency: const Duration(hours: 12),
+    initialDelay:
+        const Duration(minutes: 10), // We can make this delay longer now
+    constraints: Constraints(
+      networkType: NetworkType.notRequired,
+    ),
   );
 
+  // --- ✅ ADD THIS BACK IN FOR IMMEDIATE SCHEDULING ---
+  // This will run ONCE every time the user opens the app, ensuring
+  // the schedule is always fresh. WorkManager is the long-term backup.
   NotificationService.scheduleDailyAndWeeklyNotifications();
+
   setupFirebasePushNotifications();
 
   final prefs = await SharedPreferences.getInstance();
@@ -224,70 +234,59 @@ Future<void> main() async {
   runApp(MyApp(initialRoute: initialRoute));
 }
 
-// --- The rest of your file (setupFirebasePushNotifications, MyApp, etc.) is unchanged ---
-// ...
-// --- FIREBASE PUSH NOTIFICATION SETUP (UPDATED & CORRECTED) ---
+// --- CHAIN OF EVIDENCE: STEP 1 ---
 Future<void> setupFirebasePushNotifications() async {
   try {
     FirebaseMessaging messaging = FirebaseMessaging.instance;
-
-    NotificationSettings settings = await messaging.requestPermission();
-    if (settings.authorizationStatus != AuthorizationStatus.authorized) {
-      debugPrint('🚫 Firebase Messaging permission denied.');
-      return;
-    }
-    debugPrint('✅ Firebase Messaging permission granted.');
-
+    await messaging.requestPermission();
     await messaging.subscribeToTopic('all');
-    debugPrint("📢 Subscribed to Firebase topic: all");
-
-    final token = await messaging.getToken();
-    debugPrint('🔥 Initial FCM Device Token: $token');
 
     FirebaseMessaging.instance.onTokenRefresh.listen((newFcmToken) async {
-      debugPrint('🔄 FCM Token has been refreshed. New token: $newFcmToken');
       final prefs = await SharedPreferences.getInstance();
       final accessToken = prefs.getString('accessToken');
       if (accessToken != null) {
-        debugPrint('User is logged in. Updating refreshed token on server...');
         await ApiService.updateFcmToken(newFcmToken, accessToken);
-      } else {
-        debugPrint('User is not logged in. No need to update token on server.');
       }
-    }).onError((err) {
-      debugPrint("❌ Error in onTokenRefresh listener: $err");
     });
 
-    // --- ✅ FIX 1: The provider refresh logic is now correctly INSIDE the listener ---
     FirebaseMessaging.onMessage.listen((RemoteMessage message) {
-      debugPrint(
-          "💬 Firebase foreground message received: ${message.notification?.title}");
-      String title = message.notification?.title ??
-          message.data['title'] ??
-          "New Notification";
-      String body = message.notification?.body ?? message.data['body'] ?? "";
+      logger.i("--- [PUSH NOTIFICATION RECEIVED IN FOREGROUND] ---");
+      logger.d("RAW PAYLOAD: ${message.data}");
 
-      // Show the new, custom, animated banner from the top
+      final title = message.data['title'] ??
+          message.notification?.title ??
+          "New Notification";
+      final body = message.data['body'] ?? message.notification?.body ?? "";
       showOverlayNotification(title: title, body: body);
 
-      // Trigger a live refresh for the badge count
       final context = NotificationService.navigatorKey.currentContext;
-      if (context != null) {
-        final provider =
-            Provider.of<NotificationProvider>(context, listen: false);
+      if (context == null) {
+        logger.e("❌ CONTEXT IS NULL. Cannot update provider.");
+        return;
+      }
+
+      final provider =
+          Provider.of<NotificationProvider>(context, listen: false);
+      final String? notificationId = message.data['id']?.toString();
+
+      // --- ✅ THIS IS THE CORE CHANGE ---
+      // Replace the old logic with a call to our new, robust method.
+      if (notificationId != null) {
+        provider.markAsUnreadAndRefresh(notificationId);
+      } else {
+        // Fallback remains the same if there's no ID.
+        logger.w("⚠️ ID missing in payload. Falling back to full refresh.");
         provider.fetchNotifications();
-        debugPrint("🔄 Triggered live refresh of notifications provider.");
       }
     });
 
     FirebaseMessaging.onMessageOpenedApp.listen((RemoteMessage message) {
-      debugPrint(
-          '🚀 App opened from Firebase notification: ${message.notification?.title}');
+      logger.i("🚀 App opened from a tapped notification.");
       NotificationService.navigatorKey.currentState
           ?.pushNamed('/notifications');
     });
   } catch (e) {
-    debugPrint("❌ ERROR setting up Firebase Push Notifications: $e");
+    logger.f("❌ FATAL ERROR setting up Firebase Push Notifications: $e");
   }
 }
 

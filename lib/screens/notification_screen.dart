@@ -1,7 +1,8 @@
-// lib/screens/notification_screen.dart (FIXED)
+// lib/screens/notification_screen.dart (CORRECTED VERSION)
 
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import 'package:minber/main.dart';
 import 'package:provider/provider.dart';
 import 'package:shimmer/shimmer.dart';
 
@@ -15,17 +16,11 @@ class NotificationsPage extends StatefulWidget {
 }
 
 class _NotificationsPageState extends State<NotificationsPage> {
-  @override
-  void initState() {
-    super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      _refreshNotifications();
-    });
-  }
-
   Future<void> _refreshNotifications() async {
-    await Provider.of<NotificationProvider>(context, listen: false)
-        .fetchNotifications();
+    if (mounted) {
+      await Provider.of<NotificationProvider>(context, listen: false)
+          .fetchNotifications();
+    }
   }
 
   String _formatTimestamp(String? dateString) {
@@ -35,17 +30,12 @@ class _NotificationsPageState extends State<NotificationsPage> {
       final now = DateTime.now();
       final difference = now.difference(dateTime);
 
-      if (difference.inDays == 0) {
-        if (difference.inHours < 1) {
-          if (difference.inMinutes < 1) return 'Just now';
-          return '${difference.inMinutes}m ago';
-        }
-        return '${difference.inHours}h ago';
-      } else if (difference.inDays == 1) {
-        return 'Yesterday at ${DateFormat.jm().format(dateTime)}';
-      } else {
-        return DateFormat('MMM d, yyyy').format(dateTime);
-      }
+      if (difference.inSeconds < 60) return 'Just now';
+      if (difference.inMinutes < 60) return '${difference.inMinutes}m ago';
+      if (difference.inHours < 24) return '${difference.inHours}h ago';
+      if (difference.inDays == 1) return 'Yesterday';
+
+      return DateFormat('MMM d, yyyy').format(dateTime);
     } catch (e) {
       return '';
     }
@@ -53,6 +43,7 @@ class _NotificationsPageState extends State<NotificationsPage> {
 
   @override
   Widget build(BuildContext context) {
+    // Use .watch() here so the UI rebuilds when the provider's data changes.
     final notificationProvider = context.watch<NotificationProvider>();
 
     return Scaffold(
@@ -93,15 +84,17 @@ class _NotificationsPageState extends State<NotificationsPage> {
       itemCount: notifications.length,
       itemBuilder: (context, index) {
         final n = notifications[index];
-        // ✅ FIXED: Changed '_id' to 'id' to match your API response.
         final notificationId = n['id']?.toString() ?? index.toString();
         final isRead = provider.isRead(notificationId);
+
+        logger.i(
+            "--- [CHAIN 3/3] UI: Building item for ID '$notificationId'. Provider says isRead = $isRead ---");
 
         return _NotificationItem(
           key: ValueKey(notificationId),
           title: n['title'] ?? 'Untitled Notification',
           body: n['body'] ?? 'No message content.',
-          timestamp: _formatTimestamp(n['createdAt']),
+          timestamp: _formatTimestamp(n['updatedAt'] ?? n['createdAt']),
           isRead: isRead,
           onTap: () {
             provider.markAsRead(notificationId);
@@ -112,7 +105,8 @@ class _NotificationsPageState extends State<NotificationsPage> {
   }
 }
 
-// --- WIDGETS (Paste your existing _NotificationItem, _NotificationListShimmer, and _EmptyState widgets here) ---
+// --- WIDGETS (UNCHANGED) ---
+// (The _NotificationItem, _NotificationListShimmer, and _EmptyState widgets below are unchanged)
 
 class _NotificationItem extends StatelessWidget {
   final String title;

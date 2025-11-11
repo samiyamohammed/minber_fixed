@@ -1,9 +1,10 @@
-// lib/screens/hijri_calendar.dart (Fully Corrected & Ready to Paste)
+// lib/screens/hijri_calendar.dart (Fully Corrected & With Note Feature)
 
 import 'package:flutter/material.dart';
 import 'package:hijri/hijri_calendar.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:geocoding/geocoding.dart';
+import 'package:shared_preferences/shared_preferences.dart'; // NEW: Import shared_preferences
 
 class HijriCalendarPage extends StatefulWidget {
   const HijriCalendarPage({super.key});
@@ -19,6 +20,9 @@ class _HijriCalendarPageState extends State<HijriCalendarPage> {
   int _selectedIndex = 2;
 
   String _locationName = "Fetching location...";
+
+  // NEW: State variable to hold the notes
+  final Map<String, String> _notes = {};
 
   static const _gregorianMonths = <String>[
     'January',
@@ -60,12 +64,51 @@ class _HijriCalendarPageState extends State<HijriCalendarPage> {
     super.initState();
     _pageController = PageController(initialPage: _initialPage);
     _checkLocationPermissionAndFetchLocation();
+    _loadNotes(); // NEW: Load notes when the widget initializes
   }
 
   @override
   void dispose() {
     _pageController.dispose();
     super.dispose();
+  }
+
+  // NEW: Function to generate a unique key for a given date
+  String _getNoteKey(int hYear, int hMonth, int hDay) {
+    return "note_${hYear}_${hMonth}_$hDay";
+  }
+
+  // NEW: Function to load notes from SharedPreferences
+  Future<void> _loadNotes() async {
+    final prefs = await SharedPreferences.getInstance();
+    setState(() {
+      final keys = prefs.getKeys();
+      for (String key in keys) {
+        if (key.startsWith('note_')) {
+          _notes[key] = prefs.getString(key) ?? '';
+        }
+      }
+    });
+  }
+
+  // NEW: Function to save or delete a note
+  Future<void> _saveNote(int hYear, int hMonth, int hDay, String text) async {
+    final prefs = await SharedPreferences.getInstance();
+    final key = _getNoteKey(hYear, hMonth, hDay);
+
+    if (text.isEmpty) {
+      // If the note is empty, remove it
+      await prefs.remove(key);
+      setState(() {
+        _notes.remove(key);
+      });
+    } else {
+      // Otherwise, save the note
+      await prefs.setString(key, text);
+      setState(() {
+        _notes[key] = text;
+      });
+    }
   }
 
   HijriCalendar _shiftedMonth(int shift) {
@@ -100,8 +143,9 @@ class _HijriCalendarPageState extends State<HijriCalendarPage> {
         return;
       }
       LocationPermission permission = await Geolocator.checkPermission();
-      if (permission == LocationPermission.denied)
+      if (permission == LocationPermission.denied) {
         permission = await Geolocator.requestPermission();
+      }
       if (permission == LocationPermission.denied ||
           permission == LocationPermission.deniedForever) {
         setState(() => _locationName = "Location permission denied");
@@ -123,8 +167,6 @@ class _HijriCalendarPageState extends State<HijriCalendarPage> {
   String _getGregorianDateForDisplay(HijriCalendar hijriMonth) {
     final monthStart = HijriCalendar()
         .hijriToGregorian(hijriMonth.hYear, hijriMonth.hMonth, 1);
-
-    // ✅ CORRECTION: Use getDaysInMonth() instead of accessing the uninitialized 'lengthOfMonth' property.
     final daysInMonth =
         hijriMonth.getDaysInMonth(hijriMonth.hYear, hijriMonth.hMonth);
     final monthEnd = HijriCalendar()
@@ -155,53 +197,86 @@ class _HijriCalendarPageState extends State<HijriCalendarPage> {
         routeName = '/subapps';
         break;
     }
-    if (routeName.isNotEmpty)
+    if (routeName.isNotEmpty) {
       Navigator.pushReplacementNamed(context, routeName);
+    }
   }
 
-  // The rest of the page (build methods, etc.) remains the same as the corrected version I provided before.
-  // Pasting it all for completeness.
+// MODIFIED: This entire function is updated to include note editing.
   void _showDayDetails(BuildContext context, int hYear, int hMonth, int hDay) {
     final g = HijriCalendar().hijriToGregorian(hYear, hMonth, hDay);
     final holiday = _holidays["$hDay-$hMonth"];
     final theme = Theme.of(context);
 
+    // NEW: Controller for the note text field
+    final noteKey = _getNoteKey(hYear, hMonth, hDay);
+    final existingNote = _notes[noteKey] ?? '';
+    final noteController = TextEditingController(text: existingNote);
+
     showDialog(
       context: context,
       builder: (_) => AlertDialog(
+        // THIS IS THE CORRECTED LINE:
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         title: Text("Date Details", style: theme.textTheme.titleLarge),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text("Hijri: $hDay ${_hijriMonths[hMonth - 1]} $hYear AH",
-                style: theme.textTheme.bodyLarge),
-            const SizedBox(height: 8),
-            Text(
-                "Gregorian: ${_gregorianMonths[g.month - 1]} ${g.day}, ${g.year}",
-                style: theme.textTheme.bodyLarge),
-            if (holiday != null) ...[
+        content: SingleChildScrollView(
+          // Added for better scrolling on small screens
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text("Hijri: $hDay ${_hijriMonths[hMonth - 1]} $hYear AH",
+                  style: theme.textTheme.bodyLarge),
+              const SizedBox(height: 8),
+              Text(
+                  "Gregorian: ${_gregorianMonths[g.month - 1]} ${g.day}, ${g.year}",
+                  style: theme.textTheme.bodyLarge),
+              if (holiday != null) ...[
+                const Divider(height: 24),
+                Row(
+                  children: [
+                    Icon(Icons.star_rounded,
+                        color: theme.colorScheme.secondary, size: 20),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        holiday,
+                        style: theme.textTheme.bodyLarge?.copyWith(
+                            fontWeight: FontWeight.bold,
+                            color: theme.colorScheme.secondary),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+              // NEW: Section for adding/editing a note
               const Divider(height: 24),
-              Row(
-                children: [
-                  Icon(Icons.star_rounded,
-                      color: theme.colorScheme.secondary, size: 20),
-                  const SizedBox(width: 8),
-                  Expanded(
-                      child: Text(holiday,
-                          style: theme.textTheme.bodyLarge?.copyWith(
-                              fontWeight: FontWeight.bold,
-                              color: theme.colorScheme.secondary))),
-                ],
-              )
+              Text("Note:", style: theme.textTheme.titleMedium),
+              const SizedBox(height: 8),
+              TextField(
+                controller: noteController,
+                decoration: const InputDecoration(
+                  hintText: "Add a note for this day...",
+                  border: OutlineInputBorder(),
+                ),
+                maxLines: 3,
+              ),
             ],
-          ],
+          ),
         ),
         actions: [
           TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text("Close"))
+            onPressed: () => Navigator.pop(context),
+            child: const Text("Cancel"),
+          ),
+          // NEW: Save button to save the note
+          ElevatedButton(
+            onPressed: () {
+              _saveNote(hYear, hMonth, hDay, noteController.text.trim());
+              Navigator.pop(context);
+            },
+            child: const Text("Save"),
+          ),
         ],
       ),
     );
@@ -232,10 +307,11 @@ class _HijriCalendarPageState extends State<HijriCalendarPage> {
               child: Row(
                 children: [
                   IconButton(
-                      icon: const Icon(Icons.chevron_left_rounded),
-                      onPressed: () => _pageController.previousPage(
-                          duration: const Duration(milliseconds: 300),
-                          curve: Curves.easeOut)),
+                    icon: const Icon(Icons.chevron_left_rounded),
+                    onPressed: () => _pageController.previousPage(
+                        duration: const Duration(milliseconds: 300),
+                        curve: Curves.easeOut),
+                  ),
                   Expanded(
                     child: Column(
                       children: [
@@ -263,10 +339,11 @@ class _HijriCalendarPageState extends State<HijriCalendarPage> {
                     ),
                   ),
                   IconButton(
-                      icon: const Icon(Icons.chevron_right_rounded),
-                      onPressed: () => _pageController.nextPage(
-                          duration: const Duration(milliseconds: 300),
-                          curve: Curves.easeOut)),
+                    icon: const Icon(Icons.chevron_right_rounded),
+                    onPressed: () => _pageController.nextPage(
+                        duration: const Duration(milliseconds: 300),
+                        curve: Curves.easeOut),
+                  ),
                 ],
               ),
             ),
@@ -276,11 +353,13 @@ class _HijriCalendarPageState extends State<HijriCalendarPage> {
                 children: [
                   for (final day in ['S', 'M', 'T', 'W', 'T', 'F', 'S'])
                     Expanded(
-                        child: Center(
-                            child: Text(day,
-                                style: textTheme.bodyMedium?.copyWith(
-                                    fontWeight: FontWeight.bold,
-                                    color: theme.hintColor))))
+                      child: Center(
+                        child: Text(day,
+                            style: textTheme.bodyMedium?.copyWith(
+                                fontWeight: FontWeight.bold,
+                                color: theme.hintColor)),
+                      ),
+                    ),
                 ],
               ),
             ),
@@ -299,9 +378,10 @@ class _HijriCalendarPageState extends State<HijriCalendarPage> {
                     padding: const EdgeInsets.all(12),
                     gridDelegate:
                         const SliverGridDelegateWithFixedCrossAxisCount(
-                            crossAxisCount: 7,
-                            mainAxisSpacing: 8,
-                            crossAxisSpacing: 8),
+                      crossAxisCount: 7,
+                      mainAxisSpacing: 8,
+                      crossAxisSpacing: 8,
+                    ),
                     itemCount: daysInMonth + leadingEmptyDays,
                     itemBuilder: (ctx, idx) {
                       if (idx < leadingEmptyDays)
@@ -313,10 +393,18 @@ class _HijriCalendarPageState extends State<HijriCalendarPage> {
                       final isHoliday =
                           _holidays.containsKey("$hDay-${month.hMonth}");
 
+                      // NEW: Check if the day has a note
+                      final noteKey =
+                          _getNoteKey(month.hYear, month.hMonth, hDay);
+                      final hasNote = _notes.containsKey(noteKey) &&
+                          _notes[noteKey]!.isNotEmpty;
+
+                      // MODIFIED: Pass hasNote to the tile
                       return _CalendarDayTile(
                         day: hDay,
                         isToday: isToday,
                         isHoliday: isHoliday,
+                        hasNote: hasNote, // Pass the new property
                         onTap: () => _showDayDetails(
                             context, month.hYear, month.hMonth, hDay),
                       );
@@ -331,8 +419,11 @@ class _HijriCalendarPageState extends State<HijriCalendarPage> {
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
                   _buildLegendItem(colorScheme.primary, "Today"),
-                  const SizedBox(width: 24),
+                  const SizedBox(width: 16),
                   _buildLegendItem(colorScheme.secondary, "Holiday"),
+                  const SizedBox(width: 16),
+                  // NEW: Legend item for notes
+                  _buildLegendItem(theme.hintColor, "Note"),
                 ],
               ),
             ),
@@ -385,17 +476,21 @@ class _HijriCalendarPageState extends State<HijriCalendarPage> {
   }
 }
 
+// MODIFIED: The tile widget is updated to accept and display the note indicator.
 class _CalendarDayTile extends StatelessWidget {
   final int day;
   final bool isToday;
   final bool isHoliday;
+  final bool hasNote; // NEW: Property to indicate if a note exists
   final VoidCallback onTap;
 
-  const _CalendarDayTile(
-      {required this.day,
-      required this.isToday,
-      required this.isHoliday,
-      required this.onTap});
+  const _CalendarDayTile({
+    required this.day,
+    required this.isToday,
+    required this.isHoliday,
+    required this.hasNote, // NEW
+    required this.onTap,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -414,21 +509,28 @@ class _CalendarDayTile extends StatelessWidget {
               Text(
                 "$day",
                 style: TextStyle(
-                    fontWeight: FontWeight.bold,
-                    color: isToday
-                        ? colorScheme.onPrimary
-                        : colorScheme.onBackground),
+                  fontWeight: FontWeight.bold,
+                  color: isToday
+                      ? colorScheme.onPrimary
+                      : colorScheme.onBackground,
+                ),
               ),
-              if (isHoliday) ...[
+              // MODIFIED: Display a dot for holidays or notes
+              if (isHoliday || hasNote) ...[
                 const SizedBox(height: 2),
                 Container(
-                    width: 5,
-                    height: 5,
-                    decoration: BoxDecoration(
-                        color: isToday
+                  width: 5,
+                  height: 5,
+                  decoration: BoxDecoration(
+                    // Logic to decide the dot color
+                    color: isHoliday
+                        ? (isToday
                             ? colorScheme.onPrimary
-                            : colorScheme.secondary,
-                        shape: BoxShape.circle)),
+                            : colorScheme.secondary)
+                        : theme.hintColor,
+                    shape: BoxShape.circle,
+                  ),
+                ),
               ]
             ],
           ),

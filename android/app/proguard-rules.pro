@@ -17,3 +17,6 @@
 # Rules for Firebase
 -keep class com.google.firebase.** { *; }
 -keep class com.google.android.gms.** { *; }
+
+# Rules for Google Play Core library (fixes R8 build error)
+-keep class com.google.android.play.core.** { *; }

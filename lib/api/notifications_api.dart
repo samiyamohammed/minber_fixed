@@ -62,4 +62,40 @@ class NotificationsApi {
       throw Exception('Failed to fetch notifications. Error: $e');
     }
   }
+
+  /// Fetch a single notification by its id.
+  static Future<Map<String, dynamic>?> fetchNotificationById(String id) async {
+    final url = '$baseUrl/notifications/$id';
+    logger.i("Attempting to fetch single notification from: $url");
+    try {
+      final response = await http.get(Uri.parse(url));
+      logger.d({
+        "URL": url,
+        "Status Code": response.statusCode,
+        "Response Body": response.body,
+      });
+
+      if (response.statusCode == 200 || response.statusCode == 201) {
+        final data = json.decode(response.body);
+        if (data is Map<String, dynamic>) {
+          logger.i("✅ Successfully fetched notification with id=$id");
+          return data;
+        } else if (data is List && data.isNotEmpty) {
+          // Some APIs return a single item wrapped in a list
+          return Map<String, dynamic>.from(data.first);
+        } else {
+          logger.w("⚠️ Unexpected payload when fetching notification $id");
+          return null;
+        }
+      } else {
+        logger.e(
+            "❌ API returned non-200 for single notification: ${response.statusCode}");
+        return null;
+      }
+    } catch (e, s) {
+      logger.e("💀 Error fetching notification by id: $e",
+          error: e, stackTrace: s);
+      return null;
+    }
+  }
 }

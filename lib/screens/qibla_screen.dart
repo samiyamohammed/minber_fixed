@@ -31,7 +31,7 @@ class _QiblaCompassPageState extends State<QiblaCompassPage> {
         Navigator.pushReplacementNamed(context, '/prayer');
         break;
       case 3:
-        Navigator.pushReplacementNamed(context, '/Chat Bot');
+        Navigator.pushReplacementNamed(context, '/chatbot');
         break;
       case 4:
         Navigator.pushReplacementNamed(context, '/subapps');
@@ -215,7 +215,7 @@ class _QiblaCompassPageState extends State<QiblaCompassPage> {
             icon: Icon(Icons.chat_bubble),
             label: "Chat Bot",
           ),
-          BottomNavigationBarItem(icon: Icon(Icons.explore), label: "Sub Apps"),
+          BottomNavigationBarItem(icon: Icon(Icons.apps), label: "Sub Apps"),
         ],
       ),
     );

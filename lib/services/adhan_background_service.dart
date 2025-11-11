@@ -1,47 +1,36 @@
-// lib/services/adhan_background_service.dart
+// lib/services/adhan_background_service.dart (FINAL - SYNTAX FIXED)
 
 import 'dart:async';
 import 'dart:ui';
-import 'package:flutter/material.dart';
 import 'package:audioplayers/audioplayers.dart';
 import 'package:flutter_background_service/flutter_background_service.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:logger/logger.dart';
 
 final logger = Logger();
+final flutterLocalNotificationsPlugin = FlutterLocalNotificationsPlugin();
 
-// This function runs when the user interacts with the notification (e.g., taps the Silence button)
-@pragma('vm:entry-point')
-void notificationTapBackground(NotificationResponse notificationResponse) {
-  if (notificationResponse.actionId == 'silence_action') {
-    logger.i("ACTION: 'Silence' button tapped. Invoking stopService.");
-    FlutterBackgroundService().invoke('stopService');
-  }
-}
-
-// This is the main entry point for the background service
 @pragma('vm:entry-point')
 Future<void> onStart(ServiceInstance service) async {
   DartPluginRegistrant.ensureInitialized();
 
   final audioPlayer = AudioPlayer();
-  final flutterLocalNotificationsPlugin = FlutterLocalNotificationsPlugin();
+  logger.i("🎧 Adhan Background Service has started silently.");
 
-  logger.i("🎧 Adhan Background Service has started.");
+  // The service now runs truly in the background without any initial notification.
+  // We only show a notification when the Adhan actually needs to play.
 
-  // Listen for the 'startAdhan' command from the alarm callback
   service.on('startAdhan').listen((event) async {
     final prayerName = event?['prayerName'] ?? 'Prayer Time';
     logger.i("▶️ Received 'startAdhan' command for $prayerName");
 
-    // Show the persistent notification with the Silence button.
     await flutterLocalNotificationsPlugin.show(
-      888,
+      999, // A unique ID for the Adhan notification
       '$prayerName Adhan',
       'The call to prayer has begun.',
       const NotificationDetails(
         android: AndroidNotificationDetails(
-          'adhan_channel',
+          'adhan_channel', // The main, high-importance channel
           'Adhan Notifications',
           channelDescription: 'Plays the full Adhan for prayer times',
           importance: Importance.max,
@@ -49,19 +38,15 @@ Future<void> onStart(ServiceInstance service) async {
           playSound: false,
           icon: '@drawable/notification_icon',
           ongoing: true,
-          autoCancel: true,
+          autoCancel: false,
           actions: <AndroidNotificationAction>[
-            AndroidNotificationAction(
-              'silence_action', // A unique ID for the action
-              'Silence', // The text on the button
-            ),
+            AndroidNotificationAction('silence_action', 'Silence'),
           ],
         ),
       ),
     );
 
     try {
-      // Set audio context before playing
       await audioPlayer.setAudioContext(AudioContext(
         android: AudioContextAndroid(
           isSpeakerphoneOn: true,
@@ -71,7 +56,7 @@ Future<void> onStart(ServiceInstance service) async {
           audioFocus: AndroidAudioFocus.gain,
         ),
       ));
-      await audioPlayer.release(); // Reset the player
+      await audioPlayer.release();
       await audioPlayer.play(AssetSource('sounds/adhan.mp3'));
       logger.i("🎵 Adhan audio is now playing.");
     } catch (e) {
@@ -80,12 +65,11 @@ Future<void> onStart(ServiceInstance service) async {
     }
   });
 
-  // Listen for the command to stop everything
   service.on('stopService').listen((event) async {
     logger.w("⏹️ Received 'stopService' command. Stopping Adhan.");
     try {
       await audioPlayer.stop();
-      await flutterLocalNotificationsPlugin.cancel(888);
+      await flutterLocalNotificationsPlugin.cancel(999);
       service.stopSelf();
       logger.i("✅ Service and audio stopped successfully.");
     } catch (e) {
@@ -93,18 +77,16 @@ Future<void> onStart(ServiceInstance service) async {
     }
   });
 
-  // Automatically stop the service when the Adhan finishes playing
   audioPlayer.onPlayerComplete.listen((event) {
     logger.i("🎶 Adhan audio completed naturally.");
     service.invoke('stopService');
   });
 }
 
-// This function initializes the service and its notification channel.
 Future<void> initializeAdhanService() async {
   final service = FlutterBackgroundService();
-  final flutterLocalNotificationsPlugin = FlutterLocalNotificationsPlugin();
 
+  // Create the channel for the audible Adhan alerts.
   const AndroidNotificationChannel adhanChannel = AndroidNotificationChannel(
     'adhan_channel',
     'Adhan Notifications',
@@ -118,27 +100,16 @@ Future<void> initializeAdhanService() async {
           AndroidFlutterLocalNotificationsPlugin>()
       ?.createNotificationChannel(adhanChannel);
 
-  // Initialize the plugin and link the notification tap handler
-  await flutterLocalNotificationsPlugin.initialize(
-    const InitializationSettings(
-      android: AndroidInitializationSettings('@drawable/notification_icon'),
-    ),
-    onDidReceiveBackgroundNotificationResponse: notificationTapBackground,
-  );
-
-  // Configure the service itself
+  // ✅ --- THIS IS THE CORRECTED CONFIGURATION BLOCK --- ✅
   await service.configure(
     androidConfiguration: AndroidConfiguration(
       onStart: onStart,
+      // This is the key parameter that tells the service to be a foreground
+      // service without showing an initial notification. It stops the crash silently.
       isForegroundMode: true,
-      autoStart: false,
-      notificationChannelId: 'adhan_channel',
-      initialNotificationTitle: 'Adhan Service',
-      initialNotificationContent: 'Ready for prayer times',
-      foregroundServiceNotificationId: 888,
     ),
     iosConfiguration: IosConfiguration(
       autoStart: false,
     ),
-  );
+  ); // <-- The missing parenthesis was here.
 }

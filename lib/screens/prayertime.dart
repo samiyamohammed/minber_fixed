@@ -1,4 +1,4 @@
-// lib/screens/prayertime.dart (Fully Updated & Ready to Paste)
+// lib/screens/prayertime.dart 
 
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';

@@ -1,169 +1,7 @@
-// // lib/services/notification_service.dart (FINAL CLEANED VERSION)
+// lib/services/notification_service.dart (FINAL - WORKMANAGER VERSION)
 
-// import 'package:flutter/material.dart';
-// import 'package:android_alarm_manager_plus/android_alarm_manager_plus.dart';
-// import 'package:flutter_local_notifications/flutter_local_notifications.dart';
-// import 'package:shared_preferences/shared_preferences.dart';
-// import 'package:timezone/timezone.dart' as tz;
-// import 'package:logger/logger.dart';
-// import 'package:geolocator/geolocator.dart';
-// import 'package:adhan_dart/adhan_dart.dart';
-// import '../main.dart'; // Import main.dart to access callbacks, logger, and plugins
-
-// class NotificationService {
-//   static final logger = Logger(
-//       printer: PrettyPrinter(
-//           methodCount: 1, printTime: true, printEmojis: true, colors: true));
-//   // We get the global instance from main.dart to ensure there are no conflicts.
-//   static final FlutterLocalNotificationsPlugin _notifications =
-//       flutterLocalNotificationsPlugin;
-//   static final GlobalKey<NavigatorState> navigatorKey =
-//       GlobalKey<NavigatorState>();
-
-//   /// The init function is now empty. All critical initialization is centralized
-//   /// in the initializeNotifications() function in main.dart to prevent conflicts
-//   /// between the main app process and the background alarm process.
-//   static Future<void> init() async {
-//     logger.i(
-//         "[NotificationService] init() called. Initialization is now handled by main().");
-//     return Future.value();
-//   }
-
-//   /// This function is the entry point for scheduling all notifications.
-//   static Future<void> scheduleDailyAndWeeklyNotifications() async {
-//     logger.i("🚀 Starting notification scheduling process...");
-//     try {
-//       final prefs = await SharedPreferences.getInstance();
-
-//       // Schedule Salawat reminder if enabled
-//       if (prefs.getBool('notifications_khemis_enabled') ?? true) {
-//         await scheduleSalawatNotification();
-//       } else {
-//         logger.i("Skipping Khemis notification as it's disabled by the user.");
-//       }
-
-//       // Get location and schedule prayer time alarms
-//       Position position = await Geolocator.getCurrentPosition(
-//           desiredAccuracy: LocationAccuracy.medium);
-//       _scheduleAllPrayerTimesForLocation(position.latitude, position.longitude);
-//     } catch (e, s) {
-//       logger.e("❌ Failed to complete notification scheduling.",
-//           error: e, stackTrace: s);
-//     }
-//   }
-
-//   /// This is the core logic that calculates prayer times and sets the alarms.
-//   static Future<void> _scheduleAllPrayerTimesForLocation(
-//       double lat, double lng) async {
-//     logger.i("--- Starting Alarm Scheduling for Location ---");
-//     final prefs = await SharedPreferences.getInstance();
-//     final prayerTimes = PrayerTimes(
-//         coordinates: Coordinates(lat, lng),
-//         date: DateTime.now(),
-//         calculationParameters: CalculationMethod.muslimWorldLeague()
-//           ..madhab = Madhab.shafi);
-
-//     final prayers = {
-//       "fajr": prayerTimes.fajr!.toLocal(),
-//       "dhuhr": prayerTimes.dhuhr!.toLocal(),
-//       "asr": prayerTimes.asr!.toLocal(),
-//       "maghrib": prayerTimes.maghrib!.toLocal(),
-//       "isha": prayerTimes.isha!.toLocal(),
-//     };
-
-//     for (var prayer in prayers.entries) {
-//       final prayerKey = prayer.key;
-//       final prayerTime = prayer.value;
-//       final isEnabled =
-//           prefs.getBool('notifications_${prayerKey}_enabled') ?? true;
-
-//       final alarmId = prayerKey.hashCode;
-
-//       if (isEnabled) {
-//         if (prayerTime.isAfter(DateTime.now())) {
-//           logger.i("✅ Scheduling ALARM for $prayerKey at $prayerTime.");
-//           await AndroidAlarmManager.oneShotAt(
-//             prayerTime,
-//             alarmId,
-//             fireAdhanAlarm, // The function from main.dart
-//             exact: true,
-//             wakeup: true,
-//             allowWhileIdle: true,
-//             rescheduleOnReboot: true,
-//             params: {
-//               'prayerName': prayerKey[0].toUpperCase() + prayerKey.substring(1)
-//             },
-//           );
-//         } else {
-//           logger.w(
-//               "⚠️ Skipping alarm for $prayerKey as its time has already passed for today.");
-//         }
-//       } else {
-//         logger.i(
-//             "Skipping $prayerKey alarm as it's disabled. Cancelling any existing one.");
-//         await AndroidAlarmManager.cancel(alarmId);
-//       }
-//     }
-//     logger.i("--- Finished Alarm Scheduling ---");
-//   }
-
-//   /// This handler is now only for foreground taps on non-Adhan notifications.
-//   /// The main background handler is in main.dart.
-//   static void _handleNotificationTap(String? payload) {
-//     if (payload == "salawat") {
-//       navigatorKey.currentState?.pushNamed('/dua-dhikr');
-//     }
-//   }
-
-//   /// Schedules the weekly Salawat reminder (uses the old notification system).
-//   static Future<void> scheduleSalawatNotification() async {
-//     logger.i("--- Scheduling Weekly Salawat Notification ---");
-//     try {
-//       final location = tz.local;
-//       final now = tz.TZDateTime.now(location);
-//       tz.TZDateTime scheduledDate =
-//           tz.TZDateTime(location, now.year, now.month, now.day, 19);
-//       if (scheduledDate.weekday != DateTime.thursday) {
-//         scheduledDate = scheduledDate.add(Duration(
-//             days: (DateTime.thursday - scheduledDate.weekday + 7) % 7));
-//       } else if (scheduledDate.isBefore(now)) {
-//         scheduledDate = scheduledDate.add(const Duration(days: 7));
-//       }
-
-//       await _notifications.zonedSchedule(
-//         777,
-//         "Salawat Reminder",
-//         "Join in Salawat Askār this evening at 7PM",
-//         scheduledDate,
-//         const NotificationDetails(
-//           android: AndroidNotificationDetails(
-//               'weekly_channel', 'Weekly Notifications',
-//               channelDescription: 'Reminder for Salawat Askār',
-//               importance: Importance.max,
-//               priority: Priority.high),
-//           iOS: DarwinNotificationDetails(),
-//         ),
-//         payload: "salawat",
-//         uiLocalNotificationDateInterpretation:
-//             UILocalNotificationDateInterpretation.absoluteTime,
-//         matchDateTimeComponents: DateTimeComponents.dayOfWeekAndTime,
-//         androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
-//       );
-//     } catch (e, s) {
-//       logger.e("❌ ERROR scheduling Salawat notification",
-//           error: e, stackTrace: s);
-//     }
-//   }
-
-//   static Future<void> cancelAllNotifications() async {
-//     logger.w("Cancelling all scheduled notifications and alarms.");
-//     await _notifications.cancelAll();
-//     // In the future, you could add logic here to cancel all alarms.
-//   }
-// }
 import 'dart:io';
 import 'package:flutter/material.dart';
-import 'package:android_alarm_manager_plus/android_alarm_manager_plus.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:flutter_timezone/flutter_timezone.dart';
 import 'package:permission_handler/permission_handler.dart';
@@ -173,8 +11,8 @@ import 'package:timezone/data/latest_all.dart' as tz;
 import 'package:logger/logger.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:adhan_dart/adhan_dart.dart';
-import '../main.dart';
-import 'adhan_background_service.dart';
+
+// We no longer need the main.dart import for the old alarm function.
 
 class NotificationService {
   static final logger = Logger(
@@ -185,129 +23,168 @@ class NotificationService {
   static final GlobalKey<NavigatorState> navigatorKey =
       GlobalKey<NavigatorState>();
 
+  // The init function remains mostly the same.
   static Future<void> init() async {
     logger.i("[NotificationService] Initializing...");
-    // 1. Initialize Timezones
     try {
       tz.initializeTimeZones();
       final String timeZoneName = await FlutterTimezone.getLocalTimezone();
       tz.setLocalLocation(tz.getLocation(timeZoneName));
-      logger.i("-> Timezones initialized successfully for ${tz.local.name}.");
     } catch (e) {
       logger.f("💀 FATAL: FAILED to initialize timezones.", error: e);
       return;
     }
-
-    // 2. Initialize FlutterLocalNotifications
     const android =
         AndroidInitializationSettings('@drawable/notification_icon');
     const settings = InitializationSettings(android: android);
 
-    // Link the background tap handler from adhan_background_service.dart
+    // The tap handler is simplified as we don't have custom actions anymore.
     await _notifications.initialize(settings,
-        onDidReceiveNotificationResponse: (NotificationResponse response) =>
-            _handleNotificationTap(response.payload),
-        onDidReceiveBackgroundNotificationResponse: notificationTapBackground);
-
-    // 3. Request necessary permissions
-    if (Platform.isAndroid) {
-      if (await Permission.notification.request().isGranted) {
-        await Permission.scheduleExactAlarm.request();
+        onDidReceiveNotificationResponse: (NotificationResponse response) {
+      if (response.payload == "salawat") {
+        navigatorKey.currentState?.pushNamed('/dua-dhikr');
       }
+    });
+
+    if (Platform.isAndroid) {
+      // Request permissions needed for notifications and exact alarms.
+      await Permission.notification.request();
+      await Permission.scheduleExactAlarm.request();
     }
     logger.i("[NotificationService] Initialization complete.");
   }
 
+  // --- THIS IS THE NEW CORE FUNCTION CALLED BY WORKMANAGER ---
   static Future<void> scheduleDailyAndWeeklyNotifications() async {
-    // This function is correct and unchanged.
-    logger.i("🚀 Starting notification scheduling process...");
+    logger.i("🚀 Starting background notification scheduling process...");
     try {
-      final prefs = await SharedPreferences.getInstance();
+      // First, ensure all plugins are ready within this background isolate.
+      await _initializeForBackground();
 
+      // Clear any notifications that were scheduled from a previous run.
+      // This is crucial to prevent duplicate or old notifications.
+      await _notifications.cancelAll();
+      logger.i("Cleared all previously scheduled notifications.");
+
+      // Schedule the prayer time notifications.
+      await _scheduleAllPrayerTimes();
+
+      // Also, schedule the weekly Salawat notification.
+      final prefs = await SharedPreferences.getInstance();
       if (prefs.getBool('notifications_khemis_enabled') ?? true) {
         await scheduleSalawatNotification();
-      } else {
-        logger.i("Skipping Khemis notification as it's disabled by the user.");
       }
 
-      Position position = await Geolocator.getCurrentPosition(
-          desiredAccuracy: LocationAccuracy.medium);
-      _scheduleAllPrayerTimesForLocation(position.latitude, position.longitude);
+      logger.i("✅ Notification scheduling process completed successfully.");
     } catch (e, s) {
-      logger.e("❌ Failed to complete notification scheduling.",
-          error: e, stackTrace: s);
+      logger.e("❌ Failed to complete scheduling.", error: e, stackTrace: s);
     }
   }
 
-  static Future<void> _scheduleAllPrayerTimesForLocation(
-      double lat, double lng) async {
-    // This logic is correct and unchanged. It schedules the alarms.
-    logger.i("--- Starting Alarm Scheduling for Location ---");
+  static Future<void> _scheduleAllPrayerTimes() async {
+    logger.i("--- Calculating and scheduling prayer notifications ---");
     final prefs = await SharedPreferences.getInstance();
+
+    // 1. Get User Location
+    // We need this to calculate accurate prayer times.
+    Position position;
+    try {
+      position = await Geolocator.getCurrentPosition(
+          desiredAccuracy: LocationAccuracy.medium);
+    } catch (e) {
+      logger.e("Could not get location for scheduling. Aborting.", error: e);
+      return; // Exit if we can't get location
+    }
+
+    // 2. Calculate Prayer Times for Today
+    final now = tz.TZDateTime.now(tz.local);
     final prayerTimes = PrayerTimes(
-        coordinates: Coordinates(lat, lng),
-        date: DateTime.now(),
+        coordinates: Coordinates(position.latitude, position.longitude),
+        date: now,
         calculationParameters: CalculationMethod.muslimWorldLeague()
           ..madhab = Madhab.shafi);
 
-    final prayers = {
-      "fajr": prayerTimes.fajr!.toLocal(),
-      "dhuhr": prayerTimes.dhuhr!.toLocal(),
-      "asr": prayerTimes.asr!.toLocal(),
-      "maghrib": prayerTimes.maghrib!.toLocal(),
-      "isha": prayerTimes.isha!.toLocal(),
+    final prayersToSchedule = {
+      "Fajr": prayerTimes.fajr,
+      "Dhuhr": prayerTimes.dhuhr,
+      "Asr": prayerTimes.asr,
+      "Maghrib": prayerTimes.maghrib,
+      "Isha": prayerTimes.isha,
     };
 
-    for (var prayer in prayers.entries) {
-      final prayerKey = prayer.key;
-      final prayerTime = prayer.value;
-      final isEnabled =
-          prefs.getBool('notifications_${prayerKey}_enabled') ?? true;
+    logger.i("Prayer times calculated for today: ${now.toIso8601String()}");
 
-      final alarmId = prayerKey.hashCode;
+    // 3. Loop Through and Schedule Each Prayer
+    for (var prayer in prayersToSchedule.entries) {
+      final prayerName = prayer.key;
+      final prayerDateTime = prayer.value;
 
-      if (isEnabled) {
-        if (prayerTime.isAfter(DateTime.now())) {
-          logger.i("✅ Scheduling ALARM for $prayerKey at $prayerTime.");
-          await AndroidAlarmManager.oneShotAt(
-            prayerTime,
-            alarmId,
-            fireAdhanAlarm, // The function from main.dart
-            exact: true,
-            wakeup: true,
-            allowWhileIdle: true,
-            rescheduleOnReboot: true,
-            params: {
-              'prayerName': prayerKey[0].toUpperCase() + prayerKey.substring(1)
-            },
+      if (prayerDateTime == null) continue; // Skip if a time is somehow null
+
+      // Convert the prayer's UTC DateTime to the local timezone.
+      final tz.TZDateTime scheduledTime =
+          tz.TZDateTime.from(prayerDateTime, tz.local);
+
+      // CRUCIAL CHECK: Only schedule notifications that are in the future.
+      if (scheduledTime.isAfter(now)) {
+        final isEnabled = prefs
+                .getBool('notifications_${prayerName.toLowerCase()}_enabled') ??
+            true;
+
+        if (isEnabled) {
+          logger.i("✅ Scheduling '$prayerName' at $scheduledTime");
+
+          await _notifications.zonedSchedule(
+            prayerName.hashCode, // Unique ID for each notification
+            'Time for $prayerName', // Title
+            'The time for the $prayerName prayer has arrived.', // Body
+            scheduledTime,
+            const NotificationDetails(
+              android: AndroidNotificationDetails(
+                'adhan_channel', // Use the channel you already created
+                'Adhan Notifications',
+                channelDescription: 'Notifications for prayer times.',
+                importance: Importance.max,
+                priority: Priority.high,
+                // We are not specifying a custom sound, so it will use the default.
+              ),
+            ),
+            androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
+            uiLocalNotificationDateInterpretation:
+                UILocalNotificationDateInterpretation.absoluteTime,
           );
         } else {
           logger.w(
-              "⚠️ Skipping alarm for $prayerKey as its time has already passed today.");
+              "🚫 Skipping '$prayerName' because it is disabled in settings.");
         }
       } else {
-        logger.i(
-            "Skipping $prayerKey alarm as it's disabled. Cancelling any existing one.");
-        await AndroidAlarmManager.cancel(alarmId);
+        logger.w(
+            "🚫 Skipping '$prayerName' because its time ($scheduledTime) has already passed today.");
       }
     }
-    logger.i("--- Finished Alarm Scheduling ---");
+    logger.i("--- Finished scheduling prayer notifications ---");
   }
 
-  static void _handleNotificationTap(String? payload) {
-    if (payload == "salawat") {
-      navigatorKey.currentState?.pushNamed('/dua-dhikr');
+  // A helper function to ensure timezone data is available in the background.
+  static Future<void> _initializeForBackground() async {
+    tz.initializeTimeZones();
+    try {
+      final String timeZoneName = await FlutterTimezone.getLocalTimezone();
+      tz.setLocalLocation(tz.getLocation(timeZoneName));
+    } catch (e) {
+      logger.e("Error getting local timezone in background: $e");
     }
   }
 
+  // --- THE REST OF THE FILE IS MOSTLY UNCHANGED ---
+
   static Future<void> scheduleSalawatNotification() async {
-    // This function for Salawat reminders is correct and unchanged.
-    logger.i("--- Scheduling Weekly Salawat Notification ---");
     try {
       final location = tz.local;
       final now = tz.TZDateTime.now(location);
+      // Logic to find the next Thursday at 7 PM
       tz.TZDateTime scheduledDate =
-          tz.TZDateTime(location, now.year, now.month, now.day, 19);
+          tz.TZDateTime(location, now.year, now.month, now.day, 19); // 7 PM
       if (scheduledDate.weekday != DateTime.thursday) {
         scheduledDate = scheduledDate.add(Duration(
             days: (DateTime.thursday - scheduledDate.weekday + 7) % 7));
@@ -315,8 +192,10 @@ class NotificationService {
         scheduledDate = scheduledDate.add(const Duration(days: 7));
       }
 
+      logger.i("Scheduling weekly Salawat notification for $scheduledDate");
+
       await _notifications.zonedSchedule(
-        777,
+        777, // A unique ID for this notification
         "Salawat Reminder",
         "Join in Salawat Askār this evening at 7PM",
         scheduledDate,
@@ -326,7 +205,6 @@ class NotificationService {
               channelDescription: 'Reminder for Salawat Askār',
               importance: Importance.max,
               priority: Priority.high),
-          iOS: DarwinNotificationDetails(),
         ),
         payload: "salawat",
         uiLocalNotificationDateInterpretation:
@@ -335,8 +213,7 @@ class NotificationService {
         androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
       );
     } catch (e, s) {
-      logger.e("❌ ERROR scheduling Salawat notification",
-          error: e, stackTrace: s);
+      logger.e("❌ ERROR scheduling Salawat", error: e, stackTrace: s);
     }
   }
 
