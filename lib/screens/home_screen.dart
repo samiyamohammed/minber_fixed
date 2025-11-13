@@ -1,12 +1,10 @@
-// lib/screens/home_screen.dart (FINAL, WITH ROBUST APP RESUME LOGIC)
+// lib/screens/home_screen.dart (Final Fixed Height, Proportional Width Fix)
 
 import 'dart:async';
 import 'dart:convert';
 import 'dart:math';
 import 'package:adhan_dart/adhan_dart.dart';
-import 'package:better_player_plus/better_player_plus.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:http/http.dart' as http;
 import 'package:intl/intl.dart';
@@ -14,6 +12,9 @@ import 'package:minber/main.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:shimmer/shimmer.dart';
 import 'package:youtube_player_flutter/youtube_player_flutter.dart';
+import 'package:video_player/video_player.dart';
+import 'package:chewie/chewie.dart';
+
 import '../core/app_colors.dart';
 import '../models/video_model.dart';
 import '../widgets/animated_list_item.dart';
@@ -39,15 +40,12 @@ class _HomeScreenState extends State<HomeScreen>
   Timer? _timer;
   Timer? _autoRefreshTimer;
 
-  // --- Player State ---
-  BetterPlayerController? _bannerPlayerController;
-  bool _isBannerLoading = true;
-  bool _hasBannerError = false;
+  VideoPlayerController? _videoPlayerController;
+  ChewieController? _chewieController;
+  late Future<void> _initializeVideoPlayerFuture;
   bool _isMuted = true;
   final String streamUrl = 'http://msa.merkuz.com:8888/live/stream1/index.m3u8';
-  double _bannerAspectRatio = 16 / 9;
 
-  // --- Other State Variables ---
   String _nextPrayerName = "";
   String _nextPrayerCountdown = "--:--:--";
   Map<String, DateTime> _prayerTimes = {};
@@ -69,7 +67,7 @@ class _HomeScreenState extends State<HomeScreen>
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
-    _initializeBannerPlayer();
+    _initializeVideoPlayerFuture = _initializeBannerPlayer();
     _initializePrayerTimes();
     _loadDataWithCache();
     _timer = Timer.periodic(const Duration(seconds: 1), (_) {
@@ -86,27 +84,20 @@ class _HomeScreenState extends State<HomeScreen>
     routeObserver.subscribe(this, ModalRoute.of(context)!);
   }
 
-  // ✅ ✅ ✅ --- THIS IS THE KEY CHANGE --- ✅ ✅ ✅
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     super.didChangeAppLifecycleState(state);
     switch (state) {
       case AppLifecycleState.resumed:
-        // When the app comes back to the foreground, a simple play() might not be enough
-        // because the OS may have severed the network connection.
-        // The most reliable way to ensure the live stream works is to re-initialize it.
-        // This prevents a frozen frame and guarantees a fresh, working stream.
         _reloadBannerStream();
-        _refreshData(); // Also a good time to refresh other data.
+        _refreshData();
         break;
       case AppLifecycleState.paused:
-        // When the app goes into the background, pause the player to save resources.
-        _bannerPlayerController?.pause();
+        _videoPlayerController?.pause();
         break;
       case AppLifecycleState.inactive:
       case AppLifecycleState.detached:
       case AppLifecycleState.hidden:
-        // No action needed for these states.
         break;
     }
   }
@@ -117,113 +108,68 @@ class _HomeScreenState extends State<HomeScreen>
     _timer?.cancel();
     WidgetsBinding.instance.removeObserver(this);
     routeObserver.unsubscribe(this);
-    _bannerPlayerController?.dispose();
+    _videoPlayerController?.dispose();
+    _chewieController?.dispose();
     super.dispose();
   }
 
   @override
   void didPushNext() {
-    _bannerPlayerController?.pause();
+    _videoPlayerController?.pause();
   }
 
   @override
   void didPopNext() {
-    _bannerPlayerController?.play();
+    _videoPlayerController?.play();
   }
 
   Future<void> _initializeBannerPlayer() async {
-    if (!mounted) return;
-    setState(() {
-      _isBannerLoading = true;
-      _hasBannerError = false;
-    });
+    try {
+      _videoPlayerController =
+          VideoPlayerController.networkUrl(Uri.parse(streamUrl));
+      await _videoPlayerController!.initialize();
 
-    BetterPlayerDataSource dataSource = BetterPlayerDataSource(
-      BetterPlayerDataSourceType.network,
-      streamUrl,
-      liveStream: true,
-      notificationConfiguration:
-          const BetterPlayerNotificationConfiguration(showNotification: false),
-    );
-
-    _bannerPlayerController = BetterPlayerController(
-      BetterPlayerConfiguration(
+      _chewieController = ChewieController(
+        videoPlayerController: _videoPlayerController!,
         autoPlay: true,
         looping: true,
-        fit: BoxFit.contain,
-        controlsConfiguration: const BetterPlayerControlsConfiguration(
-          showControls: false,
+        showControls: false,
+        allowFullScreen: false,
+        materialProgressColors: ChewieProgressColors(
+          playedColor: Colors.transparent,
+          handleColor: Colors.transparent,
+          bufferedColor: Colors.transparent,
+          backgroundColor: Colors.transparent,
         ),
-        handleLifecycle:
-            false, // We are handling it manually and more robustly now.
-        aspectRatio: _bannerAspectRatio,
-      ),
-      betterPlayerDataSource: dataSource,
-    );
+      );
 
-    _bannerPlayerController!.setVolume(_isMuted ? 0.0 : 1.0);
-    _bannerPlayerController!.addEventsListener(_onPlayerEvent);
-  }
+      await _videoPlayerController!.setVolume(_isMuted ? 0.0 : 1.0);
 
-  void _onPlayerEvent(BetterPlayerEvent event) {
-    if (!mounted) return;
-
-    switch (event.betterPlayerEventType) {
-      case BetterPlayerEventType.initialized:
-        final controller = _bannerPlayerController?.videoPlayerController;
-        if (controller != null && controller.value.initialized) {
-          final double videoAspectRatio = controller.value.aspectRatio;
-          if (videoAspectRatio > 0.5 && videoAspectRatio < 4.0) {
-            if ((videoAspectRatio - _bannerAspectRatio).abs() > 0.01) {
-              setState(() {
-                _bannerAspectRatio = videoAspectRatio;
-                _bannerPlayerController
-                    ?.setOverriddenAspectRatio(videoAspectRatio);
-              });
-            }
-          }
-        }
-        setState(() {
-          _isBannerLoading = false;
-          _hasBannerError = false;
-        });
-        break;
-
-      case BetterPlayerEventType.bufferingEnd:
-        setState(() {
-          _isBannerLoading = false;
-          _hasBannerError = false;
-        });
-        break;
-
-      case BetterPlayerEventType.exception:
-        setState(() {
-          _isBannerLoading = false;
-          _hasBannerError = true;
-        });
-        break;
-
-      case BetterPlayerEventType.bufferingStart:
-        setState(() => _isBannerLoading = true);
-        break;
-
-      default:
-        break;
+      if (mounted) {
+        setState(() {});
+      }
+    } catch (e) {
+      logger.e("Error initializing video player: $e");
+      rethrow;
     }
   }
 
   void _reloadBannerStream() {
-    // This function is now used for both retrying on error AND resuming the app.
-    _bannerPlayerController?.dispose();
-    _initializeBannerPlayer();
+    _videoPlayerController?.dispose();
+    _chewieController?.dispose();
+    if (mounted) {
+      setState(() {
+        _initializeVideoPlayerFuture = _initializeBannerPlayer();
+      });
+    }
   }
 
   void _toggleMute() {
     if (!mounted) return;
     setState(() {
       _isMuted = !_isMuted;
+      _videoPlayerController?.setVolume(_isMuted ? 0.0 : 1.0);
     });
-    _bannerPlayerController?.setVolume(_isMuted ? 0.0 : 1.0);
   }
 
   void _navigateToLivePage() {
@@ -233,11 +179,9 @@ class _HomeScreenState extends State<HomeScreen>
   @override
   Widget build(BuildContext context) {
     super.build(context);
-
     final theme = Theme.of(context);
     final isDarkMode = theme.brightness == Brightness.dark;
-    final screenWidth = MediaQuery.of(context).size.width;
-    final bannerHeight = screenWidth / _bannerAspectRatio;
+    const double bannerHeight = 220.0; // Your desired fixed height
 
     return GestureDetector(
       onHorizontalDragEnd: (details) {
@@ -347,118 +291,138 @@ class _HomeScreenState extends State<HomeScreen>
     );
   }
 
+// ✅ --- FINAL VERSION WITH TOP SPACING ---
   Widget _buildVideoBanner(BuildContext context, double bannerHeight) {
     return Container(
       color: Colors.black,
       height: bannerHeight,
       width: MediaQuery.of(context).size.width,
-      child: Stack(
-        alignment: Alignment.center,
-        children: [
-          if (_bannerPlayerController != null)
-            BetterPlayer(
-              controller: _bannerPlayerController!,
-            ),
-          if (_isBannerLoading)
-            Container(
-              color: Colors.black.withOpacity(0.8),
-              child: const Center(
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
+      child: FutureBuilder(
+        future: _initializeVideoPlayerFuture,
+        builder: (context, snapshot) {
+          if (snapshot.connectionState == ConnectionState.done &&
+              _chewieController != null &&
+              _videoPlayerController!.value.isInitialized) {
+            return Stack(
+              children: [
+                // Add SizedBox at the top for spacing
+                Column(
                   children: [
-                    CircularProgressIndicator(color: Colors.white),
-                    SizedBox(height: 12),
-                    Text('Loading Stream...',
-                        style: TextStyle(color: Colors.white70)),
+                    SizedBox(
+                        height: 12), // Adjust this value for more/less spacing
+                    Expanded(
+                      child: ClipRect(
+                        child: Transform.scale(
+                          scale: 1.15, // Your chosen scale
+                          child: Center(
+                            child: SizedBox(
+                              width: MediaQuery.of(context).size.width,
+                              height: bannerHeight,
+                              child: Chewie(controller: _chewieController!),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
                   ],
                 ),
-              ),
-            ),
-          if (_hasBannerError)
-            Container(
-              color: Colors.black.withOpacity(0.8),
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  const Icon(Icons.error_outline,
-                      color: Colors.white, size: 40),
-                  const SizedBox(height: 12),
-                  const Text('Stream Error',
-                      style: TextStyle(color: Colors.white)),
-                  const SizedBox(height: 12),
-                  ElevatedButton.icon(
-                    onPressed: _reloadBannerStream,
-                    icon: const Icon(Icons.refresh, size: 16),
-                    label: const Text('Retry'),
-                  ),
-                ],
-              ),
-            ),
-          if (!_hasBannerError && !_isBannerLoading) ...[
-            Positioned(
-              top: 40,
-              left: 12,
-              child: Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-                decoration: BoxDecoration(
-                  color: Colors.black.withOpacity(0.6),
-                  borderRadius: BorderRadius.circular(20),
-                ),
-                child: const Row(
-                  children: [
-                    Icon(Icons.circle, color: Colors.red, size: 10),
-                    SizedBox(width: 6),
-                    Text("LIVE",
-                        style: TextStyle(color: Colors.white, fontSize: 12)),
-                  ],
-                ),
-              ),
-            ),
-            Positioned(
-              top: 40,
-              right: 12,
-              child: GestureDetector(
-                onTap: _toggleMute,
-                child: Container(
-                  padding: const EdgeInsets.all(6),
-                  decoration: BoxDecoration(
-                    color: Colors.black.withOpacity(0.6),
-                    shape: BoxShape.circle,
-                  ),
-                  child: Icon(
-                    _isMuted ? Icons.volume_off : Icons.volume_up,
-                    color: Colors.white,
-                    size: 20,
+
+                Positioned(
+                  top: 40,
+                  left: 12,
+                  child: Container(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                    decoration: BoxDecoration(
+                      color: Colors.black.withOpacity(0.6),
+                      borderRadius: BorderRadius.circular(20),
+                    ),
+                    child: const Row(
+                      children: [
+                        Icon(Icons.circle, color: Colors.red, size: 10),
+                        SizedBox(width: 6),
+                        Text("LIVE",
+                            style:
+                                TextStyle(color: Colors.white, fontSize: 12)),
+                      ],
+                    ),
                   ),
                 ),
-              ),
-            ),
-            Positioned(
-              bottom: 12,
-              right: 12,
-              child: GestureDetector(
-                onTap: _navigateToLivePage,
-                child: Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-                  decoration: BoxDecoration(
-                    color: Colors.black.withOpacity(0.6),
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: const Text(
-                    "Tap for full screen",
-                    style: TextStyle(color: Colors.white, fontSize: 12),
+                Positioned(
+                  top: 40,
+                  right: 12,
+                  child: GestureDetector(
+                    onTap: _toggleMute,
+                    child: Container(
+                      padding: const EdgeInsets.all(6),
+                      decoration: BoxDecoration(
+                        color: Colors.black.withOpacity(0.6),
+                        shape: BoxShape.circle,
+                      ),
+                      child: Icon(
+                        _isMuted ? Icons.volume_off : Icons.volume_up,
+                        color: Colors.white,
+                        size: 20,
+                      ),
+                    ),
                   ),
                 ),
-              ),
+                Positioned(
+                  bottom: 12,
+                  right: 12,
+                  child: GestureDetector(
+                    onTap: _navigateToLivePage,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 10, vertical: 5),
+                      decoration: BoxDecoration(
+                        color: Colors.black.withOpacity(0.6),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: const Text(
+                        "Tap for full screen",
+                        style: TextStyle(color: Colors.white, fontSize: 12),
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            );
+          } else if (snapshot.hasError) {
+            return Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                const Icon(Icons.error_outline, color: Colors.white, size: 40),
+                const SizedBox(height: 12),
+                const Text('Stream Error',
+                    style: TextStyle(color: Colors.white)),
+                const SizedBox(height: 12),
+                ElevatedButton.icon(
+                  onPressed: _reloadBannerStream,
+                  icon: const Icon(Icons.refresh, size: 16),
+                  label: const Text('Retry'),
+                ),
+              ],
+            );
+          }
+          return const Center(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                CircularProgressIndicator(color: Colors.white),
+                SizedBox(height: 12),
+                Text('Loading Stream...',
+                    style: TextStyle(color: Colors.white70)),
+              ],
             ),
-          ],
-        ],
+          );
+        },
       ),
     );
   }
 
+  // --- All other methods below are unchanged ---
+  // ... (rest of the file is the same)
   Future<void> _loadDataWithCache() async {
     final prefs = await SharedPreferences.getInstance();
     final lastTrendingTime = prefs.getInt(_trendingTimestampKey) ?? 0;
@@ -737,10 +701,12 @@ class _HomeScreenState extends State<HomeScreen>
       final dateTime = DateTime.parse(dateString);
       final now = DateTime.now();
       final difference = now.difference(dateTime);
-      if (difference.inDays > 365)
+      if (difference.inDays > 365) {
         return '${(difference.inDays / 365).floor()}y ago';
-      if (difference.inDays > 30)
+      }
+      if (difference.inDays > 30) {
         return '${(difference.inDays / 30).floor()}mo ago';
+      }
       if (difference.inDays > 0) return '${difference.inDays}d ago';
       if (difference.inHours > 0) return '${difference.inHours}h ago';
       if (difference.inMinutes > 0) return '${difference.inMinutes}m ago';

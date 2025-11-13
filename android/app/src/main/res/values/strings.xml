@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="default_notification_channel_id">high_importance_channel</string>
+    <string name="default_notification_channel_name">High Importance Notifications</string>
+    
+    <!-- Prayer notification channels -->
+    <string name="adhan_channel_id">adhan_channel</string>
+    <string name="adhan_channel_name">Adhan Notifications</string>
+    <string name="adhan_channel_description">Notifications for prayer times</string>
+    
+    <string name="weekly_channel_id">weekly_channel</string>
+    <string name="weekly_channel_name">Weekly Notifications</string>
+    <string name="weekly_channel_description">Reminder for Salawat Askār</string>
+</resources>

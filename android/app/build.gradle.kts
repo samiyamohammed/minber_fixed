@@ -1,7 +1,7 @@
+
 // plugins {
 //     id("com.android.application")
 //     id("kotlin-android")
-//     // The Flutter Gradle Plugin must be applied after the Android and Kotlin Gradle plugins.
 //     id("dev.flutter.flutter-gradle-plugin")
 //     id("com.google.gms.google-services")
 // }
@@ -11,19 +11,17 @@
 //     compileSdk = flutter.compileSdkVersion
 //     ndkVersion = flutter.ndkVersion
 
-// compileOptions {
+//     compileOptions {
 //         sourceCompatibility = JavaVersion.VERSION_1_8
 //         targetCompatibility = JavaVersion.VERSION_1_8
 //         isCoreLibraryDesugaringEnabled = true
 //     }
-
 
 //     kotlinOptions {
 //         jvmTarget = JavaVersion.VERSION_1_8.toString()
 //     }
 
 //     defaultConfig {
-//         // TODO: Specify your own unique Application ID (https://developer.android.com/studio/build/application-id.html).
 //         applicationId = "com.example.minber_super_app_new_fixed"
 //         minSdk = flutter.minSdkVersion
 //         targetSdk = flutter.targetSdkVersion
@@ -32,24 +30,28 @@
 //     }
 
 //     buildTypes {
-       
 //         getByName("release") {
 //             signingConfig = signingConfigs.getByName("debug")
+
+//             // ✅ USE THE CORRECT KOTLIN SYNTAX
 //             isMinifyEnabled = true
 //             isShrinkResources = true
+            
+//             // ✅ ADD THIS LINE - The function call is the same in Kotlin and Groovy
+//             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
 //         }
 //     }
-//     dependencies {
-    
-//     coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.0.3")
-// }
 // }
 
 // flutter {
 //     source = "../.."
 // }
-// android/app/build.gradle (FULLY UPDATED & READY TO PASTE)
-// android/app/build.gradle.kts (CORRECTED SYNTAX - READY TO PASTE)
+
+// dependencies {
+//     coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.0.3")
+// }
+
+// In android/app/build.gradle.kts
 
 plugins {
     id("com.android.application")
@@ -83,13 +85,14 @@ android {
 
     buildTypes {
         getByName("release") {
+            // NOTE: For a real release, you should have a dedicated release signing config.
             signingConfig = signingConfigs.getByName("debug")
 
-            // ✅ USE THE CORRECT KOTLIN SYNTAX
-            isMinifyEnabled = true
-            isShrinkResources = true
+            // This is the corrected section with Kotlin DSL syntax
+            isMinifyEnabled = false
+            isShrinkResources = false
             
-            // ✅ ADD THIS LINE - The function call is the same in Kotlin and Groovy
+            // This line correctly tells the build system to use your rules file
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
         }
     }
@@ -98,7 +101,8 @@ android {
 flutter {
     source = "../.."
 }
-
 dependencies {
+    implementation("com.google.android.play:core:1.10.3")
+    implementation("androidx.work:work-runtime:2.8.1") // This is correct
     coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.0.3")
 }

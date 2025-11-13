@@ -57,6 +57,7 @@ import 'screens/forgot_password_screen.dart';
 import 'screens/reset_password_screen.dart';
 import 'services/api_service.dart';
 import 'firebase_options.dart';
+import 'providers/notification_settings_provider.dart';
 
 // --- SHARED TOP-LEVEL OBJECTS AND CALLBACKS ---
 final logger = Logger();
@@ -232,6 +233,9 @@ Future<void> main() async {
 
   debugPrint('➡️ App Start → navigating to $initialRoute');
   runApp(MyApp(initialRoute: initialRoute));
+   WidgetsBinding.instance.addPostFrameCallback((_) {
+    NotificationService.debugNotificationSetup();
+  });
 }
 
 // --- CHAIN OF EVIDENCE: STEP 1 ---
@@ -301,10 +305,11 @@ class MyApp extends StatelessWidget {
       providers: [
         ChangeNotifierProvider(create: (context) => UserProvider()),
         ChangeNotifierProvider(create: (context) => PrayerProvider()),
-        // ✅ FIX 2: Correctly initialize the NotificationProvider.
-        // It now loads its own saved data when created.
         ChangeNotifierProvider(
           create: (context) => NotificationProvider()..init(),
+        ),
+        ChangeNotifierProvider(
+          create: (context) => NotificationSettingsProvider(),
         ),
         ProxyProvider<UserProvider, ApiClient>(
           update: (context, userProvider, previousApiClient) =>

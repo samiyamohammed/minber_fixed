@@ -1,11 +1,12 @@
-// lib/screens/prayertime.dart 
+// lib/screens/prayertime.dart (UI Layout Fixed & Compacted)
 
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:hijri/hijri_calendar.dart';
 import 'package:shimmer/shimmer.dart';
 import 'package:provider/provider.dart';
-import '../providers/prayer_provider.dart'; // ✅ SOLUTION: Import the provider
+import '../providers/prayer_provider.dart';
+import '../providers/notification_settings_provider.dart';
 
 class PrayerTimesPage extends StatefulWidget {
   const PrayerTimesPage({super.key});
@@ -15,10 +16,7 @@ class PrayerTimesPage extends StatefulWidget {
 }
 
 class _PrayerTimesPageState extends State<PrayerTimesPage> {
-  // All business logic and state are now in PrayerProvider.
-  // This widget is only responsible for building the UI.
-
-  int _selectedIndex = 2; // For BottomNavBar
+  int _selectedIndex = 2;
 
   final Map<String, IconData> _prayerIcons = {
     "Fajr": Icons.wb_twilight_rounded,
@@ -29,8 +27,6 @@ class _PrayerTimesPageState extends State<PrayerTimesPage> {
     "Isha": Icons.nights_stay_rounded,
   };
 
-  // Your navigation logic remains the same. The provider ensures that even if this
-  // page is rebuilt, the data is not re-fetched.
   void _onItemTapped(int index) {
     if (_selectedIndex == index) return;
     String routeName = '';
@@ -42,7 +38,7 @@ class _PrayerTimesPageState extends State<PrayerTimesPage> {
         routeName = '/media';
         break;
       case 2:
-        break; // Current page, do nothing
+        break;
       case 3:
         routeName = '/chatbot';
         break;
@@ -58,9 +54,8 @@ class _PrayerTimesPageState extends State<PrayerTimesPage> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    // ✅ SOLUTION: Listen to the PrayerProvider for state changes.
-    // context.watch makes this widget rebuild whenever notifyListeners() is called.
     final prayerProvider = context.watch<PrayerProvider>();
+    final settingsProvider = context.watch<NotificationSettingsProvider>();
 
     return Scaffold(
       body: Column(
@@ -69,14 +64,20 @@ class _PrayerTimesPageState extends State<PrayerTimesPage> {
           Expanded(
             child: prayerProvider.isLoading
                 ? const _PrayerListShimmer()
-                : ListView(
-                    padding: const EdgeInsets.all(16.0),
-                    children: [
-                      _buildPrayerList(theme, prayerProvider),
-                      const SizedBox(height: 24),
-                      _buildToolsGrid(theme),
-                      const SizedBox(height: 16),
-                    ],
+                : SingleChildScrollView(
+                    child: Padding(
+                      padding: const EdgeInsets.all(16.0),
+                      child: Column(
+                        children: [
+                          _buildPrayerList(
+                              theme, prayerProvider, settingsProvider),
+                          // ✅ UI FIX 1: Reduced space between prayer list and tools grid.
+                          const SizedBox(height: 16),
+                          _buildToolsGrid(theme),
+                          const SizedBox(height: 16),
+                        ],
+                      ),
+                    ),
                   ),
           ),
         ],
@@ -86,7 +87,6 @@ class _PrayerTimesPageState extends State<PrayerTimesPage> {
   }
 
   // --- WIDGET BUILDER METHODS ---
-  // These now take the provider as an argument to get the data they need.
 
   Widget _buildHeader(ThemeData theme, PrayerProvider provider) {
     final formattedHijriDate = HijriCalendar.now().toFormat("MMMM d, yyyy");
@@ -126,18 +126,15 @@ class _PrayerTimesPageState extends State<PrayerTimesPage> {
                 Row(mainAxisAlignment: MainAxisAlignment.center, children: [
                   const Icon(Icons.location_on, color: Colors.white, size: 16),
                   const SizedBox(width: 6),
-                  // ✅ SOLUTION: Use data from the provider
                   Text("${provider.city}, ${provider.country}",
                       style: theme.textTheme.titleSmall?.copyWith(
                           color: Colors.white, fontWeight: FontWeight.w500))
                 ]),
                 const SizedBox(height: 8),
-                // ✅ SOLUTION: Use data from the provider
                 Text(provider.nextPrayer,
                     style: theme.textTheme.headlineMedium?.copyWith(
                         color: Colors.white, fontWeight: FontWeight.bold)),
                 const SizedBox(height: 4),
-                // ✅ SOLUTION: Use data from the provider
                 if (provider.nextPrayerCountdown.isNotEmpty)
                   Text("in ${provider.nextPrayerCountdown}",
                       style: theme.textTheme.titleLarge
@@ -159,14 +156,36 @@ class _PrayerTimesPageState extends State<PrayerTimesPage> {
     );
   }
 
-  Widget _buildPrayerList(ThemeData theme, PrayerProvider provider) {
-    // ✅ SOLUTION: Use data from the provider
+  Widget _buildPrayerList(ThemeData theme, PrayerProvider prayerProvider,
+      NotificationSettingsProvider settingsProvider) {
     return Column(
-      children: provider.prayerTimes.entries.map((entry) {
-        final isNext = entry.key == provider.nextPrayer;
+      children: prayerProvider.prayerTimes.entries.map((entry) {
+        final isNext = entry.key == prayerProvider.nextPrayer;
+
+        bool isNotificationEnabled() {
+          switch (entry.key) {
+            case 'Fajr':
+              return settingsProvider.fajr;
+            case 'Dhuhr':
+              return settingsProvider.dhuhr;
+            case 'Asr':
+              return settingsProvider.asr;
+            case 'Maghrib':
+              return settingsProvider.maghrib;
+            case 'Isha':
+              return settingsProvider.isha;
+            default:
+              return false;
+          }
+        }
+
+        String getPrayerKey() => entry.key.toLowerCase();
+
         return Container(
-          margin: const EdgeInsets.only(bottom: 8),
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+          // ✅ UI FIX 2: Reduced bottom margin to bring prayer rows closer.
+          margin: const EdgeInsets.only(bottom: 6),
+          // ✅ UI FIX 3: Reduced vertical padding to make each row shorter.
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
           decoration: BoxDecoration(
             color:
                 isNext ? theme.colorScheme.primaryContainer : theme.cardColor,
@@ -200,11 +219,27 @@ class _PrayerTimesPageState extends State<PrayerTimesPage> {
                 ),
               ),
               const SizedBox(width: 12),
-              Icon(Icons.notifications_active_outlined,
-                  size: 20,
-                  color: isNext
-                      ? theme.colorScheme.onPrimaryContainer.withOpacity(0.7)
-                      : theme.hintColor.withOpacity(0.7)),
+              if (entry.key == 'Sunrise')
+                const SizedBox(width: 48)
+              else
+                IconButton(
+                  padding: EdgeInsets.zero,
+                  constraints: const BoxConstraints(),
+                  icon: Icon(
+                    isNotificationEnabled()
+                        ? Icons.notifications_active
+                        : Icons.notifications_off_outlined,
+                    size: 20,
+                    color: isNext
+                        ? theme.colorScheme.onPrimaryContainer.withOpacity(0.9)
+                        : theme.hintColor.withOpacity(0.9),
+                  ),
+                  onPressed: () {
+                    final key = getPrayerKey();
+                    final currentValue = isNotificationEnabled();
+                    settingsProvider.updateSetting(key, !currentValue);
+                  },
+                ),
             ],
           ),
         );
@@ -298,7 +333,6 @@ class _PrayerTimesPageState extends State<PrayerTimesPage> {
   }
 }
 
-// This shimmer widget remains completely unchanged.
 class _PrayerListShimmer extends StatelessWidget {
   const _PrayerListShimmer();
 
