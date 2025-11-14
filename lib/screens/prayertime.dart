@@ -1,8 +1,9 @@
-// lib/screens/prayertime.dart (UI Layout Fixed & Compacted)
+// lib/screens/prayertime.dart (FINAL CORRECT VERSION - GUIDES TO SETTINGS)
 
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:hijri/hijri_calendar.dart';
+import 'package:permission_handler/permission_handler.dart';
 import 'package:shimmer/shimmer.dart';
 import 'package:provider/provider.dart';
 import '../providers/prayer_provider.dart';
@@ -26,6 +27,81 @@ class _PrayerTimesPageState extends State<PrayerTimesPage> {
     "Maghrib": Icons.wb_twilight_outlined,
     "Isha": Icons.nights_stay_rounded,
   };
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _requestPermissionsAndRefreshData();
+    });
+  }
+
+  /// Shows a dialog explaining why background location is needed and guides the user to settings.
+  Future<void> _showBackgroundPermissionDialog() async {
+    return showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          title: const Text('Final Step for Notifications'),
+          content: const SingleChildScrollView(
+            child: ListBody(
+              children: <Widget>[
+                Text(
+                    'To enable prayer time notifications, you need to manually set location access to "Allow all the time" in the app settings.'),
+                SizedBox(height: 15),
+                Text(
+                    'Tap "Open Settings", then go to "Permissions" -> "Location" and select "Allow all the time".'),
+              ],
+            ),
+          ),
+          actions: <Widget>[
+            TextButton(
+              child: const Text('Cancel'),
+              onPressed: () => Navigator.of(context).pop(),
+            ),
+            TextButton(
+              child: const Text('Open Settings'),
+              onPressed: () {
+                // This is the key function that takes the user to your app's settings page.
+                openAppSettings();
+                Navigator.of(context).pop();
+              },
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  /// Handles the entire permission request flow correctly for modern Android.
+  Future<void> _requestPermissionsAndRefreshData() async {
+    // 1. Request standard (foreground) location permission first.
+    PermissionStatus foregroundStatus = await Permission.location.request();
+
+    if (foregroundStatus.isGranted) {
+      // 2. If foreground is granted, check if we already have background permission.
+      PermissionStatus backgroundStatus =
+          await Permission.locationAlways.status;
+      if (!backgroundStatus.isGranted) {
+        // 3. If not, show our dialog to guide the user to the settings page.
+        if (mounted) {
+          await _showBackgroundPermissionDialog();
+        }
+      }
+    } else if (foregroundStatus.isPermanentlyDenied) {
+      // If permission is permanently denied, the only way is to open settings.
+      await openAppSettings();
+    }
+
+    // 4. Finally, initialize the provider. This will populate the UI and cache
+    // if the user has just granted the necessary permissions.
+    if (mounted) {
+      Provider.of<PrayerProvider>(context, listen: false).initialize();
+    }
+  }
+
+  // --- No other methods below this line have changed. ---
 
   void _onItemTapped(int index) {
     if (_selectedIndex == index) return;
@@ -71,7 +147,6 @@ class _PrayerTimesPageState extends State<PrayerTimesPage> {
                         children: [
                           _buildPrayerList(
                               theme, prayerProvider, settingsProvider),
-                          // ✅ UI FIX 1: Reduced space between prayer list and tools grid.
                           const SizedBox(height: 16),
                           _buildToolsGrid(theme),
                           const SizedBox(height: 16),
@@ -85,8 +160,6 @@ class _PrayerTimesPageState extends State<PrayerTimesPage> {
       bottomNavigationBar: _buildBottomNavBar(theme),
     );
   }
-
-  // --- WIDGET BUILDER METHODS ---
 
   Widget _buildHeader(ThemeData theme, PrayerProvider provider) {
     final formattedHijriDate = HijriCalendar.now().toFormat("MMMM d, yyyy");
@@ -182,9 +255,7 @@ class _PrayerTimesPageState extends State<PrayerTimesPage> {
         String getPrayerKey() => entry.key.toLowerCase();
 
         return Container(
-          // ✅ UI FIX 2: Reduced bottom margin to bring prayer rows closer.
           margin: const EdgeInsets.only(bottom: 6),
-          // ✅ UI FIX 3: Reduced vertical padding to make each row shorter.
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
           decoration: BoxDecoration(
             color:

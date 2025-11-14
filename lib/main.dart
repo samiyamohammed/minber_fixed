@@ -58,6 +58,8 @@ import 'screens/reset_password_screen.dart';
 import 'services/api_service.dart';
 import 'firebase_options.dart';
 import 'providers/notification_settings_provider.dart';
+import 'screens/permission_screen.dart';
+// import 'package:android_alarm_manager_plus/android_alarm_manager_plus.dart';
 
 // --- SHARED TOP-LEVEL OBJECTS AND CALLBACKS ---
 final logger = Logger();
@@ -184,7 +186,7 @@ Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  await initializeAdhanService();
+  // await initializeAdhanService();
   await NotificationService.init();
   await FirebaseNotificationService.init();
 
@@ -200,7 +202,8 @@ Future<void> main() async {
     debugPrint("🔥 FATAL: Firebase Core initialization failed: $e");
   }
 
-  // --- WORKMANAGER REGISTRATION (REMAINS THE SAME) ---
+  // Initialize Android Alarm Manager
+  // await AndroidAlarmManager.initialize();
   await Workmanager().initialize(callbackDispatcher, isInDebugMode: true);
   await Workmanager().registerPeriodicTask(
     "prayer_notification_scheduler",
@@ -233,7 +236,7 @@ Future<void> main() async {
 
   debugPrint('➡️ App Start → navigating to $initialRoute');
   runApp(MyApp(initialRoute: initialRoute));
-   WidgetsBinding.instance.addPostFrameCallback((_) {
+  WidgetsBinding.instance.addPostFrameCallback((_) {
     NotificationService.debugNotificationSetup();
   });
 }
@@ -400,6 +403,7 @@ class MyApp extends StatelessWidget {
                   apiBaseUrl: args['apiBaseUrl'] as String,
                 );
               },
+              '/permission': (_) => const PermissionScreen(),
               '/youtubeContent': (_) => const OnDemandPage(),
               '/channel': (_) => const YouTubeChannelDetailPage(),
               '/ondemand': (_) => const OnDemandPage(),

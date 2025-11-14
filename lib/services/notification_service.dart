@@ -126,85 +126,104 @@ class NotificationService {
     }
   }
 
-  static Future<void> _scheduleAllPrayerTimes() async {
+static Future<void> _scheduleAllPrayerTimes() async {
     logger.i("--- Calculating and scheduling prayer notifications ---");
-
-    if (!await _checkLocationPermission()) {
-      logger.e(
-          "Cannot schedule notifications without location permission or cached times");
-      return;
-    }
     final prefs = await SharedPreferences.getInstance();
 
-    Position position;
+    Coordinates? coordinates;
+
+    // --- 1. First, try to get a fresh, live location ---
     try {
-      position = await Geolocator.getCurrentPosition(
-          desiredAccuracy: LocationAccuracy.medium);
+      // A safeguard check for permissions within the background service itself.
+      LocationPermission permission = await Geolocator.checkPermission();
+      if (permission != LocationPermission.always) {
+        throw Exception("Background location permission not granted.");
+      }
+
+      Position position = await Geolocator.getCurrentPosition(
+          desiredAccuracy: LocationAccuracy.medium,
+          // Add a timeout to prevent the service from hanging
+          timeLimit: const Duration(seconds: 20));
+
+      coordinates = Coordinates(position.latitude, position.longitude);
+      logger.i("✅ Successfully fetched live location for scheduling.");
     } catch (e) {
-      logger.e("Could not get location for scheduling. Aborting.", error: e);
-      return;
+      logger.w("Could not get live location for scheduling. Reason: $e");
+
+      // --- 2. If live location fails, immediately try to use the cache ---
+      final lat = prefs.getDouble('last_known_lat');
+      final lng = prefs.getDouble('last_known_lng');
+
+      if (lat != null && lng != null) {
+        coordinates = Coordinates(lat, lng);
+        logger.i("✅ Using CACHED location for scheduling: $lat, $lng");
+      }
     }
 
-    final now = tz.TZDateTime.now(tz.local);
-    final prayerTimes = PrayerTimes(
-        coordinates: Coordinates(position.latitude, position.longitude),
-        date: now,
-        calculationParameters: CalculationMethod.muslimWorldLeague()
-          ..madhab = Madhab.shafi);
+    // --- 3. If we have coordinates (either live or cached), proceed to schedule ---
+    if (coordinates != null) {
+      final now = tz.TZDateTime.now(tz.local);
+      final prayerTimes = PrayerTimes(
+          coordinates: coordinates,
+          date: now,
+          calculationParameters: CalculationMethod.muslimWorldLeague()
+            ..madhab = Madhab.shafi);
 
-    final prayersToSchedule = {
-      "Fajr": prayerTimes.fajr,
-      "Dhuhr": prayerTimes.dhuhr,
-      "Asr": prayerTimes.asr,
-      "Maghrib": prayerTimes.maghrib,
-      "Isha": prayerTimes.isha,
-    };
+      final prayersToSchedule = {
+        "Fajr": prayerTimes.fajr,
+        "Dhuhr": prayerTimes.dhuhr,
+        "Asr": prayerTimes.asr,
+        "Maghrib": prayerTimes.maghrib,
+        "Isha": prayerTimes.isha,
+      };
 
-    logger.i("Prayer times calculated for today: ${now.toIso8601String()}");
+      logger.i("Prayer times calculated for today: ${now.toIso8601String()}");
 
-    for (var prayer in prayersToSchedule.entries) {
-      final prayerName = prayer.key;
-      final prayerDateTime = prayer.value;
+      for (var prayer in prayersToSchedule.entries) {
+        final prayerName = prayer.key;
+        final prayerDateTime = prayer.value;
+        if (prayerDateTime == null) continue;
 
-      if (prayerDateTime == null) continue;
+        final tz.TZDateTime scheduledTime =
+            tz.TZDateTime.from(prayerDateTime, tz.local);
 
-      final tz.TZDateTime scheduledTime =
-          tz.TZDateTime.from(prayerDateTime, tz.local);
-
-      if (scheduledTime.isAfter(now)) {
-        final isEnabled = prefs
-                .getBool('notifications_${prayerName.toLowerCase()}_enabled') ??
-            true;
-
-        if (isEnabled) {
-          logger.i("✅ Scheduling '$prayerName' at $scheduledTime");
-
-          await _notifications.zonedSchedule(
-            prayerName.hashCode,
-            'Time for $prayerName',
-            'The time for the $prayerName prayer has arrived.',
-            scheduledTime,
-            const NotificationDetails(
-              android: AndroidNotificationDetails(
-                'adhan_channel',
-                'Adhan Notifications',
-                channelDescription: 'Notifications for prayer times.',
-                importance: Importance.max,
-                // REMOVED: priority: Priority.high,
+        if (scheduledTime.isAfter(now)) {
+          final isEnabled = prefs.getBool(
+                  'notifications_${prayerName.toLowerCase()}_enabled') ??
+              true;
+          if (isEnabled) {
+            logger.i("✅ Scheduling '$prayerName' at $scheduledTime");
+            await _notifications.zonedSchedule(
+              prayerName.hashCode,
+              'Time for $prayerName',
+              'The time for the $prayerName prayer has arrived.',
+              scheduledTime,
+              const NotificationDetails(
+                android: AndroidNotificationDetails(
+                  'adhan_channel',
+                  'Adhan Notifications',
+                  channelDescription: 'Notifications for prayer times.',
+                  importance: Importance.max,
+                ),
               ),
-            ),
-            androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
-            uiLocalNotificationDateInterpretation:
-                UILocalNotificationDateInterpretation.absoluteTime,
-          );
+              androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
+              uiLocalNotificationDateInterpretation:
+                  UILocalNotificationDateInterpretation.absoluteTime,
+            );
+          } else {
+            logger.w(
+                "🚫 Skipping '$prayerName' because it is disabled in settings.");
+          }
         } else {
           logger.w(
-              "🚫 Skipping '$prayerName' because it is disabled in settings.");
+              "🚫 Skipping '$prayerName' because its time ($scheduledTime) has already passed today.");
         }
-      } else {
-        logger.w(
-            "🚫 Skipping '$prayerName' because its time ($scheduledTime) has already passed today.");
       }
+    } else {
+      // --- 4. If BOTH live and cached location failed, we cannot schedule ---
+      logger.e(
+          "❌ ABORTING: Could not get a location from live fetch or cache. Cannot schedule notifications.");
+      return;
     }
     logger.i("--- Finished scheduling prayer notifications ---");
   }

@@ -1,10 +1,11 @@
-// lib/providers/prayer_provider.dart
+// lib/providers/prayer_provider.dart (FULLY UPDATED AND READY TO PASTE)
 
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:geocoding/geocoding.dart';
 import 'package:adhan_dart/adhan_dart.dart';
+import 'package:shared_preferences/shared_preferences.dart'; // <-- ADD THIS IMPORT
 
 class PrayerProvider with ChangeNotifier {
   bool _isLoading = true;
@@ -61,6 +62,18 @@ class PrayerProvider with ChangeNotifier {
 
       Position position = await Geolocator.getCurrentPosition(
           desiredAccuracy: LocationAccuracy.high);
+
+      // --- ✅ START: NEW CACHING CODE ---
+      // After successfully fetching the live location, we save it to the
+      // device's storage. The background notification service can then
+      // use this as a fallback if it fails to get a live location.
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setDouble('last_known_lat', position.latitude);
+      await prefs.setDouble('last_known_lng', position.longitude);
+      print(
+          "✅ [PrayerProvider] Location cached: ${position.latitude}, ${position.longitude}");
+      // --- ✅ END: NEW CACHING CODE ---
+
       _calculatePrayerTimes(position.latitude, position.longitude);
 
       List<Placemark> placemarks =
@@ -72,6 +85,8 @@ class PrayerProvider with ChangeNotifier {
     } catch (e) {
       _city = "Location Unavailable";
       _country = "";
+      // Optional: In case of error, you could try to load from cache here too
+      // for the UI, but for now we keep it simple.
     }
     // No need to call notifyListeners() here, it's handled in initialize()
   }

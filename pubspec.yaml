@@ -55,6 +55,7 @@ dependencies:
   flutter_slidable: ^4.0.3
   audioplayers: ^6.5.1
   flutter_background_service: ^5.1.0
+  # android_alarm_manager_plus: ^5.0.0
 
 dev_dependencies:
   flutter_test:

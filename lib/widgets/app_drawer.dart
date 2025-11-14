@@ -158,19 +158,10 @@ class AppDrawer extends StatelessWidget {
             },
           ),
           const Divider(indent: 16, endIndent: 16),
-          if (isLoggedIn)
-            _buildDrawerItem(
-              context: context,
-              icon: Icons.logout,
-              text: 'Logout',
-              onTap: () => _showLogoutConfirmation(context),
-            ),
         ],
       ),
     );
   }
-  // ... (All your helper methods: _buildLoggedInHeader, _buildLoggedOutHeader, etc. remain exactly the same)
-  // --- WIDGET BUILDER METHODS ---
 
   Widget _buildLoggedInHeader(BuildContext context, UserProvider provider) {
     final user = provider.user!;

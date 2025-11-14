@@ -1,4 +1,4 @@
-// lib/screens/home_screen.dart (Final Fixed Height, Proportional Width Fix)
+// lib/screens/home_screen.dart (Final Dynamic Height Fix)
 
 import 'dart:async';
 import 'dart:convert';
@@ -45,6 +45,9 @@ class _HomeScreenState extends State<HomeScreen>
   late Future<void> _initializeVideoPlayerFuture;
   bool _isMuted = true;
   final String streamUrl = 'http://msa.merkuz.com:8888/live/stream1/index.m3u8';
+
+  // ✅ 1. Re-introduce the aspect ratio as a state variable, with a default.
+  double _bannerAspectRatio = 16 / 9;
 
   String _nextPrayerName = "";
   String _nextPrayerCountdown = "--:--:--";
@@ -129,12 +132,17 @@ class _HomeScreenState extends State<HomeScreen>
           VideoPlayerController.networkUrl(Uri.parse(streamUrl));
       await _videoPlayerController!.initialize();
 
+      // ✅ 2. Get the video's true aspect ratio once it's ready.
+      final double videoAspectRatio = _videoPlayerController!.value.aspectRatio;
+
       _chewieController = ChewieController(
         videoPlayerController: _videoPlayerController!,
         autoPlay: true,
         looping: true,
         showControls: false,
         allowFullScreen: false,
+        // ✅ 3. Tell the Chewie player its correct shape.
+        aspectRatio: videoAspectRatio,
         materialProgressColors: ChewieProgressColors(
           playedColor: Colors.transparent,
           handleColor: Colors.transparent,
@@ -146,7 +154,10 @@ class _HomeScreenState extends State<HomeScreen>
       await _videoPlayerController!.setVolume(_isMuted ? 0.0 : 1.0);
 
       if (mounted) {
-        setState(() {});
+        // ✅ 4. Update the state to trigger a rebuild with the new, correct aspect ratio.
+        setState(() {
+          _bannerAspectRatio = videoAspectRatio;
+        });
       }
     } catch (e) {
       logger.e("Error initializing video player: $e");
@@ -159,6 +170,8 @@ class _HomeScreenState extends State<HomeScreen>
     _chewieController?.dispose();
     if (mounted) {
       setState(() {
+        // Reset to default while reloading, prevents layout jumps
+        _bannerAspectRatio = 16 / 9;
         _initializeVideoPlayerFuture = _initializeBannerPlayer();
       });
     }
@@ -181,7 +194,10 @@ class _HomeScreenState extends State<HomeScreen>
     super.build(context);
     final theme = Theme.of(context);
     final isDarkMode = theme.brightness == Brightness.dark;
-    const double bannerHeight = 220.0; // Your desired fixed height
+
+    // ✅ 5. The banner height is now fully dynamic, based on the state variable.
+    final screenWidth = MediaQuery.of(context).size.width;
+    final bannerHeight = screenWidth / _bannerAspectRatio;
 
     return GestureDetector(
       onHorizontalDragEnd: (details) {
@@ -291,7 +307,6 @@ class _HomeScreenState extends State<HomeScreen>
     );
   }
 
-// ✅ --- FINAL VERSION WITH TOP SPACING ---
   Widget _buildVideoBanner(BuildContext context, double bannerHeight) {
     return Container(
       color: Colors.black,
@@ -304,29 +319,10 @@ class _HomeScreenState extends State<HomeScreen>
               _chewieController != null &&
               _videoPlayerController!.value.isInitialized) {
             return Stack(
+              alignment: Alignment.center,
               children: [
-                // Add SizedBox at the top for spacing
-                Column(
-                  children: [
-                    SizedBox(
-                        height: 12), // Adjust this value for more/less spacing
-                    Expanded(
-                      child: ClipRect(
-                        child: Transform.scale(
-                          scale: 1.15, // Your chosen scale
-                          child: Center(
-                            child: SizedBox(
-                              width: MediaQuery.of(context).size.width,
-                              height: bannerHeight,
-                              child: Chewie(controller: _chewieController!),
-                            ),
-                          ),
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-
+                // ✅ 6. The simple Chewie widget will now size itself perfectly.
+                Chewie(controller: _chewieController!),
                 Positioned(
                   top: 40,
                   left: 12,
@@ -405,6 +401,7 @@ class _HomeScreenState extends State<HomeScreen>
               ],
             );
           }
+          // The initial loading state.
           return const Center(
             child: Column(
               mainAxisSize: MainAxisSize.min,
