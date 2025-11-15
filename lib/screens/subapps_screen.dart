@@ -88,17 +88,18 @@ class _KiriyogdeyraPageState extends State<KiriyogdeyraPage> {
   int _selectedIndex = 4; // Sub-Apps tab
 
   final List<Map<String, dynamic>> _featuredApps = [
-    {
-      'name': 'Kirbgebeya',
-      'description': 'Shop online and find great deals',
-      'image': 'assets/images/kirbgebeya.png',
-      'url': 'https://kirbgebeya.com/',
-    },
+
     {
       'name': 'almathurat',
       'description': 'Recite Morning and Evening Adhkar',
       'image': 'assets/images/almathurat.jpg',
       'url': 'https://Skylinkict.com/almathurat',
+    },
+   {
+      'name': 'Kirbgebeya',
+      'description': 'Shop online and find great deals',
+      'image': 'assets/images/kirbgebeya.png',
+      'url': 'https://kirbgebeya.com/',
     },
     {
       'name': 'Alfurqan App',
@@ -110,6 +111,12 @@ class _KiriyogdeyraPageState extends State<KiriyogdeyraPage> {
       'name': 'Besirah',
       'description': 'Explore historical and religious content',
       'image': 'assets/images/besira.jpg',
+      'url': 'https://basirah-app.skylinkict.com/',
+    },
+    {
+      'name': 'Audio Book',
+      'description': 'Experience content your way: watch, listen, or read.',
+      'image': 'assets/images/audio book.png',
     },
   ];
 
@@ -197,15 +204,6 @@ class _KiriyogdeyraPageState extends State<KiriyogdeyraPage> {
 
   Widget _buildAppCard(ThemeData theme, bool isDark, Map<String, dynamic> app) {
     final cardColor = isDark ? const Color(0xFF1E1E1E) : Colors.white;
-    // In light mode, the cards are white. To make them visible on a white
-    // background, we rely on the shadow from elevation. Let's make sure
-    // the card has a subtle border or slightly different color if needed.
-    // Or we use a very light grey for the background.
-    // Sticking with white cards on a slightly off-white bg is usually best.
-    // Let's change the light bg to a very faint grey for better card visibility.
-    // Reverting to `Colors.grey[50]` for a subtle difference.
-    // The user wants an EXACT match. So we'll use a subtle border on the card
-    // in light mode.
 
     return Card(
       elevation: isDark ? 1.5 : 2,

@@ -278,26 +278,26 @@ static Future<void> _scheduleAllPrayerTimes() async {
     }
   }
 
-  static Future<void> debugNotificationSetup() async {
-    logger.i("🧪 DEBUG: Testing notification setup in release mode");
+  // static Future<void> debugNotificationSetup() async {
+  //   logger.i("🧪 DEBUG: Testing notification setup in release mode");
 
-    await _notifications.show(
-      888,
-      'Test Notification',
-      'If you see this, notifications work in release mode',
-      const NotificationDetails(
-        android: AndroidNotificationDetails(
-          'adhan_channel',
-          'Adhan Notifications',
-          channelDescription: 'Test notification',
-          importance: Importance.max,
-          // REMOVED: priority: Priority.high,
-        ),
-      ),
-    );
+  //   await _notifications.show(
+  //     888,
+  //     'Test Notification',
+  //     'If you see this, notifications work in release mode',
+  //     const NotificationDetails(
+  //       android: AndroidNotificationDetails(
+  //         'adhan_channel',
+  //         'Adhan Notifications',
+  //         channelDescription: 'Test notification',
+  //         importance: Importance.max,
+  //         // REMOVED: priority: Priority.high,
+  //       ),
+  //     ),
+  //   );
 
-    logger.i("🧪 DEBUG: Test notification scheduled");
-  }
+  //   logger.i("🧪 DEBUG: Test notification scheduled");
+  // }
 
   static Future<void> cancelAllNotifications() async {
     logger.w("Cancelling all scheduled notifications.");

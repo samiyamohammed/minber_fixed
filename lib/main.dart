@@ -237,7 +237,7 @@ Future<void> main() async {
   debugPrint('➡️ App Start → navigating to $initialRoute');
   runApp(MyApp(initialRoute: initialRoute));
   WidgetsBinding.instance.addPostFrameCallback((_) {
-    NotificationService.debugNotificationSetup();
+    // NotificationService.debugNotificationSetup();
   });
 }
 

@@ -24,6 +24,8 @@ import '../widgets/embedded_web_screen.dart';
 import 'trending_see_all_screen.dart';
 import 'video_player_screen.dart';
 
+// ... (Keep all the code from the top of the file down to the class definition)
+
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
   @override
@@ -46,7 +48,6 @@ class _HomeScreenState extends State<HomeScreen>
   bool _isMuted = true;
   final String streamUrl = 'http://msa.merkuz.com:8888/live/stream1/index.m3u8';
 
-  // ✅ 1. Re-introduce the aspect ratio as a state variable, with a default.
   double _bannerAspectRatio = 16 / 9;
 
   String _nextPrayerName = "";
@@ -132,7 +133,6 @@ class _HomeScreenState extends State<HomeScreen>
           VideoPlayerController.networkUrl(Uri.parse(streamUrl));
       await _videoPlayerController!.initialize();
 
-      // ✅ 2. Get the video's true aspect ratio once it's ready.
       final double videoAspectRatio = _videoPlayerController!.value.aspectRatio;
 
       _chewieController = ChewieController(
@@ -141,7 +141,6 @@ class _HomeScreenState extends State<HomeScreen>
         looping: true,
         showControls: false,
         allowFullScreen: false,
-        // ✅ 3. Tell the Chewie player its correct shape.
         aspectRatio: videoAspectRatio,
         materialProgressColors: ChewieProgressColors(
           playedColor: Colors.transparent,
@@ -154,7 +153,6 @@ class _HomeScreenState extends State<HomeScreen>
       await _videoPlayerController!.setVolume(_isMuted ? 0.0 : 1.0);
 
       if (mounted) {
-        // ✅ 4. Update the state to trigger a rebuild with the new, correct aspect ratio.
         setState(() {
           _bannerAspectRatio = videoAspectRatio;
         });
@@ -165,13 +163,24 @@ class _HomeScreenState extends State<HomeScreen>
     }
   }
 
+  // UPDATED FUNCTION
   void _reloadBannerStream() {
+    // First, dispose of the old controllers to release their resources.
     _videoPlayerController?.dispose();
     _chewieController?.dispose();
+
     if (mounted) {
       setState(() {
-        // Reset to default while reloading, prevents layout jumps
+        // **THE FIX:** Explicitly set controllers to null.
+        // This forces the FutureBuilder to show the loading indicator
+        // on the next build, as the `_chewieController != null` check will fail.
+        _videoPlayerController = null;
+        _chewieController = null;
+
+        // Reset the aspect ratio to a default to prevent layout jumps.
         _bannerAspectRatio = 16 / 9;
+
+        // Assign a new Future to the FutureBuilder to start the reload.
         _initializeVideoPlayerFuture = _initializeBannerPlayer();
       });
     }
@@ -195,7 +204,6 @@ class _HomeScreenState extends State<HomeScreen>
     final theme = Theme.of(context);
     final isDarkMode = theme.brightness == Brightness.dark;
 
-    // ✅ 5. The banner height is now fully dynamic, based on the state variable.
     final screenWidth = MediaQuery.of(context).size.width;
     final bannerHeight = screenWidth / _bannerAspectRatio;
 
@@ -321,7 +329,6 @@ class _HomeScreenState extends State<HomeScreen>
             return Stack(
               alignment: Alignment.center,
               children: [
-                // ✅ 6. The simple Chewie widget will now size itself perfectly.
                 Chewie(controller: _chewieController!),
                 Positioned(
                   top: 40,
@@ -418,7 +425,7 @@ class _HomeScreenState extends State<HomeScreen>
     );
   }
 
-  // --- All other methods below are unchanged ---
+  // --- All other methods are unchanged ---
   // ... (rest of the file is the same)
   Future<void> _loadDataWithCache() async {
     final prefs = await SharedPreferences.getInstance();
@@ -681,16 +688,25 @@ class _HomeScreenState extends State<HomeScreen>
       'url': 'https://Skylinkict.com/alfurqan'
     },
     {
+      'name': 'Almathurat',
+      'image': 'assets/images/almathurat.jpg',
+      'url': 'https://Skylinkict.com/almathurat'
+    },
+    {
       'name': 'Kirbgebeya',
       'image': 'assets/images/kirbgebeya.png',
       'url': 'https://kirbgebeya.com/'
     },
     {
-      'name': 'Almathurat',
-      'image': 'assets/images/almathurat.jpg',
-      'url': 'https://Skylinkict.com/almathurat'
+      'name': 'Besirah',
+      'image': 'assets/images/besira.jpg',
+      'url': 'https://basirah-app.skylinkict.com/'
     },
-    {'name': 'Besirah', 'image': 'assets/images/besira.jpg', 'url': null},
+    {
+      'name': 'Audio Book',
+      'image': 'assets/images/audio book.png',
+      'url': null
+    },
   ];
 
   String _formatTimeAgo(String dateString) {
@@ -1165,90 +1181,133 @@ class _HomeScreenState extends State<HomeScreen>
         ),
       );
     }
-    return ListView.separated(
-      shrinkWrap: true,
-      physics: const NeverScrollableScrollPhysics(),
-      itemCount: min(3, _newsArticles!.length),
-      separatorBuilder: (context, index) => const SizedBox(height: 12),
-      itemBuilder: (context, index) {
-        final item = _newsArticles![index];
-        final headline = item['headline'] ?? 'No Title';
-        final newsUrl = item['newsUrl'] as String?;
-        String thumbnailUrl = item['thumbnail'] ?? '';
-        if (thumbnailUrl.isNotEmpty && !thumbnailUrl.startsWith('http')) {
-          if (thumbnailUrl.startsWith('/')) {
-            thumbnailUrl = '$_apiBaseUrl$thumbnailUrl';
-          } else {
-            thumbnailUrl = '$_apiBaseUrl/$thumbnailUrl';
-          }
-        }
-        final isDarkMode = theme.brightness == Brightness.dark;
-        final cardBackgroundColor =
-            isDarkMode ? AppColors.surfaceDark : const Color(0xFFF7F9FC);
-        final newsCard = Container(
-          decoration: BoxDecoration(
-            color: cardBackgroundColor,
-            borderRadius: BorderRadius.circular(12),
+
+    final videoNews = _newsArticles!
+        .where((article) =>
+            (article['newsUrl'] as String?)?.contains('youtube.com') ?? false)
+        .toList();
+    final websiteNews = _newsArticles!
+        .where((article) =>
+            !(article['newsUrl'] as String?)!.contains('youtube.com') ?? true)
+        .toList();
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        if (websiteNews.isNotEmpty) ...[
+          Padding(
+            padding: const EdgeInsets.only(top: 8.0, bottom: 12.0),
+            child: Text("Latest Articles",
+                style: theme.textTheme.titleMedium
+                    ?.copyWith(fontWeight: FontWeight.bold)),
           ),
-          child: InkWell(
-            borderRadius: BorderRadius.circular(12),
-            onTap: () {
-              if (newsUrl != null && newsUrl.isNotEmpty) {
-                Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                        builder: (context) => EmbeddedWebScreen(
-                            url: newsUrl, appName: headline)));
-              }
+          ListView.separated(
+            shrinkWrap: true,
+            physics: const NeverScrollableScrollPhysics(),
+            itemCount: min(3, websiteNews.length),
+            separatorBuilder: (context, index) => const SizedBox(height: 12),
+            itemBuilder: (context, index) {
+              return _buildNewsItem(theme, websiteNews[index], index);
             },
-            child: Padding(
-              padding: const EdgeInsets.all(12.0),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(headline,
-                            style: theme.textTheme.bodyMedium
-                                ?.copyWith(fontWeight: FontWeight.bold),
-                            maxLines: 3,
-                            overflow: TextOverflow.ellipsis),
-                        const SizedBox(height: 8),
-                        Text(_formatTimeAgo(item["createdAt"] ?? ''),
-                            style: theme.textTheme.bodySmall
-                                ?.copyWith(color: theme.hintColor)),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  ClipRRect(
-                    borderRadius: BorderRadius.circular(8),
-                    child: thumbnailUrl.isNotEmpty
-                        ? Image.network(thumbnailUrl,
-                            width: 80,
-                            height: 80,
-                            fit: BoxFit.cover,
-                            errorBuilder: (c, e, s) => Container(
-                                width: 80,
-                                height: 80,
-                                color: theme.splashColor,
-                                child:
-                                    const Icon(Icons.broken_image, size: 30)))
-                        : Container(
+          ),
+        ],
+        if (videoNews.isNotEmpty) ...[
+          const SizedBox(height: 24),
+          Padding(
+            padding: const EdgeInsets.only(bottom: 12.0),
+            child: Text("Video News",
+                style: theme.textTheme.titleMedium
+                    ?.copyWith(fontWeight: FontWeight.bold)),
+          ),
+          ListView.separated(
+            shrinkWrap: true,
+            physics: const NeverScrollableScrollPhysics(),
+            itemCount: min(3, videoNews.length),
+            separatorBuilder: (context, index) => const SizedBox(height: 12),
+            itemBuilder: (context, index) {
+              return _buildNewsItem(theme, videoNews[index], index);
+            },
+          ),
+        ]
+      ],
+    );
+  }
+
+  Widget _buildNewsItem(ThemeData theme, dynamic item, int index) {
+    final headline = item['headline'] ?? 'No Title';
+    final newsUrl = item['newsUrl'] as String?;
+    String thumbnailUrl = item['thumbnail'] ?? '';
+    if (thumbnailUrl.isNotEmpty && !thumbnailUrl.startsWith('http')) {
+      if (thumbnailUrl.startsWith('/')) {
+        thumbnailUrl = '$_apiBaseUrl$thumbnailUrl';
+      } else {
+        thumbnailUrl = '$_apiBaseUrl/$thumbnailUrl';
+      }
+    }
+    final isDarkMode = theme.brightness == Brightness.dark;
+    final cardBackgroundColor =
+        isDarkMode ? AppColors.surfaceDark : const Color(0xFFF7F9FC);
+    final newsCard = Container(
+      decoration: BoxDecoration(
+        color: cardBackgroundColor,
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(12),
+        onTap: () {
+          if (newsUrl != null && newsUrl.isNotEmpty) {
+            Navigator.push(
+                context,
+                MaterialPageRoute(
+                    builder: (context) =>
+                        EmbeddedWebScreen(url: newsUrl, appName: headline)));
+          }
+        },
+        child: Padding(
+          padding: const EdgeInsets.all(12.0),
+          child: Row(
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(headline,
+                        style: theme.textTheme.bodyMedium
+                            ?.copyWith(fontWeight: FontWeight.bold),
+                        maxLines: 3,
+                        overflow: TextOverflow.ellipsis),
+                    const SizedBox(height: 8),
+                    Text(_formatTimeAgo(item["createdAt"] ?? ''),
+                        style: theme.textTheme.bodySmall
+                            ?.copyWith(color: theme.hintColor)),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 12),
+              ClipRRect(
+                borderRadius: BorderRadius.circular(8),
+                child: thumbnailUrl.isNotEmpty
+                    ? Image.network(thumbnailUrl,
+                        width: 80,
+                        height: 80,
+                        fit: BoxFit.cover,
+                        errorBuilder: (c, e, s) => Container(
                             width: 80,
                             height: 80,
                             color: theme.splashColor,
-                            child: const Icon(Icons.image, size: 30)),
-                  ),
-                ],
+                            child: const Icon(Icons.broken_image, size: 30)))
+                    : Container(
+                        width: 80,
+                        height: 80,
+                        color: theme.splashColor,
+                        child: const Icon(Icons.image, size: 30)),
               ),
-            ),
+            ],
           ),
-        );
-        return AnimatedListItem(index: index, child: newsCard);
-      },
+        ),
+      ),
     );
+    return AnimatedListItem(index: index, child: newsCard);
   }
 
   Widget _buildNewsShimmer(ThemeData theme) {
