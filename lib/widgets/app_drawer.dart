@@ -1,9 +1,9 @@
-// lib/widgets/app_drawer.dart (Fully Updated & Ready to Paste)
+// lib/widgets/app_drawer.dart (FINAL VERSION WITH OVERFLOW FIX)
 
 import 'package:flutter/material.dart';
 import 'package:logger/logger.dart';
 import 'package:provider/provider.dart';
-import 'package:minber/providers/notification_provider.dart'; // ✅ 1. IMPORT NOTIFICATION PROVIDER
+import 'package:minber/providers/notification_provider.dart';
 
 import '../core/theme_notifier.dart';
 import '../core/app_colors.dart';
@@ -12,7 +12,6 @@ import '../providers/user_provider.dart';
 class AppDrawer extends StatelessWidget {
   const AppDrawer({super.key});
 
-  // ... (keep your _getUserColor method as is)
   Color _getUserColor(String username) {
     final List<Color> userColors = [
       Colors.red.shade400,
@@ -36,7 +35,7 @@ class AppDrawer extends StatelessWidget {
       child: ListView(
         padding: EdgeInsets.zero,
         children: [
-          // ... (Your Consumer<UserProvider> header remains the same)
+          // Header Section
           Consumer<UserProvider>(
             builder: (context, provider, child) {
               final logger = Logger();
@@ -52,6 +51,8 @@ class AppDrawer extends StatelessWidget {
               }
             },
           ),
+
+          // Home Item
           _buildDrawerItem(
             context: context,
             icon: Icons.home_outlined,
@@ -66,6 +67,8 @@ class AppDrawer extends StatelessWidget {
             routeName: '/home',
             currentRoute: currentRoute,
           ),
+
+          // Profile Item (Only if logged in)
           if (isLoggedIn)
             _buildDrawerItem(
               context: context,
@@ -81,15 +84,13 @@ class AppDrawer extends StatelessWidget {
               currentRoute: currentRoute,
             ),
 
-          // ✅ 2. REPLACE THE NOTIFICATIONS DRAWER ITEM WITH A CONSUMER
+          // Notifications Item
           Consumer<NotificationProvider>(
             builder: (context, provider, child) {
               final bool isSelected = currentRoute == '/notifications';
               return ListTile(
                 leading: Badge(
-                  // Show the unread count from the provider
                   label: Text(provider.unreadCount.toString()),
-                  // Only show the badge if there are unread notifications
                   isLabelVisible: provider.unreadCount > 0,
                   child: Icon(
                     Icons.notifications_outlined,
@@ -124,13 +125,11 @@ class AppDrawer extends StatelessWidget {
             },
           ),
           const Divider(indent: 16, endIndent: 16),
-          // ... (The rest of your drawer items: Theme Switch, Logout, etc. remain the same)
+
+          // Dark Mode Switch
           ValueListenableBuilder<ThemeMode>(
             valueListenable: themeNotifier,
             builder: (context, currentMode, child) {
-              // This is the crucial logic fix:
-              // The switch is 'on' if the theme is explicitly dark, OR
-              // if the theme is set to 'system' AND the system itself is currently dark.
               final isDarkMode = currentMode == ThemeMode.dark ||
                   (currentMode == ThemeMode.system &&
                       MediaQuery.of(context).platformBrightness ==
@@ -139,17 +138,12 @@ class AppDrawer extends StatelessWidget {
               return SwitchListTile(
                 title: const Text('Dark Mode'),
                 secondary: Icon(
-                  // Use our new 'isDarkMode' boolean to select the correct icon
                   isDarkMode ? Icons.dark_mode : Icons.light_mode,
                   color: Theme.of(context).colorScheme.primary,
                 ),
-                // Use our new 'isDarkMode' boolean for the switch's state
                 value: isDarkMode,
                 onChanged: (isNowDark) {
-                  // When the user interacts, we set an explicit preference,
-                  // moving away from 'system' mode. This logic is correct.
                   final newMode = isNowDark ? ThemeMode.dark : ThemeMode.light;
-
                   themeNotifier.value = newMode;
                   saveThemePreference(newMode);
                 },
@@ -158,6 +152,18 @@ class AppDrawer extends StatelessWidget {
             },
           ),
           const Divider(indent: 16, endIndent: 16),
+
+          // Logout Item (Only if logged in)
+          if (isLoggedIn)
+            _buildDrawerItem(
+              context: context,
+              icon: Icons.logout,
+              text: 'Logout',
+              onTap: () {
+                Navigator.pop(context);
+                _showLogoutConfirmation(context);
+              },
+            ),
         ],
       ),
     );
@@ -170,7 +176,6 @@ class AppDrawer extends StatelessWidget {
         user.username.isNotEmpty ? user.username[0].toUpperCase() : '?';
 
     return DrawerHeader(
-      // ✅ UI/UX UPDATE: Professional gradient using brand colors
       decoration: const BoxDecoration(
         gradient: LinearGradient(
           colors: [AppColors.primaryBlue, AppColors.accentBlue],
@@ -178,80 +183,86 @@ class AppDrawer extends StatelessWidget {
           end: Alignment.bottomRight,
         ),
       ),
-      child: Align(
-        alignment: Alignment.bottomLeft,
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          mainAxisAlignment: MainAxisAlignment.end,
-          children: [
-            CircleAvatar(
-              radius: 30,
-              backgroundColor: userColor,
-              child: Text(
-                initial,
-                style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 28,
-                    fontWeight: FontWeight.bold),
+      // --- ✅ FIX: SingleChildScrollView added here too for safety ---
+      child: SingleChildScrollView(
+        child: Align(
+          alignment: Alignment.bottomLeft,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisAlignment: MainAxisAlignment.end,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              CircleAvatar(
+                radius: 30,
+                backgroundColor: userColor,
+                child: Text(
+                  initial,
+                  style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 28,
+                      fontWeight: FontWeight.bold),
+                ),
               ),
-            ),
-            const SizedBox(height: 12),
-            Text(
-              user.username,
-              style: const TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.bold,
-                  color: Colors.white,
-                  shadows: [Shadow(blurRadius: 2.0, color: Colors.black26)]),
-            ),
-            const Text(
-              "Welcome Back!",
-              style: TextStyle(color: Colors.white70),
-            ),
-          ],
+              const SizedBox(height: 12),
+              Text(
+                user.username,
+                style: const TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.white,
+                    shadows: [Shadow(blurRadius: 2.0, color: Colors.black26)]),
+              ),
+              const Text(
+                "Welcome Back!",
+                style: TextStyle(color: Colors.white70),
+              ),
+            ],
+          ),
         ),
       ),
     );
   }
 
   Widget _buildLoggedOutHeader(BuildContext context) {
-    // ✅ UI/UX UPDATE: Cleaner, more inviting header with a clear call-to-action
     return DrawerHeader(
       decoration:
           BoxDecoration(color: Theme.of(context).scaffoldBackgroundColor),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Text("Welcome to Minber TV",
-              style: Theme.of(context)
-                  .textTheme
-                  .titleLarge
-                  ?.copyWith(fontWeight: FontWeight.bold)),
-          const SizedBox(height: 8),
-          Text("Sign in to access your profile and subscriptions.",
-              style: Theme.of(context).textTheme.bodyMedium),
-          const SizedBox(height: 16),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(
-              backgroundColor: AppColors.primaryBlue,
-              foregroundColor: Colors.white,
-              shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(8)),
-            ),
-            onPressed: () {
-              Navigator.pop(context);
-              Navigator.pushNamed(context, "/login");
-            },
-            child: const Text("Sign In or Register"),
-          )
-        ],
+      // --- ✅ FIX: SingleChildScrollView fixes the "Bottom Overflowed" error ---
+      child: SingleChildScrollView(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisAlignment: MainAxisAlignment.center,
+          mainAxisSize: MainAxisSize.min, // Prevents taking up infinite space
+          children: [
+            Text("Welcome to Minber TV",
+                style: Theme.of(context)
+                    .textTheme
+                    .titleLarge
+                    ?.copyWith(fontWeight: FontWeight.bold)),
+            const SizedBox(height: 8),
+            Text("Sign in to access your profile and subscriptions.",
+                style: Theme.of(context).textTheme.bodyMedium),
+            const SizedBox(height: 12),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppColors.primaryBlue,
+                foregroundColor: Colors.white,
+                shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(8)),
+              ),
+              onPressed: () {
+                Navigator.pop(context);
+                Navigator.pushNamed(context, "/login");
+              },
+              child: const Text("Sign In or Register"),
+            )
+          ],
+        ),
       ),
     );
   }
 
   Widget _buildLoadingHeader() {
-    // ✅ UI/UX UPDATE: Consistent branding in the loading state
     return const DrawerHeader(
       decoration: BoxDecoration(
         gradient: LinearGradient(
@@ -274,7 +285,6 @@ class AppDrawer extends StatelessWidget {
     String? routeName,
     String? currentRoute,
   }) {
-    // ✅ UI/UX UPDATE: Highlights the currently active page in the drawer
     final bool isSelected = routeName != null && routeName == currentRoute;
 
     return ListTile(
@@ -299,7 +309,6 @@ class AppDrawer extends StatelessWidget {
     showDialog(
       context: context,
       builder: (BuildContext dialogContext) {
-        // ✅ UI/UX UPDATE: Dialog now matches the app's modern, rounded aesthetic
         return AlertDialog(
           shape:
               RoundedRectangleBorder(borderRadius: BorderRadius.circular(16.0)),

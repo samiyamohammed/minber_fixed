@@ -1,7 +1,8 @@
-// lib/screens/login_screen.dart (Fully Updated & Ready to Paste)
+// lib/screens/login_screen.dart (FINAL VERSION)
 
 import 'dart:async';
 import 'package:connectivity_plus/connectivity_plus.dart';
+import 'package:firebase_messaging/firebase_messaging.dart'; // Added for FCM
 import 'package:flutter/material.dart';
 import 'package:fluttertoast/fluttertoast.dart';
 import 'package:logger/logger.dart';
@@ -9,6 +10,7 @@ import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../providers/user_provider.dart';
+import '../services/api_service.dart'; // Added for ApiService
 
 class LoginPage extends StatefulWidget {
   const LoginPage({super.key});
@@ -24,6 +26,7 @@ class _LoginPageState extends State<LoginPage> {
 
   bool _rememberMe = false;
   bool _isLoading = false;
+  bool _isSkipping = false; // Added to handle skip loading state
   bool _isPasswordObscured = true;
   final Logger _logger = Logger();
 
@@ -68,7 +71,41 @@ class _LoginPageState extends State<LoginPage> {
     }
   }
 
-  // --- 👇 CORE LOGIC UPDATED HERE 👇 ---
+  // --- NEW: Handle Skip Logic ---
+  Future<void> _handleSkip() async {
+    setState(() => _isSkipping = true);
+
+    try {
+      // 1. Get FCM Token
+      String? fcmToken = await FirebaseMessaging.instance.getToken();
+
+      if (fcmToken != null) {
+        _logger.i("Skip Login: Sending FCM Token -> $fcmToken");
+        // 2. Send to Backend (Guest mode)
+        await ApiService.registerGuestFcmToken(fcmToken);
+      } else {
+        _logger.w("Skip Login: FCM Token was null.");
+      }
+
+      // 3. Mark as Guest in Preferences (Optional, for app state logic)
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setBool('isGuest', true);
+
+      // 4. Navigate to Home
+      if (mounted) {
+        Navigator.pushReplacementNamed(context, '/home');
+      }
+    } catch (e) {
+      _logger.e("Error during skip login", error: e);
+      // Proceed to home even if API fails, so user isn't blocked
+      if (mounted) {
+        Navigator.pushReplacementNamed(context, '/home');
+      }
+    } finally {
+      if (mounted) setState(() => _isSkipping = false);
+    }
+  }
+
   Future<void> _login() async {
     FocusManager.instance.primaryFocus?.unfocus();
     if (!_formKey.currentState!.validate()) return;
@@ -82,27 +119,25 @@ class _LoginPageState extends State<LoginPage> {
     if (mounted) setState(() => _isLoading = true);
 
     try {
-      // 1. Call the provider's login method. It will now throw an error on failure.
       await Provider.of<UserProvider>(context, listen: false).login(
         _emailController.text.trim(),
         _passwordController.text.trim(),
       );
 
-      // 2. If the code reaches here, the login was successful.
-      //    The UserProvider has already handled saving the session data.
       await _handleRememberMe();
+
+      // Clear guest flag if it exists, since we are now real users
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.remove('isGuest');
+
       _showToast("Login Successful 🎉", bgColor: Colors.green);
       if (mounted) {
-        // Navigate to the home screen after a successful login.
         Navigator.pushReplacementNamed(context, '/home');
       }
     } catch (e) {
-      // 3. If an error was thrown, the catch block is executed.
       _logger.e("Login failed", error: e);
-      // Show a user-friendly error message from the exception.
       _showToast("❌ Invalid email or password. Please try again.");
     } finally {
-      // 4. This always runs, ensuring the loading indicator is turned off.
       if (mounted) setState(() => _isLoading = false);
     }
   }
@@ -112,7 +147,6 @@ class _LoginPageState extends State<LoginPage> {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
     final textTheme = theme.textTheme;
-
 
     return Scaffold(
       body: SafeArea(
@@ -125,6 +159,26 @@ class _LoginPageState extends State<LoginPage> {
                 mainAxisAlignment: MainAxisAlignment.center,
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
+                  // --- Skip Button at the top-right corner (Optional placement) ---
+                  Align(
+                    alignment: Alignment.centerRight,
+                    child: TextButton(
+                      onPressed: _isSkipping || _isLoading ? null : _handleSkip,
+                      child: _isSkipping
+                          ? const SizedBox(
+                              width: 16,
+                              height: 16,
+                              child: CircularProgressIndicator(strokeWidth: 2))
+                          : Text(
+                              "Skip",
+                              style: TextStyle(
+                                  color: colorScheme.primary,
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 16),
+                            ),
+                    ),
+                  ),
+
                   Image.asset(
                     'assets/images/minber.jpg',
                     height: 80,
@@ -208,14 +262,13 @@ class _LoginPageState extends State<LoginPage> {
                             Navigator.pushNamed(context, '/forgot-password'),
                         child: const Text("Forgot Password?"),
                       ),
-
                     ],
                   ),
                   const SizedBox(height: 24),
                   SizedBox(
                     height: 50,
                     child: ElevatedButton(
-                      onPressed: _isLoading ? null : _login,
+                      onPressed: (_isLoading || _isSkipping) ? null : _login,
                       child: AnimatedSwitcher(
                         duration: const Duration(milliseconds: 300),
                         child: _isLoading
@@ -244,6 +297,21 @@ class _LoginPageState extends State<LoginPage> {
                                 fontWeight: FontWeight.bold)),
                       ),
                     ],
+                  ),
+                  const SizedBox(height: 20),
+                  // Alternative Skip Link at bottom
+                  Center(
+                    child: TextButton(
+                      onPressed:
+                          (_isLoading || _isSkipping) ? null : _handleSkip,
+                      child: Text(
+                        "Continue as Guest",
+                        style: TextStyle(
+                          color: theme.hintColor,
+                          decoration: TextDecoration.underline,
+                        ),
+                      ),
+                    ),
                   ),
                 ],
               ),

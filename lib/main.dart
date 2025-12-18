@@ -1,4 +1,4 @@
-// lib/main.dart (FINAL STABLE VERSION)
+// lib/main.dart (FINAL STABLE VERSION WITH GUEST PERSISTENCE FIX)
 
 import 'dart:io';
 import 'package:flutter/material.dart';
@@ -225,16 +225,21 @@ Future<void> main() async {
 
   final prefs = await SharedPreferences.getInstance();
   final isLoggedIn = prefs.getBool('isLoggedIn') ?? false;
+  // --- 👇 FIX: CHECK FOR GUEST FLAG HERE 👇 ---
+  final isGuest = prefs.getBool('isGuest') ?? false;
   final seenOnboarding = prefs.getBool('onboarding_complete') ?? false;
 
   String initialRoute = '/onboarding';
-  if (isLoggedIn) {
+
+  // Update logic: If logged in OR is a guest, go to Home
+  if (isLoggedIn || isGuest) {
     initialRoute = '/home';
   } else if (seenOnboarding) {
     initialRoute = '/login';
   }
 
-  debugPrint('➡️ App Start → navigating to $initialRoute');
+  debugPrint(
+      '➡️ App Start → navigating to $initialRoute (LoggedIn: $isLoggedIn, Guest: $isGuest)');
   runApp(MyApp(initialRoute: initialRoute));
   WidgetsBinding.instance.addPostFrameCallback((_) {
     // NotificationService.debugNotificationSetup();
@@ -253,6 +258,9 @@ Future<void> setupFirebasePushNotifications() async {
       final accessToken = prefs.getString('accessToken');
       if (accessToken != null) {
         await ApiService.updateFcmToken(newFcmToken, accessToken);
+      } else {
+        // Optional: If you want to keep guest tokens updated on refresh
+        // await ApiService.registerGuestFcmToken(newFcmToken);
       }
     });
 

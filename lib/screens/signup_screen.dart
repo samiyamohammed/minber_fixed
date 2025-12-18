@@ -1,4 +1,4 @@
-// lib/screens/signup_page.dart (Fully Updated & Ready to Paste)
+// lib/screens/signup_page.dart (Final Version - Open Email & Simple Password)
 
 import 'dart:convert';
 import 'package:minber/screens/email_verification_page.dart';
@@ -8,7 +8,7 @@ import 'package:fluttertoast/fluttertoast.dart';
 import 'package:http/http.dart' as http;
 import 'package:logger/logger.dart';
 
-class SignUpPage extends StatefulWidget { 
+class SignUpPage extends StatefulWidget {
   const SignUpPage({super.key});
 
   @override
@@ -27,36 +27,16 @@ class _SignUpPageState extends State<SignUpPage> {
   bool _isConfirmPasswordObscured = true;
   final Logger _logger = Logger();
 
+  // Using your production backend URL
   final String registerUrl = "http://msa.merkuz.com:3636/users/register";
-
-  // ✅ UI/UX UPDATE: State for real-time password validation
-  bool _has8Chars = false;
-  bool _hasUppercase = false;
-  bool _hasNumber = false;
-
-  @override
-  void initState() {
-    super.initState();
-    _passwordController.addListener(_updatePasswordRequirements);
-  }
 
   @override
   void dispose() {
     _nameController.dispose();
     _emailController.dispose();
-    _passwordController.removeListener(_updatePasswordRequirements);
     _passwordController.dispose();
     _confirmPasswordController.dispose();
     super.dispose();
-  }
-
-  void _updatePasswordRequirements() {
-    setState(() {
-      final password = _passwordController.text;
-      _has8Chars = password.length >= 8;
-      _hasUppercase = password.contains(RegExp(r'[A-Z]'));
-      _hasNumber = password.contains(RegExp(r'[0-9]'));
-    });
   }
 
   void _showToast(String message, {Color bgColor = Colors.red}) {
@@ -150,18 +130,31 @@ class _SignUpPageState extends State<SignUpPage> {
                         : null,
                   ),
                   const SizedBox(height: 16),
+
+                  // ✅ EMAIL FIELD (Corrected Validation)
                   TextFormField(
                     controller: _emailController,
                     keyboardType: TextInputType.emailAddress,
+                    autofillHints: const [AutofillHints.email],
                     decoration: const InputDecoration(
                         labelText: "Email Address",
                         prefixIcon: Icon(Icons.email_outlined)),
-                    validator: (v) =>
-                        (v == null || v.trim().isEmpty || !v.contains('@'))
-                            ? "Please enter a valid email"
-                            : null,
+                    validator: (v) {
+                      if (v == null || v.trim().isEmpty) {
+                        return "Email is required";
+                      }
+                      // Simple regex that allows ANY domain (gmail, yahoo, outlook, etc.)
+                      // It just ensures the format is something@something.something
+                      final emailRegex = RegExp(r'^[^@]+@[^@]+\.[^@]+');
+                      if (!emailRegex.hasMatch(v)) {
+                        return "Please enter a valid email address";
+                      }
+                      return null;
+                    },
                   ),
                   const SizedBox(height: 16),
+
+                  // ✅ PASSWORD FIELD (Simplified Validation)
                   TextFormField(
                     controller: _passwordController,
                     obscureText: _isPasswordObscured,
@@ -176,16 +169,16 @@ class _SignUpPageState extends State<SignUpPage> {
                             () => _isPasswordObscured = !_isPasswordObscured),
                       ),
                     ),
-                    validator: (v) => (v == null || v.isEmpty)
-                        ? "Password is required"
-                        : ((!_has8Chars || !_hasUppercase || !_hasNumber)
-                            ? "Password does not meet requirements"
-                            : null),
+                    validator: (v) {
+                      if (v == null || v.isEmpty) {
+                        return "Password is required";
+                      }
+                      if (v.length < 6) {
+                        return "Password must be at least 6 characters";
+                      }
+                      return null;
+                    },
                   ),
-                  const SizedBox(height: 16),
-
-                  // ✅ UI/UX UPDATE: Interactive password strength checklist
-                  _buildPasswordChecklist(),
                   const SizedBox(height: 16),
 
                   TextFormField(
@@ -247,61 +240,6 @@ class _SignUpPageState extends State<SignUpPage> {
           ),
         ),
       ),
-    );
-  }
-
-  Widget _buildPasswordChecklist() {
-    return Container(
-      padding: const EdgeInsets.all(16.0),
-      decoration: BoxDecoration(
-        color: Theme.of(context).colorScheme.surfaceVariant.withOpacity(0.5),
-        borderRadius: BorderRadius.circular(12),
-      ),
-      child: Column(
-        children: [
-          _PasswordRequirementItem(
-              isValid: _has8Chars, text: "At least 8 characters"),
-          const SizedBox(height: 8),
-          _PasswordRequirementItem(
-              isValid: _hasUppercase,
-              text: "Contains an uppercase letter (A-Z)"),
-          const SizedBox(height: 8),
-          _PasswordRequirementItem(
-              isValid: _hasNumber, text: "Contains a number (0-9)"),
-        ],
-      ),
-    );
-  }
-}
-
-class _PasswordRequirementItem extends StatelessWidget {
-  final bool isValid;
-  final String text;
-  const _PasswordRequirementItem({required this.isValid, required this.text});
-
-  @override
-  Widget build(BuildContext context) {
-    final successColor = Colors.green.shade600;
-    final defaultColor =
-        Theme.of(context).textTheme.bodyMedium?.color?.withOpacity(0.7);
-    return Row(
-      children: [
-        AnimatedSwitcher(
-          duration: const Duration(milliseconds: 300),
-          transitionBuilder: (child, animation) =>
-              ScaleTransition(scale: animation, child: child),
-          child: Icon(
-              isValid ? Icons.check_circle_rounded : Icons.circle_outlined,
-              key: ValueKey<bool>(isValid),
-              color: isValid ? successColor : defaultColor,
-              size: 20),
-        ),
-        const SizedBox(width: 12),
-        Text(text,
-            style: TextStyle(
-                color: isValid ? successColor : defaultColor,
-                fontWeight: isValid ? FontWeight.w600 : FontWeight.normal)),
-      ],
     );
   }
 }

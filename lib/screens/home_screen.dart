@@ -1,4 +1,4 @@
-// lib/screens/home_screen.dart (Final Dynamic Height Fix)
+// lib/screens/home_screen.dart (FINAL STABLE VERSION - FIXED ASPECT RATIO)
 
 import 'dart:async';
 import 'dart:convert';
@@ -24,8 +24,6 @@ import '../widgets/embedded_web_screen.dart';
 import 'trending_see_all_screen.dart';
 import 'video_player_screen.dart';
 
-// ... (Keep all the code from the top of the file down to the class definition)
-
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
   @override
@@ -48,7 +46,8 @@ class _HomeScreenState extends State<HomeScreen>
   bool _isMuted = true;
   final String streamUrl = 'http://msa.merkuz.com:8888/live/stream1/index.m3u8';
 
-  double _bannerAspectRatio = 16 / 9;
+  // --- ✅ FIX: Lock Aspect Ratio to 16:9 to prevent vertical stretching ---
+  final double _bannerAspectRatio = 16 / 9;
 
   String _nextPrayerName = "";
   String _nextPrayerCountdown = "--:--:--";
@@ -133,7 +132,8 @@ class _HomeScreenState extends State<HomeScreen>
           VideoPlayerController.networkUrl(Uri.parse(streamUrl));
       await _videoPlayerController!.initialize();
 
-      final double videoAspectRatio = _videoPlayerController!.value.aspectRatio;
+      // --- ✅ FIX: Removed dynamic aspect ratio calculation logic ---
+      // We now enforce the 16:9 ratio directly in the ChewieController.
 
       _chewieController = ChewieController(
         videoPlayerController: _videoPlayerController!,
@@ -141,7 +141,8 @@ class _HomeScreenState extends State<HomeScreen>
         looping: true,
         showControls: false,
         allowFullScreen: false,
-        aspectRatio: videoAspectRatio,
+        aspectRatio: _bannerAspectRatio, // Forced 16:9
+        placeholder: Container(color: Colors.black),
         materialProgressColors: ChewieProgressColors(
           playedColor: Colors.transparent,
           handleColor: Colors.transparent,
@@ -152,35 +153,21 @@ class _HomeScreenState extends State<HomeScreen>
 
       await _videoPlayerController!.setVolume(_isMuted ? 0.0 : 1.0);
 
-      if (mounted) {
-        setState(() {
-          _bannerAspectRatio = videoAspectRatio;
-        });
-      }
+      // No setState needed here anymore for aspect ratio
     } catch (e) {
       logger.e("Error initializing video player: $e");
       rethrow;
     }
   }
 
-  // UPDATED FUNCTION
   void _reloadBannerStream() {
-    // First, dispose of the old controllers to release their resources.
     _videoPlayerController?.dispose();
     _chewieController?.dispose();
 
     if (mounted) {
       setState(() {
-        // **THE FIX:** Explicitly set controllers to null.
-        // This forces the FutureBuilder to show the loading indicator
-        // on the next build, as the `_chewieController != null` check will fail.
         _videoPlayerController = null;
         _chewieController = null;
-
-        // Reset the aspect ratio to a default to prevent layout jumps.
-        _bannerAspectRatio = 16 / 9;
-
-        // Assign a new Future to the FutureBuilder to start the reload.
         _initializeVideoPlayerFuture = _initializeBannerPlayer();
       });
     }
@@ -205,6 +192,7 @@ class _HomeScreenState extends State<HomeScreen>
     final isDarkMode = theme.brightness == Brightness.dark;
 
     final screenWidth = MediaQuery.of(context).size.width;
+    // Calculate fixed height based on 16:9 ratio
     final bannerHeight = screenWidth / _bannerAspectRatio;
 
     return GestureDetector(
@@ -329,7 +317,11 @@ class _HomeScreenState extends State<HomeScreen>
             return Stack(
               alignment: Alignment.center,
               children: [
-                Chewie(controller: _chewieController!),
+                // AspectRatio ensures the player respects the 16:9 bounds
+                AspectRatio(
+                  aspectRatio: _bannerAspectRatio,
+                  child: Chewie(controller: _chewieController!),
+                ),
                 Positioned(
                   top: 40,
                   left: 12,
@@ -408,7 +400,6 @@ class _HomeScreenState extends State<HomeScreen>
               ],
             );
           }
-          // The initial loading state.
           return const Center(
             child: Column(
               mainAxisSize: MainAxisSize.min,
@@ -425,8 +416,8 @@ class _HomeScreenState extends State<HomeScreen>
     );
   }
 
-  // --- All other methods are unchanged ---
-  // ... (rest of the file is the same)
+  // --- REST OF THE FILE REMAINS UNCHANGED ---
+
   Future<void> _loadDataWithCache() async {
     final prefs = await SharedPreferences.getInstance();
     final lastTrendingTime = prefs.getInt(_trendingTimestampKey) ?? 0;
