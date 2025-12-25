@@ -1,9 +1,10 @@
-// lib/widgets/app_drawer.dart (FINAL VERSION WITH OVERFLOW FIX)
+// lib/widgets/app_drawer.dart (Final Fixed Version - Robust Logout)
 
 import 'package:flutter/material.dart';
 import 'package:logger/logger.dart';
 import 'package:provider/provider.dart';
 import 'package:minber/providers/notification_provider.dart';
+import 'package:minber/services/notification_service.dart'; // ✅ Added for Global Navigator Key
 
 import '../core/theme_notifier.dart';
 import '../core/app_colors.dart';
@@ -16,7 +17,7 @@ class AppDrawer extends StatelessWidget {
     final List<Color> userColors = [
       Colors.red.shade400,
       Colors.green.shade400,
-      const Color(0xFF29B6F6), // Using our brand's accent blue
+      const Color(0xFF29B6F6),
       Colors.orange.shade400,
       Colors.purple.shade400,
       Colors.teal.shade400,
@@ -160,7 +161,8 @@ class AppDrawer extends StatelessWidget {
               icon: Icons.logout,
               text: 'Logout',
               onTap: () {
-                Navigator.pop(context);
+                // ✅ FIX: Don't pop(context) here. Let the dialog handle it.
+                // This keeps the context valid for showing the dialog.
                 _showLogoutConfirmation(context);
               },
             ),
@@ -169,6 +171,7 @@ class AppDrawer extends StatelessWidget {
     );
   }
 
+  // ... (Header widgets remain exactly the same as before)
   Widget _buildLoggedInHeader(BuildContext context, UserProvider provider) {
     final user = provider.user!;
     final userColor = _getUserColor(user.username);
@@ -183,7 +186,6 @@ class AppDrawer extends StatelessWidget {
           end: Alignment.bottomRight,
         ),
       ),
-      // --- ✅ FIX: SingleChildScrollView added here too for safety ---
       child: SingleChildScrollView(
         child: Align(
           alignment: Alignment.bottomLeft,
@@ -227,12 +229,11 @@ class AppDrawer extends StatelessWidget {
     return DrawerHeader(
       decoration:
           BoxDecoration(color: Theme.of(context).scaffoldBackgroundColor),
-      // --- ✅ FIX: SingleChildScrollView fixes the "Bottom Overflowed" error ---
       child: SingleChildScrollView(
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           mainAxisAlignment: MainAxisAlignment.center,
-          mainAxisSize: MainAxisSize.min, // Prevents taking up infinite space
+          mainAxisSize: MainAxisSize.min,
           children: [
             Text("Welcome to Minber TV",
                 style: Theme.of(context)
@@ -305,6 +306,7 @@ class AppDrawer extends StatelessWidget {
     );
   }
 
+  // --- ✅ ROBUST LOGOUT LOGIC ---
   void _showLogoutConfirmation(BuildContext context) {
     showDialog(
       context: context,
@@ -326,12 +328,25 @@ class AppDrawer extends StatelessWidget {
               ),
               child: const Text("Logout"),
               onPressed: () async {
-                await Provider.of<UserProvider>(context, listen: false)
-                    .logout();
+                // 1. Close the dialog
+                Navigator.of(dialogContext).pop();
 
-                if (context.mounted) {
-                  Navigator.of(context, rootNavigator: true)
-                      .pushNamedAndRemoveUntil('/login', (route) => false);
+                try {
+                  // 2. Perform logout (clearing cache/tokens)
+                  await Provider.of<UserProvider>(context, listen: false)
+                      .logout();
+                } catch (e) {
+                  Logger().e("Error during logout: $e");
+                } finally {
+                  // 3. ✅ USE GLOBAL NAVIGATOR KEY
+                  // This works even if the Drawer context is unmounted/closed.
+                  // 'pushNamedAndRemoveUntil' removes all previous routes (Home, Drawer),
+                  // effectively "resetting" the app state visually.
+                  NotificationService.navigatorKey.currentState
+                      ?.pushNamedAndRemoveUntil(
+                    '/login',
+                    (route) => false,
+                  );
                 }
               },
             ),
