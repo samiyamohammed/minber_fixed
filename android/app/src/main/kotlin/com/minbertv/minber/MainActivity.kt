@@ -1,4 +1,4 @@
-package com.example.minber_super_app_new_fixed
+package com.minbertv.minber
 
 import io.flutter.embedding.android.FlutterActivity
 

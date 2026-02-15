@@ -3,11 +3,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_staggered_animations/flutter_staggered_animations.dart';
 import 'package:fluttertoast/fluttertoast.dart';
 import 'package:webview_flutter/webview_flutter.dart';
-import './coming_soon_page.dart';
 
-/// ---------------------------------------------------------------
-///  Embedded web view (unchanged – works in light & dark)
-/// ---------------------------------------------------------------
+
 class EmbeddedWebScreen extends StatefulWidget {
   final String url;
   final String appName;
@@ -106,12 +103,6 @@ class _KiriyogdeyraPageState extends State<KiriyogdeyraPage> {
       'description': 'Read, listen, and understand the Quran',
       'image': 'assets/images/alfuqan.jpg',
       'url': 'https://skylinkict.com/alfurqan',
-    },
-    {
-      'name': 'Besirah',
-      'description': 'Explore historical and religious content',
-      'image': 'assets/images/besira.jpg',
-      'url': 'https://basirah-app.skylinkict.com/',
     },
     {
       'name': 'Audio Book',

@@ -9,7 +9,26 @@
       "client_info": {
         "mobilesdk_app_id": "1:712226370485:android:c880a6fbf94e22ce291ffc",
         "android_client_info": {
-          "package_name": "com.example.minber_super_app_new_fixed"
+          "package_name": "com.minbertv.minber"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCr9Ula0Eja4nviq6xU8cfpE85V7q49iTM"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:712226370485:android:8818d83eea9d8d43291ffc",
+        "android_client_info": {
+          "package_name": "com.minbertv.minber"
         }
       },
       "oauth_client": [],

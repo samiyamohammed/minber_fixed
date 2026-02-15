@@ -61,3 +61,14 @@
 -keepclassmembers class com.example.minber_super_app_new_fixed.services.NotificationService {
     public static *;
 }
+
+# Fix for Google Play Core Split Libraries
+-dontwarn com.google.android.play.core.**
+-keep class com.google.android.play.core.tasks.** { *; }
+-keep class com.google.android.play.core.common.** { *; }
+
+# Update your app package rule (since you renamed the app)
+-keep class com.minbertv.minber.** { *; }
+
+# Keep Flutter Play Store Split classes
+-keep class io.flutter.embedding.engine.deferredcomponents.** { *; }

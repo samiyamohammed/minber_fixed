@@ -689,11 +689,6 @@ class _HomeScreenState extends State<HomeScreen>
       'url': 'https://kirbgebeya.com/'
     },
     {
-      'name': 'Besirah',
-      'image': 'assets/images/besira.jpg',
-      'url': 'https://basirah-app.skylinkict.com/'
-    },
-    {
       'name': 'Audio Book',
       'image': 'assets/images/audio book.png',
       'url': null
