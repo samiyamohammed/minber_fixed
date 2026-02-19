@@ -1,4 +1,4 @@
-// lib/screens/home_screen.dart (FINAL STABLE VERSION - FIXED ASPECT RATIO)
+// lib/screens/home_screen.dart (FINAL STABLE VERSION - WITH PROMINENT DISCLOSURE & SERVICE TRIGGER)
 
 import 'dart:async';
 import 'dart:convert';
@@ -9,6 +9,7 @@ import 'package:geolocator/geolocator.dart';
 import 'package:http/http.dart' as http;
 import 'package:intl/intl.dart';
 import 'package:minber/main.dart';
+import 'package:minber/services/notification_service.dart'; // IMPORT ADDED
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:shimmer/shimmer.dart';
 import 'package:youtube_player_flutter/youtube_player_flutter.dart';
@@ -46,7 +47,6 @@ class _HomeScreenState extends State<HomeScreen>
   bool _isMuted = true;
   final String streamUrl = 'http://msa.merkuz.com:8888/live/stream1/index.m3u8';
 
-  // --- ✅ FIX: Lock Aspect Ratio to 16:9 to prevent vertical stretching ---
   final double _bannerAspectRatio = 16 / 9;
 
   String _nextPrayerName = "";
@@ -132,16 +132,13 @@ class _HomeScreenState extends State<HomeScreen>
           VideoPlayerController.networkUrl(Uri.parse(streamUrl));
       await _videoPlayerController!.initialize();
 
-      // --- ✅ FIX: Removed dynamic aspect ratio calculation logic ---
-      // We now enforce the 16:9 ratio directly in the ChewieController.
-
       _chewieController = ChewieController(
         videoPlayerController: _videoPlayerController!,
         autoPlay: true,
         looping: true,
         showControls: false,
         allowFullScreen: false,
-        aspectRatio: _bannerAspectRatio, // Forced 16:9
+        aspectRatio: _bannerAspectRatio,
         placeholder: Container(color: Colors.black),
         materialProgressColors: ChewieProgressColors(
           playedColor: Colors.transparent,
@@ -152,8 +149,6 @@ class _HomeScreenState extends State<HomeScreen>
       );
 
       await _videoPlayerController!.setVolume(_isMuted ? 0.0 : 1.0);
-
-      // No setState needed here anymore for aspect ratio
     } catch (e) {
       logger.e("Error initializing video player: $e");
       rethrow;
@@ -192,7 +187,6 @@ class _HomeScreenState extends State<HomeScreen>
     final isDarkMode = theme.brightness == Brightness.dark;
 
     final screenWidth = MediaQuery.of(context).size.width;
-    // Calculate fixed height based on 16:9 ratio
     final bannerHeight = screenWidth / _bannerAspectRatio;
 
     return GestureDetector(
@@ -317,7 +311,6 @@ class _HomeScreenState extends State<HomeScreen>
             return Stack(
               alignment: Alignment.center,
               children: [
-                // AspectRatio ensures the player respects the 16:9 bounds
                 AspectRatio(
                   aspectRatio: _bannerAspectRatio,
                   child: Chewie(controller: _chewieController!),
@@ -415,8 +408,6 @@ class _HomeScreenState extends State<HomeScreen>
       ),
     );
   }
-
-  // --- REST OF THE FILE REMAINS UNCHANGED ---
 
   Future<void> _loadDataWithCache() async {
     final prefs = await SharedPreferences.getInstance();
@@ -566,6 +557,17 @@ class _HomeScreenState extends State<HomeScreen>
   }
 
   Future<void> _getLocationAndPrayerTimes() async {
+    final prefs = await SharedPreferences.getInstance();
+    final bool disclosureAccepted =
+        prefs.getBool('location_disclosure_accepted') ?? false;
+
+    if (!disclosureAccepted) {
+      if (mounted) {
+        _showLocationDisclosure();
+      }
+      return;
+    }
+
     try {
       LocationPermission permission = await Geolocator.checkPermission();
       if (permission == LocationPermission.denied) {
@@ -575,7 +577,15 @@ class _HomeScreenState extends State<HomeScreen>
           permission == LocationPermission.always) {
         Position position = await Geolocator.getCurrentPosition(
             desiredAccuracy: LocationAccuracy.high);
+
+        // Cache the location coordinates for the Background Service
+        await prefs.setDouble('last_known_lat', position.latitude);
+        await prefs.setDouble('last_known_lng', position.longitude);
+
         _calculatePrayerTimes(position.latitude, position.longitude);
+
+        // --- TRIGGER NOTIFICATION SCHEDULING NOW THAT WE HAVE DATA ---
+        NotificationService.scheduleDailyAndWeeklyNotifications();
       }
     } catch (e) {
       // Handle error
@@ -584,6 +594,60 @@ class _HomeScreenState extends State<HomeScreen>
         setState(() => _isLoadingPrayerTimes = false);
       }
     }
+  }
+
+  void _showLocationDisclosure() {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          title: const Text(
+            "Location Access for Prayer Times & Qibla",
+            style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
+          ),
+          content: const SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  "Minber SuperApp collects location data to enable accurate Prayer Times and Qibla direction based on your current position, even when the app is closed or not in use.\n\n"
+                  "This background access is necessary to provide you with timely prayer notifications and precise spiritual tools regardless of your active screen status. Your data is handled securely and is never shared for advertising purposes.",
+                  style: TextStyle(fontSize: 14, height: 1.5),
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () {
+                Navigator.of(context).pop();
+                if (mounted) setState(() => _isLoadingPrayerTimes = false);
+              },
+              child:
+                  const Text("No Thanks", style: TextStyle(color: Colors.grey)),
+            ),
+            ElevatedButton(
+              onPressed: () async {
+                Navigator.of(context).pop();
+                final prefs = await SharedPreferences.getInstance();
+                await prefs.setBool('location_disclosure_accepted', true);
+                _getLocationAndPrayerTimes();
+              },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppColors.primaryBlue,
+                foregroundColor: Colors.white,
+                shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(8)),
+              ),
+              child: const Text("I Understand & Agree"),
+            ),
+          ],
+        );
+      },
+    );
   }
 
   void _calculatePrayerTimes(double lat, double lng) {

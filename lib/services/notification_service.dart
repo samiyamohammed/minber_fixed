@@ -1,4 +1,4 @@
-// lib/services/notification_service.dart (FINAL - WORKMANAGER VERSION)
+// lib/services/notification_service.dart (FINAL - COMPLIANT VERSION)
 
 import 'dart:io';
 import 'package:flutter/material.dart';
@@ -81,33 +81,20 @@ class NotificationService {
     }
   }
 
-  static Future<bool> _checkLocationPermission() async {
-    try {
-      LocationPermission permission = await Geolocator.checkPermission();
-      if (permission == LocationPermission.denied ||
-          permission == LocationPermission.deniedForever) {
-        logger.w("Location permission denied - using cached prayer times");
-
-        final prefs = await SharedPreferences.getInstance();
-        final cachedTimesJson = prefs.getString("prayerTimesIso");
-
-        if (cachedTimesJson != null) {
-          logger.i("Using cached prayer times for notifications");
-          return true;
-        } else {
-          logger.e("No cached prayer times available");
-          return false;
-        }
-      }
-      return true;
-    } catch (e) {
-      logger.e("Error checking location permission: $e");
-      return false;
-    }
-  }
-
   static Future<void> scheduleDailyAndWeeklyNotifications() async {
     logger.i("🚀 Starting background notification scheduling process...");
+
+    // Check if the user has accepted the location disclosure first
+    final prefs = await SharedPreferences.getInstance();
+    final bool disclosureAccepted =
+        prefs.getBool('location_disclosure_accepted') ?? false;
+
+    if (!disclosureAccepted) {
+      logger.w(
+          "⚠️ Location disclosure not yet accepted. Skipping background scheduling.");
+      return;
+    }
+
     try {
       await _initializeForBackground();
       await _notifications.cancelAll();
@@ -115,7 +102,6 @@ class NotificationService {
 
       await _scheduleAllPrayerTimes();
 
-      final prefs = await SharedPreferences.getInstance();
       if (prefs.getBool('notifications_khemis_enabled') ?? true) {
         await scheduleSalawatNotification();
       }
@@ -126,31 +112,40 @@ class NotificationService {
     }
   }
 
-static Future<void> _scheduleAllPrayerTimes() async {
+  static Future<void> _scheduleAllPrayerTimes() async {
     logger.i("--- Calculating and scheduling prayer notifications ---");
     final prefs = await SharedPreferences.getInstance();
 
     Coordinates? coordinates;
 
-    // --- 1. First, try to get a fresh, live location ---
     try {
-      // A safeguard check for permissions within the background service itself.
       LocationPermission permission = await Geolocator.checkPermission();
-      if (permission != LocationPermission.always) {
-        throw Exception("Background location permission not granted.");
+
+      // If we don't have "Always" permission yet, we don't throw an error,
+      // we just try to use cached coordinates if available.
+      if (permission == LocationPermission.always ||
+          permission == LocationPermission.whileInUse) {
+        Position position = await Geolocator.getCurrentPosition(
+            desiredAccuracy: LocationAccuracy.medium,
+            timeLimit: const Duration(seconds: 20));
+
+        coordinates = Coordinates(position.latitude, position.longitude);
+
+        // Save to cache for next time background service runs
+        await prefs.setDouble('last_known_lat', position.latitude);
+        await prefs.setDouble('last_known_lng', position.longitude);
+
+        logger.i("✅ Successfully fetched live location for scheduling.");
+      } else {
+        logger.w(
+            "Location permission not high enough for live fetch. Checking cache.");
       }
-
-      Position position = await Geolocator.getCurrentPosition(
-          desiredAccuracy: LocationAccuracy.medium,
-          // Add a timeout to prevent the service from hanging
-          timeLimit: const Duration(seconds: 20));
-
-      coordinates = Coordinates(position.latitude, position.longitude);
-      logger.i("✅ Successfully fetched live location for scheduling.");
     } catch (e) {
       logger.w("Could not get live location for scheduling. Reason: $e");
+    }
 
-      // --- 2. If live location fails, immediately try to use the cache ---
+    // --- Try Cache if live fetch failed or wasn't allowed ---
+    if (coordinates == null) {
       final lat = prefs.getDouble('last_known_lat');
       final lng = prefs.getDouble('last_known_lng');
 
@@ -160,7 +155,6 @@ static Future<void> _scheduleAllPrayerTimes() async {
       }
     }
 
-    // --- 3. If we have coordinates (either live or cached), proceed to schedule ---
     if (coordinates != null) {
       final now = tz.TZDateTime.now(tz.local);
       final prayerTimes = PrayerTimes(
@@ -177,8 +171,6 @@ static Future<void> _scheduleAllPrayerTimes() async {
         "Isha": prayerTimes.isha,
       };
 
-      logger.i("Prayer times calculated for today: ${now.toIso8601String()}");
-
       for (var prayer in prayersToSchedule.entries) {
         final prayerName = prayer.key;
         final prayerDateTime = prayer.value;
@@ -192,7 +184,6 @@ static Future<void> _scheduleAllPrayerTimes() async {
                   'notifications_${prayerName.toLowerCase()}_enabled') ??
               true;
           if (isEnabled) {
-            logger.i("✅ Scheduling '$prayerName' at $scheduledTime");
             await _notifications.zonedSchedule(
               prayerName.hashCode,
               'Time for $prayerName',
@@ -210,19 +201,11 @@ static Future<void> _scheduleAllPrayerTimes() async {
               uiLocalNotificationDateInterpretation:
                   UILocalNotificationDateInterpretation.absoluteTime,
             );
-          } else {
-            logger.w(
-                "🚫 Skipping '$prayerName' because it is disabled in settings.");
           }
-        } else {
-          logger.w(
-              "🚫 Skipping '$prayerName' because its time ($scheduledTime) has already passed today.");
         }
       }
     } else {
-      // --- 4. If BOTH live and cached location failed, we cannot schedule ---
-      logger.e(
-          "❌ ABORTING: Could not get a location from live fetch or cache. Cannot schedule notifications.");
+      logger.e("❌ Could not get location. Notifications not scheduled.");
       return;
     }
     logger.i("--- Finished scheduling prayer notifications ---");
@@ -251,8 +234,6 @@ static Future<void> _scheduleAllPrayerTimes() async {
         scheduledDate = scheduledDate.add(const Duration(days: 7));
       }
 
-      logger.i("Scheduling weekly Salawat notification for $scheduledDate");
-
       await _notifications.zonedSchedule(
         777,
         "Salawat Reminder",
@@ -264,7 +245,6 @@ static Future<void> _scheduleAllPrayerTimes() async {
             'Weekly Notifications',
             channelDescription: 'Reminder for Salawat Askār',
             importance: Importance.max,
-            // REMOVED: priority: Priority.high,
           ),
         ),
         payload: "salawat",
@@ -277,27 +257,6 @@ static Future<void> _scheduleAllPrayerTimes() async {
       logger.e("❌ ERROR scheduling Salawat", error: e, stackTrace: s);
     }
   }
-
-  // static Future<void> debugNotificationSetup() async {
-  //   logger.i("🧪 DEBUG: Testing notification setup in release mode");
-
-  //   await _notifications.show(
-  //     888,
-  //     'Test Notification',
-  //     'If you see this, notifications work in release mode',
-  //     const NotificationDetails(
-  //       android: AndroidNotificationDetails(
-  //         'adhan_channel',
-  //         'Adhan Notifications',
-  //         channelDescription: 'Test notification',
-  //         importance: Importance.max,
-  //         // REMOVED: priority: Priority.high,
-  //       ),
-  //     ),
-  //   );
-
-  //   logger.i("🧪 DEBUG: Test notification scheduled");
-  // }
 
   static Future<void> cancelAllNotifications() async {
     logger.w("Cancelling all scheduled notifications.");
