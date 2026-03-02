@@ -1287,6 +1287,7 @@ class _HomeScreenState extends State<HomeScreen>
     final headline = item['headline'] ?? 'No Title';
     final newsUrl = item['newsUrl'] as String?;
     String thumbnailUrl = item['thumbnail'] ?? '';
+
     if (thumbnailUrl.isNotEmpty && !thumbnailUrl.startsWith('http')) {
       if (thumbnailUrl.startsWith('/')) {
         thumbnailUrl = '$_apiBaseUrl$thumbnailUrl';
@@ -1294,70 +1295,110 @@ class _HomeScreenState extends State<HomeScreen>
         thumbnailUrl = '$_apiBaseUrl/$thumbnailUrl';
       }
     }
+
     final isDarkMode = theme.brightness == Brightness.dark;
     final cardBackgroundColor =
         isDarkMode ? AppColors.surfaceDark : const Color(0xFFF7F9FC);
-    final newsCard = Container(
-      decoration: BoxDecoration(
-        color: cardBackgroundColor,
-        borderRadius: BorderRadius.circular(12),
-      ),
-      child: InkWell(
-        borderRadius: BorderRadius.circular(12),
-        onTap: () {
-          if (newsUrl != null && newsUrl.isNotEmpty) {
-            Navigator.push(
+
+    return AnimatedListItem(
+      index: index,
+      child: Container(
+        margin: const EdgeInsets.only(bottom: 16), // Space between cards
+        decoration: BoxDecoration(
+          color: cardBackgroundColor,
+          borderRadius: BorderRadius.circular(16),
+          boxShadow: [
+            if (!isDarkMode)
+              BoxShadow(
+                color: Colors.black.withOpacity(0.05),
+                blurRadius: 10,
+                offset: const Offset(0, 4),
+              ),
+          ],
+        ),
+        child: InkWell(
+          borderRadius: BorderRadius.circular(16),
+          onTap: () {
+            if (newsUrl != null && newsUrl.isNotEmpty) {
+              Navigator.push(
                 context,
                 MaterialPageRoute(
-                    builder: (context) =>
-                        EmbeddedWebScreen(url: newsUrl, appName: headline)));
-          }
-        },
-        child: Padding(
-          padding: const EdgeInsets.all(12.0),
-          child: Row(
+                  builder: (context) =>
+                      EmbeddedWebScreen(url: newsUrl, appName: headline),
+                ),
+              );
+            }
+          },
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Expanded(
+              // 1. LARGE IMAGE ON TOP
+              ClipRRect(
+                borderRadius:
+                    const BorderRadius.vertical(top: Radius.circular(16)),
+                child: thumbnailUrl.isNotEmpty
+                    ? Image.network(
+                        thumbnailUrl,
+                        width: double.infinity,
+                        height: 200, // Large frame height
+                        fit: BoxFit.cover,
+                        errorBuilder: (c, e, s) => Container(
+                          width: double.infinity,
+                          height: 200,
+                          color: theme.splashColor,
+                          child: const Icon(Icons.broken_image, size: 50),
+                        ),
+                      )
+                    : Container(
+                        width: double.infinity,
+                        height: 200,
+                        color: theme.splashColor,
+                        child: const Icon(Icons.image, size: 50),
+                      ),
+              ),
+
+              // 2. TEXT CONTENT BELOW
+              Padding(
+                padding: const EdgeInsets.all(16.0),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(headline,
-                        style: theme.textTheme.bodyMedium
-                            ?.copyWith(fontWeight: FontWeight.bold),
-                        maxLines: 3,
-                        overflow: TextOverflow.ellipsis),
-                    const SizedBox(height: 8),
-                    Text(_formatTimeAgo(item["createdAt"] ?? ''),
-                        style: theme.textTheme.bodySmall
-                            ?.copyWith(color: theme.hintColor)),
+                    Text(
+                      headline,
+                      style: theme.textTheme.titleMedium?.copyWith(
+                        fontWeight: FontWeight.bold,
+                        height:
+                            1.3, // Better readability for Amharic/Multi-line text
+                      ),
+                      maxLines: 3,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    const SizedBox(height: 12),
+                    // Time-ago row with icon
+                    Row(
+                      children: [
+                        Icon(
+                          Icons.access_time,
+                          size: 14,
+                          color: theme.hintColor,
+                        ),
+                        const SizedBox(width: 6),
+                        Text(
+                          _formatTimeAgo(item["createdAt"] ?? ''),
+                          style: theme.textTheme.bodySmall?.copyWith(
+                            color: theme.hintColor,
+                          ),
+                        ),
+                      ],
+                    ),
                   ],
                 ),
-              ),
-              const SizedBox(width: 12),
-              ClipRRect(
-                borderRadius: BorderRadius.circular(8),
-                child: thumbnailUrl.isNotEmpty
-                    ? Image.network(thumbnailUrl,
-                        width: 80,
-                        height: 80,
-                        fit: BoxFit.cover,
-                        errorBuilder: (c, e, s) => Container(
-                            width: 80,
-                            height: 80,
-                            color: theme.splashColor,
-                            child: const Icon(Icons.broken_image, size: 30)))
-                    : Container(
-                        width: 80,
-                        height: 80,
-                        color: theme.splashColor,
-                        child: const Icon(Icons.image, size: 30)),
               ),
             ],
           ),
         ),
       ),
     );
-    return AnimatedListItem(index: index, child: newsCard);
   }
 
   Widget _buildNewsShimmer(ThemeData theme) {

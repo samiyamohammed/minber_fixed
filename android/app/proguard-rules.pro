@@ -1,4 +1,4 @@
-# Flutter
+# Flutter standard rules
 -keep class io.flutter.app.** { *; }
 -keep class io.flutter.plugin.**  { *; }
 -keep class io.flutter.util.**  { *; }
@@ -30,11 +30,12 @@
 -keep class * extends android.location.**
 -keep class tzdata.** { *; }
 
-# Adhan calculation
+# Adhan calculation (Fix for adhan_dart)
 -keep class com.batoulapps.adhan.** { *; }
+-keep class adhan_dart.** { *; }
 
-# Your app package
--keep class com.example.minber_super_app_new_fixed.** { *; }
+# Your app package (FIXED TO MATCH YOUR ACTUAL PACKAGE)
+-keep class com.minbertv.minber.** { *; }
 
 # Keep callback methods
 -keepclassmembers class * {
@@ -46,7 +47,6 @@
   public static final android.os.Parcelable$Creator *;
 }
 
-# === ADD THESE NEW RULES ===
 # Notification system classes
 -keep class * extends android.app.Notification { *; }
 -keep class * extends android.app.NotificationChannel { *; }
@@ -57,8 +57,8 @@
     public void onReceive(android.content.Context, android.content.Intent);
 }
 
-# Keep all method names in your notification service
--keepclassmembers class com.example.minber_super_app_new_fixed.services.NotificationService {
+# Keep all method names in your notification service (FIXED PACKAGE NAME)
+-keepclassmembers class com.minbertv.minber.services.NotificationService {
     public static *;
 }
 
@@ -66,9 +66,3 @@
 -dontwarn com.google.android.play.core.**
 -keep class com.google.android.play.core.tasks.** { *; }
 -keep class com.google.android.play.core.common.** { *; }
-
-# Update your app package rule (since you renamed the app)
--keep class com.minbertv.minber.** { *; }
-
-# Keep Flutter Play Store Split classes
--keep class io.flutter.embedding.engine.deferredcomponents.** { *; }
