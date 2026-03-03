@@ -4,7 +4,6 @@ import 'package:flutter_staggered_animations/flutter_staggered_animations.dart';
 import 'package:fluttertoast/fluttertoast.dart';
 import 'package:webview_flutter/webview_flutter.dart';
 
-
 class EmbeddedWebScreen extends StatefulWidget {
   final String url;
   final String appName;
@@ -85,18 +84,17 @@ class _KiriyogdeyraPageState extends State<KiriyogdeyraPage> {
   int _selectedIndex = 4; // Sub-Apps tab
 
   final List<Map<String, dynamic>> _featuredApps = [
-
     {
       'name': 'almathurat',
       'description': 'Recite Morning and Evening Adhkar',
       'image': 'assets/images/almathurat.jpg',
       'url': 'https://Skylinkict.com/almathurat',
     },
-   {
+    {
       'name': 'Kirbgebeya',
       'description': 'Shop online and find great deals',
       'image': 'assets/images/kirbgebeya.png',
-      'url': 'https://kirbgebeya.com/',
+      'url': null,
     },
     {
       'name': 'Alfurqan App',

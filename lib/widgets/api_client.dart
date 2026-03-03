@@ -101,4 +101,32 @@ class ApiClient {
       throw e;
     }
   }
+
+  /// Fetches the active Ramadan questions for today.
+  Future<List<dynamic>> getActiveRamadanQuestions() async {
+    try {
+      logger.i("Fetching active Ramadan questions...");
+      final response = await _dio.get('/questions/active');
+      return response.data as List<dynamic>;
+    } on DioException catch (e) {
+      logger.e("Error fetching Ramadan questions", error: e.response?.data);
+      throw e;
+    }
+  }
+
+  /// Submits an answer for a specific question.
+  Future<Map<String, dynamic>> submitRamadanAnswer(
+      String questionId, String optionId) async {
+    try {
+      logger.i("Submitting answer for question $questionId, option $optionId");
+      final response = await _dio.post(
+        '/questions/$questionId/answer',
+        data: {'optionId': optionId},
+      );
+      return response.data;
+    } on DioException catch (e) {
+      logger.e("Error submitting Ramadan answer", error: e.response?.data);
+      throw e;
+    }
+  }
 }

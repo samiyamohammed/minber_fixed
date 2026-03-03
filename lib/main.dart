@@ -6,6 +6,8 @@ import 'package:flutter_background_service/flutter_background_service.dart';
 import 'package:logger/logger.dart';
 import 'package:audioplayers/audioplayers.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
+import 'package:minber/providers/ramadan_provider.dart';
+import 'package:minber/screens/ramadan_quiz_screen.dart';
 import 'package:minber/services/adhan_background_service.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:flutter_timezone/flutter_timezone.dart';
@@ -326,6 +328,14 @@ class MyApp extends StatelessWidget {
           update: (context, userProvider, previousApiClient) =>
               ApiClient(userProvider),
         ),
+        
+        ChangeNotifierProxyProvider<ApiClient, RamadanProvider>(
+          create: (context) =>
+              RamadanProvider(Provider.of<ApiClient>(context, listen: false)),
+          // FIX: Use 'previous' to preserve the state when the widget tree rebuilds
+          update: (context, apiClient, previous) =>
+              previous ?? RamadanProvider(apiClient),
+        ),
       ],
       child: ValueListenableBuilder<ThemeMode>(
         valueListenable: themeNotifier,
@@ -429,6 +439,7 @@ class MyApp extends StatelessWidget {
               '/help-and-support': (_) => const HelpAndSupportPage(),
               '/coming-soon': (_) => const ComingSoonPage(),
               '/update-profile': (_) => const UpdateProfilePage(),
+              '/ramadan-quiz': (_) => const RamadanQuizScreen(),
             },
           );
         },

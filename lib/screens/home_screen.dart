@@ -225,6 +225,8 @@ class _HomeScreenState extends State<HomeScreen>
                         children: [
                           const SizedBox(height: 24),
                           _buildPrayerTimesSection(theme, isDarkMode),
+                          const SizedBox(height: 16), // Spacing
+                          _buildRamadanQuizCard(theme),
                           const SizedBox(height: 24),
                           _buildSectionHeader(theme, "Trending on Minber", () {
                             if (_trendingVideos != null &&
@@ -252,8 +254,8 @@ class _HomeScreenState extends State<HomeScreen>
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          const SizedBox(height: 24),
-                          _buildHalalPremium(theme, isDarkMode),
+                          // const SizedBox(height: 24),
+                          // _buildHalalPremium(theme, isDarkMode),
                           const SizedBox(height: 24),
                           _buildSectionHeader(theme, "Explore Our Apps", () {
                             Navigator.pushNamed(context, '/subapps');
@@ -750,7 +752,7 @@ class _HomeScreenState extends State<HomeScreen>
     {
       'name': 'Kirbgebeya',
       'image': 'assets/images/kirbgebeya.png',
-      'url': 'https://kirbgebeya.com/'
+      'url': null
     },
     {
       'name': 'Audio Book',
@@ -1111,41 +1113,107 @@ class _HomeScreenState extends State<HomeScreen>
     );
   }
 
-  Widget _buildHalalPremium(ThemeData theme, bool isDarkMode) {
-    return Container(
-        padding: const EdgeInsets.all(16),
+  // Widget _buildHalalPremium(ThemeData theme, bool isDarkMode) {
+  //   return Container(
+  //       padding: const EdgeInsets.all(16),
+  //       decoration: BoxDecoration(
+  //           borderRadius: BorderRadius.circular(16),
+  //           gradient: const LinearGradient(
+  //             colors: [AppColors.primaryBlue, AppColors.accentBlue],
+  //             begin: Alignment.topLeft,
+  //             end: Alignment.bottomRight,
+  //           )),
+  //       child: Row(children: [
+  //         const Icon(Icons.workspace_premium_outlined,
+  //             color: Colors.white, size: 40),
+  //         const SizedBox(width: 16),
+  //         Expanded(
+  //             child: Column(
+  //                 crossAxisAlignment: CrossAxisAlignment.start,
+  //                 children: [
+  //               Text("Halal Premium",
+  //                   style: theme.textTheme.titleMedium?.copyWith(
+  //                       fontWeight: FontWeight.bold, color: Colors.white)),
+  //               const SizedBox(height: 4),
+  //               Text("Enjoy ad-free streaming and exclusive content.",
+  //                   style: theme.textTheme.bodyMedium
+  //                       ?.copyWith(color: Colors.white70))
+  //             ])),
+  //         const SizedBox(width: 12),
+  //         ElevatedButton(
+  //             onPressed: () => Navigator.pushNamed(context, "/subscription"),
+  //             style: ElevatedButton.styleFrom(
+  //               backgroundColor: Colors.white,
+  //               foregroundColor: AppColors.primaryBlue,
+  //             ),
+  //             child: const Text("Upgrade"))
+  //       ]));
+  // }
+  Widget _buildRamadanQuizCard(ThemeData theme) {
+    return GestureDetector(
+      onTap: () => Navigator.pushNamed(context, '/ramadan-quiz'),
+      child: Container(
+        width: double.infinity,
+        padding: const EdgeInsets.all(20),
         decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(16),
-            gradient: const LinearGradient(
-              colors: [AppColors.primaryBlue, AppColors.accentBlue],
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-            )),
-        child: Row(children: [
-          const Icon(Icons.workspace_premium_outlined,
-              color: Colors.white, size: 40),
-          const SizedBox(width: 16),
-          Expanded(
-              child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                Text("Halal Premium",
-                    style: theme.textTheme.titleMedium?.copyWith(
-                        fontWeight: FontWeight.bold, color: Colors.white)),
-                const SizedBox(height: 4),
-                Text("Enjoy ad-free streaming and exclusive content.",
-                    style: theme.textTheme.bodyMedium
-                        ?.copyWith(color: Colors.white70))
-              ])),
-          const SizedBox(width: 12),
-          ElevatedButton(
-              onPressed: () => Navigator.pushNamed(context, "/subscription"),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.white,
-                foregroundColor: AppColors.primaryBlue,
+          borderRadius: BorderRadius.circular(20),
+          gradient: const LinearGradient(
+            colors: [Color(0xFF0D1B2A), Color(0xFF1B263B)],
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+          ),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.2),
+              blurRadius: 10,
+              offset: const Offset(0, 5),
+            ),
+          ],
+        ),
+        child: Row(
+          children: [
+            // Elegant Icon/Visual
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Colors.white.withOpacity(0.1),
+                shape: BoxShape.circle,
               ),
-              child: const Text("Upgrade"))
-        ]));
+              child: const Icon(Icons.brightness_3,
+                  color: Colors.amberAccent, size: 30),
+            ),
+            const SizedBox(width: 16),
+            // Text Content
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    "Ramadan Daily Quiz",
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    "Test your knowledge & win!",
+                    style: TextStyle(
+                      color: Colors.white.withOpacity(0.7),
+                      fontSize: 14,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            // Arrow
+            const Icon(Icons.arrow_forward_ios,
+                color: Colors.amberAccent, size: 18),
+          ],
+        ),
+      ),
+    );
   }
 
   Widget _buildAppsSection(ThemeData theme) {

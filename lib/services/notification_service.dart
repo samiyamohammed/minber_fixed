@@ -1,4 +1,4 @@
-// lib/services/notification_service.dart (FINAL - COMPLIANT VERSION)
+// lib/services/notification_service.dart (FINAL - PRODUCTION STABLE VERSION)
 
 import 'dart:io';
 import 'package:flutter/material.dart';
@@ -31,7 +31,8 @@ class NotificationService {
       logger.f("💀 FATAL: FAILED to initialize timezones.", error: e);
       return;
     }
-    await _createNotificationChannels();
+
+    // Initialize notification settings
     const android =
         AndroidInitializationSettings('@drawable/notification_icon');
     const settings = InitializationSettings(android: android);
@@ -43,6 +44,9 @@ class NotificationService {
       }
     });
 
+    // Create channels and request permissions
+    await _createNotificationChannels();
+
     if (Platform.isAndroid) {
       await Permission.notification.request();
       await Permission.scheduleExactAlarm.request();
@@ -52,12 +56,17 @@ class NotificationService {
 
   static Future<void> _createNotificationChannels() async {
     if (Platform.isAndroid) {
+      // PRO TIP: We use the 'azann' sound resource for the channel creation
+      // so that Android knows this channel specifically plays this sound.
       const AndroidNotificationChannel adhanChannel =
           AndroidNotificationChannel(
         'adhan_channel',
         'Adhan Notifications',
         description: 'Notifications for prayer times',
         importance: Importance.max,
+        playSound: true,
+        sound: RawResourceAndroidNotificationSound(
+            'azann'), // MATCHES YOUR FILENAME
       );
 
       const AndroidNotificationChannel weeklyChannel =
@@ -68,23 +77,18 @@ class NotificationService {
         importance: Importance.max,
       );
 
-      final FlutterLocalNotificationsPlugin notifications =
-          FlutterLocalNotificationsPlugin();
-      await notifications
-          .resolvePlatformSpecificImplementation<
-              AndroidFlutterLocalNotificationsPlugin>()
-          ?.createNotificationChannel(adhanChannel);
-      await notifications
-          .resolvePlatformSpecificImplementation<
-              AndroidFlutterLocalNotificationsPlugin>()
-          ?.createNotificationChannel(weeklyChannel);
+      final androidPlugin =
+          _notifications.resolvePlatformSpecificImplementation<
+              AndroidFlutterLocalNotificationsPlugin>();
+
+      await androidPlugin?.createNotificationChannel(adhanChannel);
+      await androidPlugin?.createNotificationChannel(weeklyChannel);
     }
   }
 
   static Future<void> scheduleDailyAndWeeklyNotifications() async {
     logger.i("🚀 Starting background notification scheduling process...");
 
-    // Check if the user has accepted the location disclosure first
     final prefs = await SharedPreferences.getInstance();
     final bool disclosureAccepted =
         prefs.getBool('location_disclosure_accepted') ?? false;
@@ -121,8 +125,6 @@ class NotificationService {
     try {
       LocationPermission permission = await Geolocator.checkPermission();
 
-      // If we don't have "Always" permission yet, we don't throw an error,
-      // we just try to use cached coordinates if available.
       if (permission == LocationPermission.always ||
           permission == LocationPermission.whileInUse) {
         Position position = await Geolocator.getCurrentPosition(
@@ -131,24 +133,18 @@ class NotificationService {
 
         coordinates = Coordinates(position.latitude, position.longitude);
 
-        // Save to cache for next time background service runs
         await prefs.setDouble('last_known_lat', position.latitude);
         await prefs.setDouble('last_known_lng', position.longitude);
 
         logger.i("✅ Successfully fetched live location for scheduling.");
-      } else {
-        logger.w(
-            "Location permission not high enough for live fetch. Checking cache.");
       }
     } catch (e) {
       logger.w("Could not get live location for scheduling. Reason: $e");
     }
 
-    // --- Try Cache if live fetch failed or wasn't allowed ---
     if (coordinates == null) {
       final lat = prefs.getDouble('last_known_lat');
       final lng = prefs.getDouble('last_known_lng');
-
       if (lat != null && lng != null) {
         coordinates = Coordinates(lat, lng);
         logger.i("✅ Using CACHED location for scheduling: $lat, $lng");
@@ -195,6 +191,10 @@ class NotificationService {
                   'Adhan Notifications',
                   channelDescription: 'Notifications for prayer times.',
                   importance: Importance.max,
+                  priority: Priority.high,
+                  // PRODUCTION FIX: Explicitly set the sound for the notification
+                  sound: RawResourceAndroidNotificationSound('azann'),
+                  playSound: true,
                 ),
               ),
               androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
