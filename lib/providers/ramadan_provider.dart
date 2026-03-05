@@ -2,10 +2,10 @@
 
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:intl/intl.dart';
 import '../models/ramadan_question.dart';
 import '../widgets/api_client.dart';
 import 'package:dio/dio.dart';
+import 'dart:async';
 
 enum RamadanStatus {
   initial,
@@ -19,32 +19,42 @@ enum RamadanStatus {
 
 class RamadanProvider with ChangeNotifier {
   final ApiClient _apiClient;
-  static const String _finishedKey = 'ramadan_quiz_finished_date';
 
   List<RamadanQuestion> _questions = [];
+  List<RamadanQuestion> _history = [];
+  List<LeaderboardEntry> _leaderboard = [];
+
   RamadanStatus _status = RamadanStatus.initial;
   String? _errorMessage;
   int _currentIndex = 0;
   bool _isSubmitting = false;
 
+  bool _isLoadingHistory = false;
+  bool _isLoadingLeaderboard = false;
+
   RamadanProvider(this._apiClient);
 
+  // Getters
   List<RamadanQuestion> get questions => _questions;
+  List<RamadanQuestion> get history => _history;
+  List<LeaderboardEntry> get leaderboard => _leaderboard;
+
   RamadanStatus get status => _status;
   String? get errorMessage => _errorMessage;
   int get currentIndex => _currentIndex;
   bool get isSubmitting => _isSubmitting;
+  bool get isLoadingHistory => _isLoadingHistory;
+  bool get isLoadingLeaderboard => _isLoadingLeaderboard;
 
   double get progress =>
       _questions.isEmpty ? 0 : (_currentIndex) / _questions.length;
 
   Future<void> initialize() async {
     final prefs = await SharedPreferences.getInstance();
-    final today = DateFormat('yyyy-MM-dd').format(DateTime.now());
-    final lastFinishedDate = prefs.getString(_finishedKey);
+    final token = prefs.getString('accessToken');
 
-    if (lastFinishedDate == today) {
-      _status = RamadanStatus.alreadyAnswered;
+    if (token == null || token.isEmpty) {
+      _status = RamadanStatus.unauthenticated;
       notifyListeners();
       return;
     }
@@ -58,39 +68,77 @@ class RamadanProvider with ChangeNotifier {
     notifyListeners();
 
     try {
-      final data = await _apiClient.getActiveRamadanQuestions();
-      _questions = data.map((json) => RamadanQuestion.fromJson(json)).toList();
+      final response = await _apiClient.getActiveRamadanQuestions().timeout(
+            const Duration(seconds: 10),
+          );
 
-      if (_questions.isEmpty) {
+      if (response == null || (response is List && response.isEmpty)) {
         _status = RamadanStatus.empty;
       } else {
-        bool allAnswered = _questions.every((q) => q.hasAnswered);
+        _questions = (response as List)
+            .map((json) => RamadanQuestion.fromJson(json))
+            .toList();
 
-        if (allAnswered) {
-          _status = RamadanStatus.alreadyAnswered;
-          _currentIndex = _questions.length;
-          _saveFinishedLocally();
+        if (_questions.isEmpty) {
+          _status = RamadanStatus.empty;
         } else {
-          _status = RamadanStatus.ready;
-          _currentIndex = _questions.indexWhere((q) => !q.hasAnswered);
-          if (_currentIndex == -1) _currentIndex = 0;
+          bool allAnswered = _questions.every((q) => q.hasAnswered);
+          if (allAnswered) {
+            _status = RamadanStatus.alreadyAnswered;
+            _currentIndex = _questions.length;
+          } else {
+            _status = RamadanStatus.ready;
+            _currentIndex = _questions.indexWhere((q) => !q.hasAnswered);
+            if (_currentIndex == -1) _currentIndex = 0;
+          }
         }
       }
     } on DioException catch (e) {
-      // --- CORE FIX FOR GUEST MODE ---
       if (e.response?.statusCode == 401) {
         _status = RamadanStatus.unauthenticated;
       } else if (e.response?.statusCode == 403) {
         _status = RamadanStatus.alreadyAnswered;
-        _saveFinishedLocally();
       } else {
         _status = RamadanStatus.error;
-        _errorMessage = "Could not connect to server.";
+        _errorMessage = "Could not connect to the quiz server.";
       }
     } catch (e) {
       _status = RamadanStatus.error;
-      _errorMessage = "An unexpected error occurred.";
+      _errorMessage = "Something went wrong. Please try again.";
     } finally {
+      notifyListeners();
+    }
+  }
+
+  Future<void> fetchHistory() async {
+    _isLoadingHistory = true;
+    notifyListeners();
+    try {
+      final response = await _apiClient.getRamadanUserHistory();
+      _history = (response as List)
+          .map((json) => RamadanQuestion.fromJson(json))
+          .toList();
+    } catch (e) {
+      debugPrint("History Fetch Error: $e");
+    } finally {
+      _isLoadingHistory = false;
+      notifyListeners();
+    }
+  }
+
+  Future<void> fetchLeaderboard() async {
+    _isLoadingLeaderboard = true;
+    notifyListeners();
+    try {
+      final response = await _apiClient.getRamadanLeaderboardTop10();
+      // Swagger shows { "top10": [...] }
+      final List top10List = response['top10'] as List? ?? [];
+      _leaderboard =
+          top10List.map((json) => LeaderboardEntry.fromJson(json)).toList();
+    } catch (e) {
+      debugPrint("Leaderboard Fetch Error: $e");
+    } finally {
+      _isLoadingLeaderboard = false;
       notifyListeners();
     }
   }
@@ -106,28 +154,16 @@ class RamadanProvider with ChangeNotifier {
       _currentIndex++;
       if (_currentIndex >= _questions.length) {
         _status = RamadanStatus.alreadyAnswered;
-        _saveFinishedLocally();
       }
-      _isSubmitting = false;
-      notifyListeners();
       return true;
     } on DioException catch (e) {
-      _isSubmitting = false;
-      if (e.response?.statusCode == 403) {
-        _status = RamadanStatus.alreadyAnswered;
-        _currentIndex = _questions.length;
-        _saveFinishedLocally();
-        notifyListeners();
-        return true;
+      if (e.response?.statusCode == 401) {
+        _status = RamadanStatus.unauthenticated;
       }
-      notifyListeners();
       return false;
+    } finally {
+      _isSubmitting = false;
+      notifyListeners();
     }
-  }
-
-  Future<void> _saveFinishedLocally() async {
-    final prefs = await SharedPreferences.getInstance();
-    final today = DateFormat('yyyy-MM-dd').format(DateTime.now());
-    await prefs.setString(_finishedKey, today);
   }
 }

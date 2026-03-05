@@ -50,14 +50,21 @@ android {
 
     buildTypes {
         getByName("release") {
-            // 3. CHANGE THIS: Point to the release config, NOT debug
+            // 3. Pointing to the release config defined above
             signingConfig = signingConfigs.getByName("release")
 
-            // Enable optimization for Play Store
+            // PRODUCTION FIX: These are essential for Play Store optimization.
+            // These require your keep.xml and proguard-rules.pro to be correct.
             isMinifyEnabled = true
             isShrinkResources = true
             
-            proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
+            proguardFiles(
+                getDefaultProguardFile("proguard-android-optimize.txt"), 
+                "proguard-rules.pro"
+            )
+        }
+        getByName("debug") {
+            signingConfig = signingConfigs.getByName("debug")
         }
     }
 }
@@ -74,9 +81,12 @@ dependencies {
     // 3. For feature delivery (fixes SplitInstall errors)
     implementation("com.google.android.play:feature-delivery:2.1.0")
     
-    // 4. ADD THIS: This library contains the 'Task' and 'Listener' classes R8 is missing
+    // 4. Play Core Common: Contains classes R8 often misses
     implementation("com.google.android.play:core-common:2.0.3")
 
+    // WorkManager: Essential for background prayer time scheduling
     implementation("androidx.work:work-runtime:2.8.1")
+    
+    // Core Library Desugaring: Allows Java 8+ features on older Androids (required for adhan/timezone)
     coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.0.3")
 }

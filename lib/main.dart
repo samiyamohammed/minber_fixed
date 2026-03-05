@@ -1,6 +1,8 @@
-// lib/main.dart (FINAL STABLE VERSION WITH GUEST PERSISTENCE FIX)
+// lib/main.dart (FINAL STABLE VERSION FOR PRODUCTION)
 
 import 'dart:io';
+import 'dart:ui';
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_background_service/flutter_background_service.dart';
 import 'package:logger/logger.dart';
@@ -14,8 +16,6 @@ import 'package:flutter_timezone/flutter_timezone.dart';
 import 'package:timezone/timezone.dart' as tz;
 import 'package:timezone/data/latest_all.dart' as tz;
 
-// --- Your other project imports ---
-import 'dart:async';
 import 'package:minber/screens/about_us_page.dart';
 import 'package:minber/screens/coming_soon_page.dart';
 import 'package:minber/screens/help_and_support_page.dart';
@@ -61,124 +61,57 @@ import 'services/api_service.dart';
 import 'firebase_options.dart';
 import 'providers/notification_settings_provider.dart';
 import 'screens/permission_screen.dart';
-// import 'package:android_alarm_manager_plus/android_alarm_manager_plus.dart';
 
-// --- SHARED TOP-LEVEL OBJECTS AND CALLBACKS ---
 final logger = Logger();
 final audioPlayer = AudioPlayer();
 final flutterLocalNotificationsPlugin = FlutterLocalNotificationsPlugin();
-final RouteObserver<ModalRoute<void>> routeObserver =
-    RouteObserver<ModalRoute<void>>();
-
-/// This shared function initializes all notification-related plugins.
-Future<void> initializeNotifications() async {
-  tz.initializeTimeZones();
-  try {
-    final String timeZoneName = await FlutterTimezone.getLocalTimezone();
-    tz.setLocalLocation(tz.getLocation(timeZoneName));
-  } catch (e) {
-    logger.e("Error getting local timezone: $e");
-  }
-
-  const android = AndroidInitializationSettings('@drawable/notification_icon');
-  const settings = InitializationSettings(android: android);
-  await flutterLocalNotificationsPlugin.initialize(settings,
-      onDidReceiveBackgroundNotificationResponse: notificationTapBackground);
-
-  final androidImplementation =
-      flutterLocalNotificationsPlugin.resolvePlatformSpecificImplementation<
-          AndroidFlutterLocalNotificationsPlugin>();
-
-  const AndroidNotificationChannel adhanChannel = AndroidNotificationChannel(
-    'adhan_channel',
-    'Adhan Notifications',
-    description: 'Plays the full Adhan for prayer times.',
-    importance: Importance.max,
-    playSound: false,
-  );
-  await androidImplementation?.createNotificationChannel(adhanChannel);
-
-  const AndroidNotificationChannel weeklyChannel = AndroidNotificationChannel(
-    'weekly_channel',
-    'Weekly Notifications',
-    description: 'Reminder for Salawat Askār.',
-    importance: Importance.max,
-  );
-  await androidImplementation?.createNotificationChannel(weeklyChannel);
-}
+final RouteObserver<ModalRoute<void>> routeObserver = RouteObserver<ModalRoute<void>>();
 
 @pragma('vm:entry-point')
 void notificationTapBackground(NotificationResponse notificationResponse) {
-  final logger = Logger();
-  // This is the handler for the Adhan notification's "Silence" button
   if (notificationResponse.actionId == 'silence_action') {
-    logger.i(
-        "ACTION: 'Silence' button tapped in background. Invoking stopService.");
     FlutterBackgroundService().invoke('stopService');
-  }
-  // This handles taps on the weekly Salawat notification
-  else if (notificationResponse.payload == "salawat") {
-    logger.i("ACTION: Salawat notification tapped in background.");
-    // Note: Navigation from here is not reliable. Tapping the notification
-    // should bring the app to the foreground, where onMessageOpenedApp handles navigation.
   }
 }
 
 @pragma('vm:entry-point')
 void callbackDispatcher() {
   Workmanager().executeTask((task, inputData) async {
+    // ESSENTIAL PRODUCTION FIX: Required for background isolates to use plugins
+    DartPluginRegistrant.ensureInitialized();
+    WidgetsFlutterBinding.ensureInitialized();
+    
     debugPrint("WorkManager: Task executing ($task)");
-    // We will create this function in the next step.
-    // This is the new brain of our scheduling.
-    await NotificationService.scheduleDailyAndWeeklyNotifications();
-    debugPrint("WorkManager: Task completed.");
-    return Future.value(true);
+    try {
+      // Sync names with task registration for Production reliability (Matches Al Faruk logic)
+      if (task.contains("schedulePrayerNotifications") || task.contains("prayer_notification_scheduler")) {
+        await NotificationService.init();
+        await NotificationService.scheduleDailyAndWeeklyNotifications();
+      }
+      return Future.value(true);
+    } catch (err) {
+      debugPrint("WorkManager Error: $err");
+      return Future.value(false);
+    }
   });
 }
 
 @pragma('vm:entry-point')
 Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
-  // Standard initialization
-  await Firebase.initializeApp(
-    options: DefaultFirebaseOptions.currentPlatform,
-  );
+  await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
   await FirebaseNotificationService.init();
-  logger.i("📲 Handling a background Firebase message: ${message.messageId}");
-
   final notificationId = message.data['id']?.toString();
-
-  // --- 🔥 THE CORE FIX: MANIPULATE STORED STATE DIRECTLY ---
-  // If a notification arrives with an ID, we assume it's new or re-triggered,
-  // and we must ensure it is not marked as 'read'.
   if (notificationId != null) {
-    logger.i("Background Push for ID: $notificationId. Ensuring it's unread.");
     try {
-      // Directly access the device's storage from the background.
       final prefs = await SharedPreferences.getInstance();
-
-      // Use the EXACT same key the NotificationProvider uses.
       const key = 'read_notifications_set';
-
-      // Load the list of read IDs that are currently saved.
       final List<String> readIds = prefs.getStringList(key) ?? [];
-
-      // If the ID of the incoming notification was in the list, remove it.
       if (readIds.contains(notificationId)) {
         readIds.remove(notificationId);
-        // Save the modified list back to storage.
         await prefs.setStringList(key, readIds);
-        logger.i(
-            "✅ State Fixed: Removed '$notificationId' from read list in background.");
-      } else {
-        logger.i(
-            "'$notificationId' was not in the read list. No state change needed.");
       }
-    } catch (e) {
-      logger.e("❌ Error updating read status in background: $e");
-    }
+    } catch (e) {}
   }
-
-  // Finally, show the local notification to the user as before.
   FirebaseNotificationService.showLocalNotification(
     title: message.data['title'] ?? 'New Message',
     body: message.data['body'] ?? 'You have a new message from Minber TV.',
@@ -188,7 +121,7 @@ Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  // await initializeAdhanService();
+  // SINGLE SOURCE OF TRUTH: Init only through NotificationService to prevent channel poisoning
   await NotificationService.init();
   await FirebaseNotificationService.init();
 
@@ -196,59 +129,43 @@ Future<void> main() async {
   themeNotifier = ValueNotifier<ThemeMode>(savedThemeMode);
 
   try {
-    await Firebase.initializeApp(
-      options: DefaultFirebaseOptions.currentPlatform,
-    );
+    await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
     FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
   } catch (e) {
-    debugPrint("🔥 FATAL: Firebase Core initialization failed: $e");
+    debugPrint("🔥 Firebase Init failed: $e");
   }
 
-  // Initialize Android Alarm Manager
-  // await AndroidAlarmManager.initialize();
-  await Workmanager().initialize(callbackDispatcher, isInDebugMode: true);
+  // Workmanager Init (Set isInDebugMode to false for production)
+  await Workmanager().initialize(callbackDispatcher, isInDebugMode: false);
   await Workmanager().registerPeriodicTask(
     "prayer_notification_scheduler",
     "schedulePrayerNotifications",
     frequency: const Duration(hours: 12),
-    initialDelay:
-        const Duration(minutes: 10), // We can make this delay longer now
-    constraints: Constraints(
-      networkType: NetworkType.notRequired,
-    ),
+    initialDelay: const Duration(minutes: 5),
+    constraints: Constraints(networkType: NetworkType.notRequired),
   );
 
-  // --- ✅ ADD THIS BACK IN FOR IMMEDIATE SCHEDULING ---
-  // This will run ONCE every time the user opens the app, ensuring
-  // the schedule is always fresh. WorkManager is the long-term backup.
+  // Immediate scheduling on app launch
   NotificationService.scheduleDailyAndWeeklyNotifications();
 
   setupFirebasePushNotifications();
 
   final prefs = await SharedPreferences.getInstance();
   final isLoggedIn = prefs.getBool('isLoggedIn') ?? false;
-  // --- 👇 FIX: CHECK FOR GUEST FLAG HERE 👇 ---
   final isGuest = prefs.getBool('isGuest') ?? false;
   final seenOnboarding = prefs.getBool('onboarding_complete') ?? false;
 
   String initialRoute = '/onboarding';
-
-  // Update logic: If logged in OR is a guest, go to Home
   if (isLoggedIn || isGuest) {
     initialRoute = '/home';
   } else if (seenOnboarding) {
     initialRoute = '/login';
   }
 
-  debugPrint(
-      '➡️ App Start → navigating to $initialRoute (LoggedIn: $isLoggedIn, Guest: $isGuest)');
+  debugPrint('➡️ App Start → navigating to $initialRoute');
   runApp(MyApp(initialRoute: initialRoute));
-  WidgetsBinding.instance.addPostFrameCallback((_) {
-    // NotificationService.debugNotificationSetup();
-  });
 }
 
-// --- CHAIN OF EVIDENCE: STEP 1 ---
 Future<void> setupFirebasePushNotifications() async {
   try {
     FirebaseMessaging messaging = FirebaseMessaging.instance;
@@ -260,54 +177,34 @@ Future<void> setupFirebasePushNotifications() async {
       final accessToken = prefs.getString('accessToken');
       if (accessToken != null) {
         await ApiService.updateFcmToken(newFcmToken, accessToken);
-      } else {
-        // Optional: If you want to keep guest tokens updated on refresh
-        // await ApiService.registerGuestFcmToken(newFcmToken);
       }
     });
 
     FirebaseMessaging.onMessage.listen((RemoteMessage message) {
-      logger.i("--- [PUSH NOTIFICATION RECEIVED IN FOREGROUND] ---");
-      logger.d("RAW PAYLOAD: ${message.data}");
-
-      final title = message.data['title'] ??
-          message.notification?.title ??
-          "New Notification";
+      final title = message.data['title'] ?? message.notification?.title ?? "New Notification";
       final body = message.data['body'] ?? message.notification?.body ?? "";
       showOverlayNotification(title: title, body: body);
 
       final context = NotificationService.navigatorKey.currentContext;
-      if (context == null) {
-        logger.e("❌ CONTEXT IS NULL. Cannot update provider.");
-        return;
-      }
-
-      final provider =
-          Provider.of<NotificationProvider>(context, listen: false);
-      final String? notificationId = message.data['id']?.toString();
-
-      // --- ✅ THIS IS THE CORE CHANGE ---
-      // Replace the old logic with a call to our new, robust method.
-      if (notificationId != null) {
-        provider.markAsUnreadAndRefresh(notificationId);
-      } else {
-        // Fallback remains the same if there's no ID.
-        logger.w("⚠️ ID missing in payload. Falling back to full refresh.");
-        provider.fetchNotifications();
+      if (context != null) {
+        final provider = Provider.of<NotificationProvider>(context, listen: false);
+        final String? notificationId = message.data['id']?.toString();
+        if (notificationId != null) {
+          provider.markAsUnreadAndRefresh(notificationId);
+        } else {
+          provider.fetchNotifications();
+        }
       }
     });
 
     FirebaseMessaging.onMessageOpenedApp.listen((RemoteMessage message) {
-      logger.i("🚀 App opened from a tapped notification.");
-      NotificationService.navigatorKey.currentState
-          ?.pushNamed('/notifications');
+      NotificationService.navigatorKey.currentState?.pushNamed('/notifications');
     });
   } catch (e) {
-    logger.f("❌ FATAL ERROR setting up Firebase Push Notifications: $e");
+    logger.f("❌ ERROR setting up Push Notifications: $e");
   }
 }
 
-// --- MAIN APP WIDGET (UPDATED & CORRECTED) ---
 class MyApp extends StatelessWidget {
   final String initialRoute;
   const MyApp({super.key, required this.initialRoute});
@@ -318,23 +215,14 @@ class MyApp extends StatelessWidget {
       providers: [
         ChangeNotifierProvider(create: (context) => UserProvider()),
         ChangeNotifierProvider(create: (context) => PrayerProvider()),
-        ChangeNotifierProvider(
-          create: (context) => NotificationProvider()..init(),
-        ),
-        ChangeNotifierProvider(
-          create: (context) => NotificationSettingsProvider(),
-        ),
+        ChangeNotifierProvider(create: (context) => NotificationProvider()..init()),
+        ChangeNotifierProvider(create: (context) => NotificationSettingsProvider()),
         ProxyProvider<UserProvider, ApiClient>(
-          update: (context, userProvider, previousApiClient) =>
-              ApiClient(userProvider),
+          update: (context, userProvider, previousApiClient) => ApiClient(userProvider),
         ),
-        
         ChangeNotifierProxyProvider<ApiClient, RamadanProvider>(
-          create: (context) =>
-              RamadanProvider(Provider.of<ApiClient>(context, listen: false)),
-          // FIX: Use 'previous' to preserve the state when the widget tree rebuilds
-          update: (context, apiClient, previous) =>
-              previous ?? RamadanProvider(apiClient),
+          create: (context) => RamadanProvider(Provider.of<ApiClient>(context, listen: false)),
+          update: (context, apiClient, previous) => previous ?? RamadanProvider(apiClient),
         ),
       ],
       child: ValueListenableBuilder<ThemeMode>(
@@ -345,6 +233,7 @@ class MyApp extends StatelessWidget {
             navigatorObservers: [routeObserver],
             debugShowCheckedModeBanner: false,
             title: 'Minber TV',
+            themeMode: currentMode,
             theme: ThemeData(
               primaryColor: AppColors.primaryBlue,
               scaffoldBackgroundColor: AppColors.backgroundLight,
@@ -353,11 +242,7 @@ class MyApp extends StatelessWidget {
                 foregroundColor: AppColors.primaryBlue,
                 elevation: 0.0,
                 scrolledUnderElevation: 1.0,
-                titleTextStyle: TextStyle(
-                  color: AppColors.primaryBlue,
-                  fontSize: 20,
-                  fontWeight: FontWeight.w600,
-                ),
+                titleTextStyle: TextStyle(color: AppColors.primaryBlue, fontSize: 20, fontWeight: FontWeight.w600),
                 iconTheme: IconThemeData(color: AppColors.primaryBlue),
               ),
               brightness: Brightness.light,
@@ -380,11 +265,7 @@ class MyApp extends StatelessWidget {
                 backgroundColor: AppColors.surfaceDark,
                 foregroundColor: Colors.white,
                 elevation: 2.0,
-                titleTextStyle: TextStyle(
-                  color: Colors.white,
-                  fontSize: 20,
-                  fontWeight: FontWeight.w600,
-                ),
+                titleTextStyle: TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.w600),
                 iconTheme: IconThemeData(color: Colors.white70),
               ),
               brightness: Brightness.dark,
@@ -400,7 +281,6 @@ class MyApp extends StatelessWidget {
                 bodyMedium: TextStyle(color: Colors.white54),
               ),
             ),
-            themeMode: currentMode,
             initialRoute: initialRoute,
             routes: {
               '/onboarding': (_) => const OnboardingScreen(),
@@ -414,12 +294,8 @@ class MyApp extends StatelessWidget {
               '/live': (_) => const LiveStreamPage(),
               '/media': (_) => const MediaHubScreen(),
               '/news': (context) {
-                final args = ModalRoute.of(context)!.settings.arguments
-                    as Map<String, dynamic>;
-                return NewsSeeAllPage(
-                  newsArticles: args['newsArticles'] as List<dynamic>,
-                  apiBaseUrl: args['apiBaseUrl'] as String,
-                );
+                final args = ModalRoute.of(context)!.settings.arguments as Map<String, dynamic>;
+                return NewsSeeAllPage(newsArticles: args['newsArticles'] as List<dynamic>, apiBaseUrl: args['apiBaseUrl'] as String);
               },
               '/permission': (_) => const PermissionScreen(),
               '/youtubeContent': (_) => const OnDemandPage(),

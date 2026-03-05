@@ -7,12 +7,13 @@ class ApiClient {
   final Dio _dio;
   final UserProvider _userProvider;
   final logger = Logger();
+
   ApiClient(this._userProvider)
       : _dio = Dio(BaseOptions(baseUrl: 'http://msa.merkuz.com:3636')) {
     _dio.interceptors.add(
       QueuedInterceptorsWrapper(
         onRequest: (options, handler) {
-// Add the access token to every request
+          // Add the access token to every request
           if (_userProvider.accessToken != null) {
             options.headers['Authorization'] =
                 'Bearer ${_userProvider.accessToken}';
@@ -21,12 +22,12 @@ class ApiClient {
           return handler.next(options);
         },
         onError: (DioException err, handler) async {
-// --- THIS IS THE MAGIC ---
-// Check if the error is a 401 Unauthorized
+          // Check if the error is a 401 Unauthorized
           if (err.response?.statusCode == 401) {
             logger.w(
-                ' получили 401 Unauthorized error. Attempting to refresh token...');
-// Avoid infinite loops: if the refresh token call itself fails, don't retry.
+                'Received 401 Unauthorized error. Attempting to refresh token...');
+
+            // Avoid infinite loops: if the refresh token call itself fails, don't retry.
             if (err.requestOptions.path == '/users/refresh-token') {
               logger.e('🚨 Refresh token failed. Logging out.');
               _userProvider.logout();
@@ -76,11 +77,9 @@ class ApiClient {
     return response.data;
   }
 
-// --- Your new API methods will go here ---
   /// Updates the user's profile.
   Future<Map<String, dynamic>> updateUserProfile(
       String name, String email) async {
-    // ✅ ADD A TRY-CATCH BLOCK AROUND THE API CALL
     try {
       logger.i("Attempting to update profile with name: $name, email: $email");
       final response = await _dio.put(
@@ -91,13 +90,11 @@ class ApiClient {
           .i("✅ Profile update successful. Server response: ${response.data}");
       return response.data;
     } on DioException catch (e) {
-      // ✅ LOG THE FULL DIO ERROR. This is the key to solving the problem.
       logger.e(
         "🔥 API CLIENT ERROR on updateUserProfile",
         error: "Message: ${e.message}, Response: ${e.response?.data}",
         stackTrace: e.stackTrace,
       );
-      // Re-throw the error so the UI can catch it and show the SnackBar
       throw e;
     }
   }
@@ -126,6 +123,31 @@ class ApiClient {
       return response.data;
     } on DioException catch (e) {
       logger.e("Error submitting Ramadan answer", error: e.response?.data);
+      throw e;
+    }
+  }
+
+  /// NEW: Fetches the user's quiz participation history.
+  Future<List<dynamic>> getRamadanUserHistory() async {
+    try {
+      logger.i("Fetching user Ramadan quiz history...");
+      final response = await _dio.get('/questions/history');
+      return response.data as List<dynamic>;
+    } on DioException catch (e) {
+      logger.e("Error fetching Ramadan history", error: e.response?.data);
+      throw e;
+    }
+  }
+
+  /// NEW: Fetches the top 10 participants for the leaderboard.
+  Future<Map<String, dynamic>> getRamadanLeaderboardTop10() async {
+    try {
+      logger.i("Fetching top 10 leaderboard...");
+      final response = await _dio.get('/questions/leaderboard/top10');
+      // Returns { "year": "2026", "top10": [...] }
+      return response.data as Map<String, dynamic>;
+    } on DioException catch (e) {
+      logger.e("Error fetching Ramadan leaderboard", error: e.response?.data);
       throw e;
     }
   }
