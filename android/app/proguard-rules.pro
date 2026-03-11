@@ -12,21 +12,23 @@
 -keepclasseswithmembers class * {
     @androidx.work.* *;
 }
--keep class com.batoulapps.adhan.** { *; }
 
-# --- flutter_local_notifications ---
+# --- flutter_local_notifications (CRITICAL FIX FOR AAB) ---
+# This prevents the OS from losing track of the notification receivers
 -keep class com.dexterous.flutterlocalnotifications.** { *; }
--keep class **.ScheduledNotificationReceiver { *; }
--keep class **.ScheduledNotificationBootReceiver { *; }
--keep class * extends com.dexterous.flutterlocalnotifications.** { *; }
+-keep class com.dexterous.flutterlocalnotifications.ScheduledNotificationReceiver { *; }
+-keep class com.dexterous.flutterlocalnotifications.ScheduledNotificationBootReceiver { *; }
+-keep class com.dexterous.flutterlocalnotifications.NotificationService { *; }
+-keep public class * extends android.content.BroadcastReceiver
+-keep public class * extends android.app.Service
 
-# --- flutter_background_service (CRITICAL FOR PRODUCTION) ---
--keep class id.flutter.flutter_background_service.** { *; }
+# --- Adhan & Timezone (Preserve calculation logic) ---
+-keep class com.batoulapps.adhan.** { *; }
+-keep class dev.fluttercommunity.plus.timezone.** { *; }
+-keep class com.samuelclatworthy.flutter_timezone.** { *; }
 
-# --- Firebase & Google Services ---
--keep class com.google.firebase.** { *; }
--keep class com.google.android.gms.** { *; }
--keep class com.google.android.play.core.** { *; }
+# --- Shared Preferences (Keep local storage access) ---
+-keep class io.flutter.plugins.sharedpreferences.** { *; }
 
 # --- JNI Entry Points (Prevents background task from being deleted) ---
 -keep class io.flutter.embedding.engine.plugins.shim.ShimPluginRegistry { *; }
@@ -34,23 +36,12 @@
 -keepnames class * extends io.flutter.plugin.common.MethodChannel$MethodCallHandler
 
 # --- Resource & Package Protection ---
-# Matches your package name in manifest
 -keep class com.minbertv.minber.** { *; }
-
-# --- Keep Notification Classes ---
--keep class * extends android.app.Service
--keep class * extends android.content.BroadcastReceiver
--keep class * extends android.app.Notification
-
-# --- Fix for Timezones and Geolocation ---
--keep class * extends java.util.TimeZone
--keep class * extends android.location.**
--keep class tzdata.** { *; }
 
 # --- Play Core Fixes ---
 -dontwarn com.google.android.play.core.**
 -keep class com.google.android.play.core.tasks.** { *; }
 -keep class com.google.android.play.core.common.** { *; }
 
-# --- Ensure R8 doesn't remove the Adhan calculation logic ---
--keep class adhan_dart.** { *; }
+# --- Prevent R8 from removing vital attributes ---
+-keepattributes Signature, *Annotation*, EnclosingMethod, InnerClasses

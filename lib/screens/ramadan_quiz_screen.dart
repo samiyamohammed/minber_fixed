@@ -1,5 +1,3 @@
-// lib/screens/ramadan_quiz_screen.dart
-
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:intl/intl.dart';
@@ -117,7 +115,8 @@ class _RamadanQuizScreenState extends State<RamadanQuizScreen>
           cardColor,
           icon: Icons.hourglass_empty_rounded,
           title: "Check Back Soon",
-          subtitle:
+          // Uses the specific message from the provider
+          subtitle: provider.errorMessage ??
               "Today's questions are being prepared. Please check back after the next prayer!",
           buttonText: "BACK TO HOME",
           onPressed: () => Navigator.pop(context),
@@ -141,6 +140,7 @@ class _RamadanQuizScreenState extends State<RamadanQuizScreen>
           cardColor,
           icon: Icons.wifi_off_rounded,
           title: "Oops!",
+          // Displays the specific error message caught in provider
           subtitle: provider.errorMessage ?? "Something went wrong.",
           buttonText: "TRY AGAIN",
           onPressed: () => provider.fetchQuestions(),
@@ -207,7 +207,12 @@ class _RamadanQuizScreenState extends State<RamadanQuizScreen>
                     borderRadius: BorderRadius.circular(15)),
               ),
               child: provider.isSubmitting
-                  ? const CircularProgressIndicator(color: Colors.white)
+                  ? const SizedBox(
+                      height: 20,
+                      width: 20,
+                      child: CircularProgressIndicator(
+                          color: Colors.white, strokeWidth: 2),
+                    )
                   : const Text("SUBMIT",
                       style: TextStyle(
                           color: Colors.white, fontWeight: FontWeight.bold)),
@@ -224,6 +229,18 @@ class _RamadanQuizScreenState extends State<RamadanQuizScreen>
     if (provider.isLoadingLeaderboard) {
       return const Center(
           child: CircularProgressIndicator(color: AppColors.primaryBlue));
+    }
+
+    if (provider.leaderboardError != null) {
+      return _buildStatusView(
+        theme,
+        cardColor,
+        icon: Icons.error_outline,
+        title: "Unable to load rankings",
+        subtitle: provider.leaderboardError!,
+        buttonText: "TRY AGAIN",
+        onPressed: () => provider.fetchLeaderboard(),
+      );
     }
 
     if (provider.leaderboard.isEmpty) {
@@ -335,6 +352,18 @@ class _RamadanQuizScreenState extends State<RamadanQuizScreen>
     if (provider.isLoadingHistory) {
       return const Center(
           child: CircularProgressIndicator(color: AppColors.primaryBlue));
+    }
+
+    if (provider.historyError != null) {
+      return _buildStatusView(
+        theme,
+        cardColor,
+        icon: Icons.error_outline,
+        title: "Unable to load history",
+        subtitle: provider.historyError!,
+        buttonText: "TRY AGAIN",
+        onPressed: () => provider.fetchHistory(),
+      );
     }
 
     if (provider.history.isEmpty) {

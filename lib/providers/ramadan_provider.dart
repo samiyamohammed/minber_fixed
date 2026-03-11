@@ -1,5 +1,3 @@
-// lib/providers/ramadan_provider.dart
-
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../models/ramadan_question.dart';
@@ -24,6 +22,10 @@ class RamadanProvider with ChangeNotifier {
   List<RamadanQuestion> _history = [];
   List<LeaderboardEntry> _leaderboard = [];
 
+  // errors specific to secondary tabs
+  String? _historyError;
+  String? _leaderboardError;
+
   RamadanStatus _status = RamadanStatus.initial;
   String? _errorMessage;
   int _currentIndex = 0;
@@ -41,6 +43,10 @@ class RamadanProvider with ChangeNotifier {
 
   RamadanStatus get status => _status;
   String? get errorMessage => _errorMessage;
+  // additional getters for tab-specific error messages
+  String? get historyError => _historyError;
+  String? get leaderboardError => _leaderboardError;
+
   int get currentIndex => _currentIndex;
   bool get isSubmitting => _isSubmitting;
   bool get isLoadingHistory => _isLoadingHistory;
@@ -68,57 +74,101 @@ class RamadanProvider with ChangeNotifier {
     notifyListeners();
 
     try {
-      final response = await _apiClient.getActiveRamadanQuestions().timeout(
-            const Duration(seconds: 10),
-          );
+      final envelope = await _apiClient.getActiveRamadanQuestions();
 
-      if (response == null || (response is List && response.isEmpty)) {
+      // unwrap list; envelope may contain message, count, etc.
+      final List<dynamic> payload = (envelope['data'] as List<dynamic>?) ?? [];
+      final String? backendMsg = envelope['message']?.toString();
+
+      if (payload.isEmpty) {
         _status = RamadanStatus.empty;
-      } else {
-        _questions = (response as List)
-            .map((json) => RamadanQuestion.fromJson(json))
-            .toList();
+        _errorMessage = backendMsg ??
+            "No quiz questions are available for today. Please check back later!";
+        return;
+      }
 
-        if (_questions.isEmpty) {
-          _status = RamadanStatus.empty;
-        } else {
-          bool allAnswered = _questions.every((q) => q.hasAnswered);
-          if (allAnswered) {
-            _status = RamadanStatus.alreadyAnswered;
-            _currentIndex = _questions.length;
-          } else {
-            _status = RamadanStatus.ready;
-            _currentIndex = _questions.indexWhere((q) => !q.hasAnswered);
-            if (_currentIndex == -1) _currentIndex = 0;
-          }
-        }
+      // Parse the list of questions
+      try {
+        _questions =
+            payload.map((json) => RamadanQuestion.fromJson(json)).toList();
+      } catch (e) {
+        debugPrint('Failed to parse questions: $e');
+        _status = RamadanStatus.empty;
+        _errorMessage = "Quiz data is malformed. Please try again later.";
+        return;
+      }
+
+      // if unwrapping produced an empty list (unlikely)
+      if (_questions.isEmpty) {
+        _status = RamadanStatus.empty;
+        _errorMessage = backendMsg ?? "No questions found for today.";
+        return;
+      }
+
+      // Determine progress
+      bool allAnswered = _questions.every((q) => q.hasAnswered);
+      if (allAnswered) {
+        _status = RamadanStatus.alreadyAnswered;
+        _currentIndex = _questions.length;
+      } else {
+        _status = RamadanStatus.ready;
+        _currentIndex = _questions.indexWhere((q) => !q.hasAnswered);
+        if (_currentIndex == -1) _currentIndex = 0;
       }
     } on DioException catch (e) {
-      if (e.response?.statusCode == 401) {
-        _status = RamadanStatus.unauthenticated;
-      } else if (e.response?.statusCode == 403) {
-        _status = RamadanStatus.alreadyAnswered;
-      } else {
-        _status = RamadanStatus.error;
-        _errorMessage = "Could not connect to the quiz server.";
+      String? backendMessage;
+      if (e.response?.data is Map) {
+        backendMessage = e.response?.data['message']?.toString();
       }
-    } catch (e) {
+
+      switch (e.response?.statusCode) {
+        case 401:
+          _status = RamadanStatus.unauthenticated;
+          break;
+        case 403:
+          _status = RamadanStatus.alreadyAnswered;
+          break;
+        case 404:
+          _status = RamadanStatus.empty;
+          _errorMessage =
+              backendMessage ?? "Today's quiz is not available yet.";
+          break;
+        default:
+          _status = RamadanStatus.error;
+          _errorMessage = backendMessage ??
+              "Network error or server is taking too long. Please try again.";
+      }
+    } on TimeoutException catch (_) {
+      debugPrint("Provider Fetch Error: request timed out");
       _status = RamadanStatus.error;
-      _errorMessage = "Something went wrong. Please try again.";
+      _errorMessage = "Request timed out. Check your connection and retry.";
+    } catch (e) {
+      debugPrint("Provider Fetch Error: $e");
+      _status = RamadanStatus.error;
+      _errorMessage = "Something went wrong. Please check your connection.";
     } finally {
       notifyListeners();
     }
   }
 
   Future<void> fetchHistory() async {
+    _historyError = null;
     _isLoadingHistory = true;
     notifyListeners();
     try {
-      final response = await _apiClient.getRamadanUserHistory();
-      _history = (response as List)
-          .map((json) => RamadanQuestion.fromJson(json))
-          .toList();
+      final response = await _apiClient
+          .getRamadanUserHistory()
+          .timeout(const Duration(seconds: 10));
+
+      // ApiClient returns a List<dynamic> already (it unwraps the envelope),
+      // so just cast and process it directly.
+      final List<dynamic> list = response as List<dynamic>;
+      _history = list.map((json) => RamadanQuestion.fromJson(json)).toList();
+    } on TimeoutException catch (_) {
+      _historyError = "Request timed out. Please try again.";
+      debugPrint("History Fetch Error: request timed out");
     } catch (e) {
+      _historyError = e.toString();
       debugPrint("History Fetch Error: $e");
     } finally {
       _isLoadingHistory = false;
@@ -127,15 +177,33 @@ class RamadanProvider with ChangeNotifier {
   }
 
   Future<void> fetchLeaderboard() async {
+    _leaderboardError = null;
     _isLoadingLeaderboard = true;
     notifyListeners();
     try {
-      final response = await _apiClient.getRamadanLeaderboardTop10();
-      // Swagger shows { "top10": [...] }
-      final List top10List = response['top10'] as List? ?? [];
+      final response = await _apiClient
+          .getRamadanLeaderboardTop10()
+          .timeout(const Duration(seconds: 10));
+
+      // if the endpoint uses the envelope pattern the map may contain
+      // `data` key; otherwise we expect top-level keys like `top10`.
+      Map<String, dynamic> map;
+      if (response is Map<String, dynamic> && response.containsKey('data')) {
+        map = response['data'] as Map<String, dynamic>? ?? {};
+      } else if (response is Map<String, dynamic>) {
+        map = response;
+      } else {
+        map = {};
+      }
+
+      final List<dynamic> top10List = map['top10'] as List? ?? [];
       _leaderboard =
           top10List.map((json) => LeaderboardEntry.fromJson(json)).toList();
+    } on TimeoutException catch (_) {
+      _leaderboardError = "Request timed out. Please try again.";
+      debugPrint("Leaderboard Fetch Error: request timed out");
     } catch (e) {
+      _leaderboardError = e.toString();
       debugPrint("Leaderboard Fetch Error: $e");
     } finally {
       _isLoadingLeaderboard = false;

@@ -2,13 +2,15 @@
     xmlns:tools="http://schemas.android.com/tools"
     package="com.minbertv.minber">
 
-    <!-- All Required Permissions -->
+    <!-- Permissions for Prayer Times -->
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED"/>
     <uses-permission android:name="android.permission.WAKE_LOCK"/>
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
-    <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM"/>
+    
+    <!-- Using USE_EXACT_ALARM only to avoid user settings redirection -->
     <uses-permission android:name="android.permission.USE_EXACT_ALARM" />
+    
     <uses-permission android:name="android.permission.INTERNET"/>
     <uses-permission android:name="android.permission.VIBRATE"/>
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
@@ -53,16 +55,23 @@
             android:name="flutterEmbedding"
             android:value="2" />
 
-        <!-- SERVICE for flutter_background_service -->
+        <!-- Background Service Configuration -->
         <service
             android:name="id.flutter.flutter_background_service.BackgroundService"
-            android:foregroundServiceType="mediaPlayback"
+            android:foregroundServiceType="specialUse"
             android:exported="false"
             tools:replace="android:exported" />
 
-        <!-- PRODUCTION FIX: android:exported="true" allows the OS to wake the app for scheduled prayers -->
-        <receiver android:exported="true" android:name="com.dexterous.flutterlocalnotifications.ScheduledNotificationReceiver" />
-        <receiver android:exported="true" android:name="com.dexterous.flutterlocalnotifications.ScheduledNotificationBootReceiver">
+        <!-- Essential Receivers: exported="true" is required for OS wake-ups -->
+        <receiver 
+            android:name="com.dexterous.flutterlocalnotifications.ScheduledNotificationReceiver"
+            android:exported="true" 
+            tools:replace="android:exported" />
+        
+        <receiver 
+            android:name="com.dexterous.flutterlocalnotifications.ScheduledNotificationBootReceiver"
+            android:exported="true"
+            tools:replace="android:exported">
             <intent-filter>
                 <action android:name="android.intent.action.BOOT_COMPLETED"/>
                 <action android:name="android.intent.action.MY_PACKAGE_REPLACED"/>

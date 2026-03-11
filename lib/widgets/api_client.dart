@@ -9,7 +9,14 @@ class ApiClient {
   final logger = Logger();
 
   ApiClient(this._userProvider)
-      : _dio = Dio(BaseOptions(baseUrl: 'http://msa.merkuz.com:3636')) {
+      : _dio = Dio(BaseOptions(
+          baseUrl: 'http://msa.merkuz.com:3636',
+          // set reasonable timeouts at the HTTP client level rather than
+          // using Future.timeout in every call. 10 seconds is what the
+          // provider was using previously.
+          connectTimeout: const Duration(seconds: 10),
+          receiveTimeout: const Duration(seconds: 10),
+        )) {
     _dio.interceptors.add(
       QueuedInterceptorsWrapper(
         onRequest: (options, handler) {
@@ -100,11 +107,26 @@ class ApiClient {
   }
 
   /// Fetches the active Ramadan questions for today.
-  Future<List<dynamic>> getActiveRamadanQuestions() async {
+  ///
+  /// The backend wraps every response in an envelope containing
+  /// `success`, `message`, `data`, etc.  We return the entire body so the
+  /// caller can inspect the message and unwrap the `data` field lazily.
+  Future<Map<String, dynamic>> getActiveRamadanQuestions() async {
     try {
       logger.i("Fetching active Ramadan questions...");
       final response = await _dio.get('/questions/active');
-      return response.data as List<dynamic>;
+
+      // ensure we always return a map so the provider code can safely
+      // index into it; some endpoints may erroneously send a list but
+      // the envelope is the norm.
+      if (response.data is Map<String, dynamic>) {
+        return response.data as Map<String, dynamic>;
+      }
+
+      // fallback: wrap non-map data in a fake envelope
+      logger.w(
+          'getActiveRamadanQuestions received non-map payload: ${response.data}');
+      return {'data': response.data};
     } on DioException catch (e) {
       logger.e("Error fetching Ramadan questions", error: e.response?.data);
       throw e;
@@ -127,12 +149,21 @@ class ApiClient {
     }
   }
 
-  /// NEW: Fetches the user's quiz participation history.
+  /// Fetches the user's quiz participation history.
+  ///
+  /// History is also wrapped in the standard envelope.  We return
+  /// the unwrapped list so callers don't need to perform the check.
   Future<List<dynamic>> getRamadanUserHistory() async {
     try {
       logger.i("Fetching user Ramadan quiz history...");
       final response = await _dio.get('/questions/history');
-      return response.data as List<dynamic>;
+      final data = response.data;
+      if (data is Map && data.containsKey('data')) {
+        return (data['data'] as List<dynamic>?) ?? [];
+      }
+      if (data is List) return data;
+      logger.w('Unexpected history payload: $data');
+      return [];
     } on DioException catch (e) {
       logger.e("Error fetching Ramadan history", error: e.response?.data);
       throw e;
@@ -144,8 +175,12 @@ class ApiClient {
     try {
       logger.i("Fetching top 10 leaderboard...");
       final response = await _dio.get('/questions/leaderboard/top10');
-      // Returns { "year": "2026", "top10": [...] }
-      return response.data as Map<String, dynamic>;
+      final result = response.data;
+      if (result is Map<String, dynamic>) return result;
+
+      logger.w('Unexpected leaderboard payload: $result');
+      // wrap in map to keep return type consistent
+      return {'top10': []};
     } on DioException catch (e) {
       logger.e("Error fetching Ramadan leaderboard", error: e.response?.data);
       throw e;

@@ -1,17 +1,14 @@
-// lib/services/notification_service.dart (FINAL PRODUCTION STABLE)
-
 import 'dart:io';
 import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:flutter_timezone/flutter_timezone.dart';
-import 'package:permission_handler/permission_handler.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:timezone/timezone.dart' as tz;
 import 'package:timezone/data/latest_all.dart' as tz;
-import 'package:logger/Logger.dart';
+import 'package:logger/logger.dart';
 import 'package:geolocator/geolocator.dart';
-import 'package:adhan/adhan.dart'; // Official stable library matching Al Faruk
+import 'package:adhan/adhan.dart';
 
 class NotificationService {
   static final logger = Logger(
@@ -24,9 +21,8 @@ class NotificationService {
   static final GlobalKey<NavigatorState> navigatorKey =
       GlobalKey<NavigatorState>();
 
-  // PRODUCTION FIX: Versioned IDs to force OS to reset notification channel settings
-  static const String adhanChannelId = 'minber_prayer_v4';
-  static const String weeklyChannelId = 'minber_weekly_v4';
+  static const String adhanChannelId = 'minber_prayer_v5'; // Bumped version
+  static const String weeklyChannelId = 'minber_weekly_v5';
 
   static Future<void> init() async {
     logger.i("[NotificationService] Initializing...");
@@ -47,11 +43,6 @@ class NotificationService {
     );
 
     await _createNotificationChannels();
-
-    if (Platform.isAndroid) {
-      await Permission.notification.request();
-      await Permission.scheduleExactAlarm.request();
-    }
     logger.i("[NotificationService] Initialization complete.");
   }
 
@@ -72,14 +63,13 @@ class NotificationService {
           _notifications.resolvePlatformSpecificImplementation<
               AndroidFlutterLocalNotificationsPlugin>();
 
-      // Adhan Channel: PlaySound false as per client request, but High Importance
       const AndroidNotificationChannel adhanChannel =
           AndroidNotificationChannel(
         adhanChannelId,
         'Prayer Notifications',
-        description: 'Notifications for Daily Prayer Times',
         importance: Importance.max,
         playSound: false,
+        enableVibration: true,
       );
 
       const AndroidNotificationChannel weeklyChannel =
@@ -95,18 +85,12 @@ class NotificationService {
   }
 
   static Future<void> scheduleDailyAndWeeklyNotifications() async {
-    logger.i("🚀 Starting scheduling logic...");
     final prefs = await SharedPreferences.getInstance();
-    final bool disclosureAccepted =
-        prefs.getBool('location_disclosure_accepted') ?? false;
-
-    if (!disclosureAccepted) {
-      logger.w("Location disclosure not accepted. Skipping.");
-      return;
-    }
 
     try {
       await _ensureTimezoneInitialized();
+      // Only cancel prayer notifications, not everything, to avoid collisions
+      // But for production stability, clearing and rebuilding is safest
       await _notifications.cancelAll();
 
       await _runScheduling(prefs);
@@ -123,24 +107,19 @@ class NotificationService {
   static Future<void> _runScheduling(SharedPreferences prefs) async {
     Coordinates? coordinates;
 
-    // GPS check with strict timeout to prevent background hang
     try {
-      LocationPermission permission = await Geolocator.checkPermission();
-      if (permission == LocationPermission.always ||
-          permission == LocationPermission.whileInUse) {
-        Position position = await Geolocator.getCurrentPosition(
-            desiredAccuracy: LocationAccuracy.medium,
-            timeLimit: const Duration(seconds: 10));
+      // In background, we check for last known location first for speed
+      Position? position = await Geolocator.getLastKnownPosition();
+
+      if (position != null) {
         coordinates = Coordinates(position.latitude, position.longitude);
-        await prefs.setDouble('last_known_lat', position.latitude);
-        await prefs.setDouble('last_known_lng', position.longitude);
+      } else {
+        // Fallback to manual cache
+        final lat = prefs.getDouble('last_known_lat') ?? 9.03;
+        final lng = prefs.getDouble('last_known_lng') ?? 38.74;
+        coordinates = Coordinates(lat, lng);
       }
     } catch (e) {
-      logger.w("Live GPS failed or timed out: $e");
-    }
-
-    // Fallback to cache if GPS failed
-    if (coordinates == null) {
       final lat = prefs.getDouble('last_known_lat') ?? 9.03;
       final lng = prefs.getDouble('last_known_lng') ?? 38.74;
       coordinates = Coordinates(lat, lng);
@@ -150,10 +129,11 @@ class NotificationService {
     final params = CalculationMethod.muslim_world_league.getParameters();
     params.madhab = Madhab.shafi;
 
-    // Schedule for today and tomorrow to ensure continuity
-    for (int day = 0; day <= 1; day++) {
+    // Schedule for the next 7 days to ensure the user stays notified even if the app isn't opened
+    for (int day = 0; day <= 6; day++) {
       final date = now.add(Duration(days: day));
-      final prayerTimes = PrayerTimes.today(coordinates, params);
+      final prayerTimes = PrayerTimes(
+          coordinates, DateComponents(date.year, date.month, date.day), params);
 
       final Map<String, DateTime?> times = {
         "Fajr": prayerTimes.fajr,
@@ -175,8 +155,11 @@ class NotificationService {
                 true;
         if (!isEnabled) continue;
 
+        // Unique ID per prayer per day
+        int notificationId = entry.key.hashCode + day;
+
         await _notifications.zonedSchedule(
-            (entry.key.hashCode + day),
+            notificationId,
             'Time for ${entry.key}',
             'The time for the ${entry.key} prayer has arrived.',
             scheduled,
@@ -187,12 +170,12 @@ class NotificationService {
                 importance: Importance.max,
                 priority: Priority.high,
                 playSound: false,
+                icon: '@drawable/notification_icon',
               ),
             ),
             androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
             uiLocalNotificationDateInterpretation:
-                UILocalNotificationDateInterpretation.absoluteTime,
-            matchDateTimeComponents: DateTimeComponents.time);
+                UILocalNotificationDateInterpretation.absoluteTime);
       }
     }
   }
@@ -203,6 +186,7 @@ class NotificationService {
       final now = tz.TZDateTime.now(location);
       tz.TZDateTime scheduledDate =
           tz.TZDateTime(location, now.year, now.month, now.day, 19);
+
       if (scheduledDate.weekday != DateTime.thursday) {
         scheduledDate = scheduledDate.add(Duration(
             days: (DateTime.thursday - scheduledDate.weekday + 7) % 7));
