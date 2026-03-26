@@ -1,5 +1,4 @@
 import 'dart:io';
-import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:flutter_timezone/flutter_timezone.dart';
@@ -25,6 +24,7 @@ class NotificationService {
   static const String weeklyChannelId = 'minber_weekly_v5';
 
   static Future<void> init() async {
+    debugPrint("[NotificationService] Initializing...");
     logger.i("[NotificationService] Initializing...");
 
     await _ensureTimezoneInitialized();
@@ -43,7 +43,25 @@ class NotificationService {
     );
 
     await _createNotificationChannels();
+    await _requestExactAlarmPermission();
+    debugPrint("[NotificationService] Initialization complete.");
     logger.i("[NotificationService] Initialization complete.");
+  }
+
+  /// On Android 12+ (API 31+), SCHEDULE_EXACT_ALARM requires a runtime grant.
+  /// On Android 13+ (API 33+), USE_EXACT_ALARM is auto-granted for alarm apps.
+  /// We request it here so the user is prompted if needed.
+  static Future<void> _requestExactAlarmPermission() async {
+    if (!Platform.isAndroid) return;
+    try {
+      final androidPlugin = _notifications
+          .resolvePlatformSpecificImplementation<
+              AndroidFlutterLocalNotificationsPlugin>();
+      // Request exact alarm permission (Android 13+)
+      await androidPlugin?.requestExactAlarmsPermission();
+    } catch (e) {
+      logger.w("[NotificationService] Exact alarm permission request failed: $e");
+    }
   }
 
   static Future<void> _ensureTimezoneInitialized() async {
@@ -89,8 +107,6 @@ class NotificationService {
 
     try {
       await _ensureTimezoneInitialized();
-      // Only cancel prayer notifications, not everything, to avoid collisions
-      // But for production stability, clearing and rebuilding is safest
       await _notifications.cancelAll();
 
       await _runScheduling(prefs);
@@ -98,14 +114,34 @@ class NotificationService {
       if (prefs.getBool('notifications_khemis_enabled') ?? true) {
         await scheduleSalawatNotification();
       }
+      debugPrint("✅ [NotificationService] Scheduled Successfully.");
       logger.i("✅ Scheduled Successfully.");
-    } catch (e) {
+    } catch (e, stack) {
+      debugPrint("❌ [NotificationService] Scheduling Failed: $e\n$stack");
       logger.e("❌ Scheduling Failed: $e");
     }
   }
 
   static Future<void> _runScheduling(SharedPreferences prefs) async {
     Coordinates? coordinates;
+
+    // Check if exact alarms are permitted; fall back to inexact if not
+    bool canUseExact = true;
+    if (Platform.isAndroid) {
+      try {
+        final androidPlugin = _notifications
+            .resolvePlatformSpecificImplementation<
+                AndroidFlutterLocalNotificationsPlugin>();
+        canUseExact =
+            await androidPlugin?.canScheduleExactNotifications() ?? false;
+        if (!canUseExact) {
+          logger.w(
+              "[NotificationService] Exact alarms not permitted, using inexact scheduling.");
+        }
+      } catch (e) {
+        canUseExact = false;
+      }
+    }
 
     try {
       // In background, we check for last known location first for speed
@@ -143,6 +179,14 @@ class NotificationService {
         "Isha": prayerTimes.isha,
       };
 
+      final Map<String, int> prayerIndex = {
+        "Fajr": 0,
+        "Dhuhr": 1,
+        "Asr": 2,
+        "Maghrib": 3,
+        "Isha": 4,
+      };
+
       for (var entry in times.entries) {
         if (entry.value == null) continue;
 
@@ -155,8 +199,8 @@ class NotificationService {
                 true;
         if (!isEnabled) continue;
 
-        // Unique ID per prayer per day
-        int notificationId = entry.key.hashCode + day;
+        // Stable unique ID: day * 10 + prayerIndex (avoids hashCode collisions)
+        int notificationId = day * 10 + (prayerIndex[entry.key] ?? 0);
 
         await _notifications.zonedSchedule(
             notificationId,
@@ -173,7 +217,9 @@ class NotificationService {
                 icon: '@drawable/notification_icon',
               ),
             ),
-            androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
+            androidScheduleMode: canUseExact
+                ? AndroidScheduleMode.exactAllowWhileIdle
+                : AndroidScheduleMode.inexactAllowWhileIdle,
             uiLocalNotificationDateInterpretation:
                 UILocalNotificationDateInterpretation.absoluteTime);
       }

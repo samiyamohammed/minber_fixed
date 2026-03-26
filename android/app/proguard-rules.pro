@@ -22,6 +22,13 @@
 -keep public class * extends android.content.BroadcastReceiver
 -keep public class * extends android.app.Service
 
+# --- Gson TypeToken fix (CRITICAL: prevents "Missing type parameter" crash in release) ---
+# R8 strips generic type info from anonymous TypeToken subclasses used by flutter_local_notifications
+-keep class com.google.gson.reflect.TypeToken { *; }
+-keep class * extends com.google.gson.reflect.TypeToken
+-keepattributes Signature
+-keepattributes *Annotation*
+
 # --- Adhan & Timezone (Preserve calculation logic) ---
 -keep class com.batoulapps.adhan.** { *; }
 -keep class dev.fluttercommunity.plus.timezone.** { *; }
@@ -44,4 +51,4 @@
 -keep class com.google.android.play.core.common.** { *; }
 
 # --- Prevent R8 from removing vital attributes ---
--keepattributes Signature, *Annotation*, EnclosingMethod, InnerClasses
+-keepattributes EnclosingMethod, InnerClasses
