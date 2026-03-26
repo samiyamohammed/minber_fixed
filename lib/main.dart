@@ -1,4 +1,4 @@
-// lib/main.dart (FINAL STABLE VERSION FOR PRODUCTION)
+// lib/main.dart (FINAL STABLE VERSION FOR PRODUCTION WITH AUTO-UPDATE)
 
 import 'dart:io';
 import 'dart:ui';
@@ -62,10 +62,15 @@ import 'firebase_options.dart';
 import 'providers/notification_settings_provider.dart';
 import 'screens/permission_screen.dart';
 
+// AUTO-UPDATE IMPORTS
+import 'services/versioning_service.dart';
+import 'widgets/update_dialog.dart';
+
 final logger = Logger();
 final audioPlayer = AudioPlayer();
 final flutterLocalNotificationsPlugin = FlutterLocalNotificationsPlugin();
-final RouteObserver<ModalRoute<void>> routeObserver = RouteObserver<ModalRoute<void>>();
+final RouteObserver<ModalRoute<void>> routeObserver =
+    RouteObserver<ModalRoute<void>>();
 
 @pragma('vm:entry-point')
 void notificationTapBackground(NotificationResponse notificationResponse) {
@@ -80,11 +85,12 @@ void callbackDispatcher() {
     // ESSENTIAL PRODUCTION FIX: Required for background isolates to use plugins
     DartPluginRegistrant.ensureInitialized();
     WidgetsFlutterBinding.ensureInitialized();
-    
+
     debugPrint("WorkManager: Task executing ($task)");
     try {
       // Sync names with task registration for Production reliability (Matches Al Faruk logic)
-      if (task.contains("schedulePrayerNotifications") || task.contains("prayer_notification_scheduler")) {
+      if (task.contains("schedulePrayerNotifications") ||
+          task.contains("prayer_notification_scheduler")) {
         await NotificationService.init();
         await NotificationService.scheduleDailyAndWeeklyNotifications();
       }
@@ -129,7 +135,8 @@ Future<void> main() async {
   themeNotifier = ValueNotifier<ThemeMode>(savedThemeMode);
 
   try {
-    await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
+    await Firebase.initializeApp(
+        options: DefaultFirebaseOptions.currentPlatform);
     FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
   } catch (e) {
     debugPrint("🔥 Firebase Init failed: $e");
@@ -181,13 +188,16 @@ Future<void> setupFirebasePushNotifications() async {
     });
 
     FirebaseMessaging.onMessage.listen((RemoteMessage message) {
-      final title = message.data['title'] ?? message.notification?.title ?? "New Notification";
+      final title = message.data['title'] ??
+          message.notification?.title ??
+          "New Notification";
       final body = message.data['body'] ?? message.notification?.body ?? "";
       showOverlayNotification(title: title, body: body);
 
       final context = NotificationService.navigatorKey.currentContext;
       if (context != null) {
-        final provider = Provider.of<NotificationProvider>(context, listen: false);
+        final provider =
+            Provider.of<NotificationProvider>(context, listen: false);
         final String? notificationId = message.data['id']?.toString();
         if (notificationId != null) {
           provider.markAsUnreadAndRefresh(notificationId);
@@ -198,16 +208,51 @@ Future<void> setupFirebasePushNotifications() async {
     });
 
     FirebaseMessaging.onMessageOpenedApp.listen((RemoteMessage message) {
-      NotificationService.navigatorKey.currentState?.pushNamed('/notifications');
+      NotificationService.navigatorKey.currentState
+          ?.pushNamed('/notifications');
     });
   } catch (e) {
     logger.f("❌ ERROR setting up Push Notifications: $e");
   }
 }
 
-class MyApp extends StatelessWidget {
+class MyApp extends StatefulWidget {
   final String initialRoute;
   const MyApp({super.key, required this.initialRoute});
+
+  @override
+  State<MyApp> createState() => _MyAppState();
+}
+
+class _MyAppState extends State<MyApp> {
+  @override
+  void initState() {
+    super.initState();
+    // Logic: Trigger version check after the build is completed
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _checkUpdate();
+    });
+  }
+
+  Future<void> _checkUpdate() async {
+    // 1. We now call 'checkVersionStatus' which returns an object with all the data
+    final result = await VersioningService.checkVersionStatus();
+
+    debugPrint(
+        "🔍 Version Check: Store (${result.storeVersion}) vs Local (${result.localVersion})");
+
+    if (result.canUpdate && mounted) {
+      showDialog(
+        context: NotificationService.navigatorKey.currentContext ?? context,
+        barrierDismissible: true,
+        builder: (context) => UpdateDialog(
+          // 2. We pass the version numbers found by the scraper to the dialog
+          localVersion: result.localVersion,
+          storeVersion: result.storeVersion,
+        ),
+      );
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -215,14 +260,19 @@ class MyApp extends StatelessWidget {
       providers: [
         ChangeNotifierProvider(create: (context) => UserProvider()),
         ChangeNotifierProvider(create: (context) => PrayerProvider()),
-        ChangeNotifierProvider(create: (context) => NotificationProvider()..init()),
-        ChangeNotifierProvider(create: (context) => NotificationSettingsProvider()),
+        ChangeNotifierProvider(
+            create: (context) => NotificationProvider()..init()),
+        ChangeNotifierProvider(
+            create: (context) => NotificationSettingsProvider()),
         ProxyProvider<UserProvider, ApiClient>(
-          update: (context, userProvider, previousApiClient) => ApiClient(userProvider),
+          update: (context, userProvider, previousApiClient) =>
+              ApiClient(userProvider),
         ),
         ChangeNotifierProxyProvider<ApiClient, RamadanProvider>(
-          create: (context) => RamadanProvider(Provider.of<ApiClient>(context, listen: false)),
-          update: (context, apiClient, previous) => previous ?? RamadanProvider(apiClient),
+          create: (context) =>
+              RamadanProvider(Provider.of<ApiClient>(context, listen: false)),
+          update: (context, apiClient, previous) =>
+              previous ?? RamadanProvider(apiClient),
         ),
       ],
       child: ValueListenableBuilder<ThemeMode>(
@@ -242,7 +292,10 @@ class MyApp extends StatelessWidget {
                 foregroundColor: AppColors.primaryBlue,
                 elevation: 0.0,
                 scrolledUnderElevation: 1.0,
-                titleTextStyle: TextStyle(color: AppColors.primaryBlue, fontSize: 20, fontWeight: FontWeight.w600),
+                titleTextStyle: TextStyle(
+                    color: AppColors.primaryBlue,
+                    fontSize: 20,
+                    fontWeight: FontWeight.w600),
                 iconTheme: IconThemeData(color: AppColors.primaryBlue),
               ),
               brightness: Brightness.light,
@@ -265,7 +318,10 @@ class MyApp extends StatelessWidget {
                 backgroundColor: AppColors.surfaceDark,
                 foregroundColor: Colors.white,
                 elevation: 2.0,
-                titleTextStyle: TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.w600),
+                titleTextStyle: TextStyle(
+                    color: Colors.white,
+                    fontSize: 20,
+                    fontWeight: FontWeight.w600),
                 iconTheme: IconThemeData(color: Colors.white70),
               ),
               brightness: Brightness.dark,
@@ -281,7 +337,7 @@ class MyApp extends StatelessWidget {
                 bodyMedium: TextStyle(color: Colors.white54),
               ),
             ),
-            initialRoute: initialRoute,
+            initialRoute: widget.initialRoute,
             routes: {
               '/onboarding': (_) => const OnboardingScreen(),
               '/home': (_) => const HomeScreen(),
@@ -294,8 +350,11 @@ class MyApp extends StatelessWidget {
               '/live': (_) => const LiveStreamPage(),
               '/media': (_) => const MediaHubScreen(),
               '/news': (context) {
-                final args = ModalRoute.of(context)!.settings.arguments as Map<String, dynamic>;
-                return NewsSeeAllPage(newsArticles: args['newsArticles'] as List<dynamic>, apiBaseUrl: args['apiBaseUrl'] as String);
+                final args = ModalRoute.of(context)!.settings.arguments
+                    as Map<String, dynamic>;
+                return NewsSeeAllPage(
+                    newsArticles: args['newsArticles'] as List<dynamic>,
+                    apiBaseUrl: args['apiBaseUrl'] as String);
               },
               '/permission': (_) => const PermissionScreen(),
               '/youtubeContent': (_) => const OnDemandPage(),
