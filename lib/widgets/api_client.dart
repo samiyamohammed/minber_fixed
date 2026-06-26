@@ -2,6 +2,7 @@ import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:logger/logger.dart';
 import '../providers/user_provider.dart';
+import '../config/api_config_web.dart';
 
 class ApiClient {
   final Dio _dio;
@@ -10,7 +11,7 @@ class ApiClient {
 
   ApiClient(this._userProvider)
       : _dio = Dio(BaseOptions(
-          baseUrl: 'http://msa.merkuz.com:3636',
+          baseUrl: ApiConfig.baseUrl,
           // set reasonable timeouts at the HTTP client level rather than
           // using Future.timeout in every call. 10 seconds is what the
           // provider was using previously.

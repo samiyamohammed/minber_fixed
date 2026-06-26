@@ -1,0 +1,47 @@
+═══════════════════════════════════════════════════════════
+  MINBER TV PWA - TONIGHT'S CHECKLIST
+═══════════════════════════════════════════════════════════
+
+DO THESE 3 THINGS:
+
+[ ] 1. DEPLOY TO FIREBASE (10 min)
+    ```
+    firebase login
+    firebase init hosting
+      → Public directory: build/web
+      → Single page: YES
+      → Overwrite: NO
+    firebase deploy --only hosting
+    ```
+    ✓ Save the URL you get!
+
+[ ] 2. TEST ON YOUR PHONE (5 min)
+    → Open Firebase URL in Chrome
+    → Install to home screen
+    → Take screenshot
+    
+[ ] 3. READ DEMO_PRESENTATION.md (5 min)
+    → Know your talking points
+    → Understand the 5-6 week timeline
+    → Be ready for questions
+
+═══════════════════════════════════════════════════════════
+
+TOMORROW'S DEMO:
+1. Show deployed URL (2 min)
+2. Show it's responsive (1 min)  
+3. Show install on phone (1 min)
+4. Explain timeline (1 min)
+
+TOTAL TIME: 5 minutes
+
+═══════════════════════════════════════════════════════════
+
+IF FIREBASE FAILS:
+→ Run `flutter run -d chrome --release`
+→ Show local browser
+→ Say "Will deploy after approval"
+
+YOU GOT THIS! 🚀
+
+═══════════════════════════════════════════════════════════

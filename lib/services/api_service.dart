@@ -2,10 +2,10 @@
 import 'package:http/http.dart' as http;
 import 'dart:convert';
 import 'package:flutter/material.dart';
+import '../config/api_config_web.dart';
 
 class ApiService {
-  // Using your deployed production backend URL.
-  static const String _baseUrl = 'http://msa.merkuz.com:3636';
+  static String get _baseUrl => ApiConfig.baseUrl;
 
   /// Logs in the user and returns the full response data.
   static Future<Map<String, dynamic>> loginUser(

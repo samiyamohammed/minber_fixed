@@ -1,1 +1,36 @@
-{"flutter":{"platforms":{"android":{"default":{"projectId":"minber-super-app-notifications","appId":"1:712226370485:android:c880a6fbf94e22ce291ffc","fileOutput":"android/app/google-services.json"}},"dart":{"lib/firebase_options.dart":{"projectId":"minber-super-app-notifications","configurations":{"android":"1:712226370485:android:c880a6fbf94e22ce291ffc","ios":"1:712226370485:ios:9d4de6bdf4576142291ffc","macos":"1:712226370485:ios:9d4de6bdf4576142291ffc","web":"1:712226370485:web:194b483d4d858c2b291ffc","windows":"1:712226370485:web:b13b099a97273db4291ffc"}}}}}}
+{
+  "hosting": {
+    "public": "build/web",
+    "ignore": [
+      "firebase.json",
+      "**/.*",
+      "**/node_modules/**"
+    ],
+    "rewrites": [
+      {
+        "source": "**",
+        "destination": "/index.html"
+      }
+    ],
+    "headers": [
+      {
+        "source": "**/*.@(js|css|png|jpg|jpeg|gif|ico|svg|woff|woff2|ttf|eot)",
+        "headers": [
+          {
+            "key": "Cache-Control",
+            "value": "max-age=31536000"
+          }
+        ]
+      },
+      {
+        "source": "service-worker.js",
+        "headers": [
+          {
+            "key": "Cache-Control",
+            "value": "no-cache"
+          }
+        ]
+      }
+    ]
+  }
+}

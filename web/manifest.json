@@ -1,13 +1,14 @@
 {
-    "name": "minber_super_app_new_fixed",
-    "short_name": "minber_super_app_new_fixed",
+    "name": "Minber TV",
+    "short_name": "Minber",
     "start_url": ".",
     "display": "standalone",
-    "background_color": "#0175C2",
-    "theme_color": "#0175C2",
-    "description": "A new Flutter project.",
+    "background_color": "#1B7FD1",
+    "theme_color": "#1B7FD1",
+    "description": "Islamic content streaming and prayer times platform",
     "orientation": "portrait-primary",
     "prefer_related_applications": false,
+    "categories": ["entertainment", "lifestyle", "religion"]
     "icons": [
         {
             "src": "icons/Icon-192.png",
