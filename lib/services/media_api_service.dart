@@ -9,7 +9,7 @@ import '../models/video_model.dart';
 import '../models/playlist_model.dart';
 
 class MediaApiService {
-  final String baseUrl = "http://msa.merkuz.com:3636/youtube";
+  final String baseUrl = "https://msa.merkuz.com/youtube";
   final List<String> _videoBlocklist = ['clRQNP4RdUA'];
 
   static final http.Client _client = HttpClientWithMiddleware.build(

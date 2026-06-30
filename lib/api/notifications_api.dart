@@ -9,7 +9,7 @@ class NotificationsApi {
   );
 
   // The base URL from your original code
-  static const String baseUrl = 'http://msa.merkuz.com:3636';
+  static const String baseUrl = 'https://msa.merkuz.com';
 
   static Future<List<dynamic>> fetchNotifications() async {
     final url = '$baseUrl/notifications';

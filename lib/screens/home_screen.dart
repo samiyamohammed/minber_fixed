@@ -4,12 +4,14 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:math';
 import 'package:adhan_dart/adhan_dart.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:http/http.dart' as http;
 import 'package:intl/intl.dart';
 import 'package:minber/main.dart';
-import 'package:minber/services/notification_service.dart'; // IMPORT ADDED
+import 'package:minber/services/notification_service.dart';
+import 'package:minber/services/pwa_install_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:shimmer/shimmer.dart';
 import 'package:youtube_player_flutter/youtube_player_flutter.dart';
@@ -45,7 +47,7 @@ class _HomeScreenState extends State<HomeScreen>
   ChewieController? _chewieController;
   late Future<void> _initializeVideoPlayerFuture;
   bool _isMuted = true;
-  final String streamUrl = 'http://msa.merkuz.com:8888/live/stream1/index.m3u8';
+  final String streamUrl = 'https://msa.merkuz.com/live/stream1/index.m3u8';
 
   final double _bannerAspectRatio = 16 / 9;
 
@@ -62,9 +64,9 @@ class _HomeScreenState extends State<HomeScreen>
   static const _trendingTimestampKey = 'home_trending_timestamp';
   static const _newsTimestampKey = 'home_news_timestamp';
   static const _cacheValidityMinutes = 5;
-  final String _trendingApiUrl = 'http://msa.merkuz.com:3636/trending';
-  final String _newsApiUrl = 'http://msa.merkuz.com:3636/news';
-  final String _apiBaseUrl = 'http://msa.merkuz.com:3636';
+  final String _trendingApiUrl = 'https://msa.merkuz.com/trending';
+  final String _newsApiUrl = 'https://msa.merkuz.com/news';
+  final String _apiBaseUrl = 'https://msa.merkuz.com';
 
   @override
   void initState() {
@@ -225,7 +227,7 @@ class _HomeScreenState extends State<HomeScreen>
                         children: [
                           const SizedBox(height: 24),
                           _buildPrayerTimesSection(theme, isDarkMode),
-                          const SizedBox(height: 16), // Spacing
+                          const SizedBox(height: 16),
                           _buildRamadanQuizCard(theme),
                           const SizedBox(height: 24),
                           _buildSectionHeader(theme, "Trending on Minber", () {

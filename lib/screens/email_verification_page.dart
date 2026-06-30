@@ -33,8 +33,8 @@ class _EmailVerificationPageState extends State<EmailVerificationPage> {
       false; // Disabled initially as OTP is sent on signup
 
   // Backend Endpoints
-  final String verifyUrl = "http://msa.merkuz.com:3636/users/verify-email";
-  final String resendOtpUrl = "http://msa.merkuz.com:3636/users/resend-otp";
+  final String verifyUrl = "https://msa.merkuz.com/users/verify-email";
+  final String resendOtpUrl = "https://msa.merkuz.com/users/resend-otp";
 
   @override
   void initState() {

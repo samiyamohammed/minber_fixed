@@ -23,13 +23,24 @@
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="Minber TV">
+
+  <!-- iOS icons for all device sizes -->
   <link rel="apple-touch-icon" href="icons/Icon-192.png">
+  <link rel="apple-touch-icon" sizes="120x120" href="icons/Icon-192.png">
+  <link rel="apple-touch-icon" sizes="152x152" href="icons/Icon-192.png">
+  <link rel="apple-touch-icon" sizes="167x167" href="icons/Icon-192.png">
+  <link rel="apple-touch-icon" sizes="180x180" href="icons/Icon-192.png">
+
+  <!-- iOS Splash Screens -->
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <link rel="apple-touch-startup-image" href="icons/Icon-512.png">
 
   <!-- Favicon -->
   <link rel="icon" type="image/png" href="favicon.png">
 
   <title>Minber TV - Islamic Streaming Platform</title>
   <link rel="manifest" href="manifest.json">
+  <meta name="theme-color" content="#1B7FD1">
   
   
   <meta content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" name="viewport">
@@ -131,6 +142,36 @@
       document.getElementById("splash-branding")?.remove();
       document.body.style.background = "transparent";
     }
+  </script>
+
+  <script>
+    // Capture the install prompt event before Flutter loads
+    let deferredPrompt;
+    window.addEventListener('beforeinstallprompt', (e) => {
+      e.preventDefault();
+      deferredPrompt = e;
+      console.log('✅ PWA install prompt captured');
+      // Notify Flutter that install is available
+      window.dispatchEvent(new CustomEvent('pwa-installable'));
+    });
+
+    // Function Flutter calls to trigger install
+    window.triggerPWAInstall = function() {
+      if (deferredPrompt) {
+        deferredPrompt.prompt();
+        deferredPrompt.userChoice.then((choiceResult) => {
+          if (choiceResult.outcome === 'accepted') {
+            console.log('✅ PWA installed');
+          }
+          deferredPrompt = null;
+        });
+      }
+    };
+
+    // Check if already installed
+    window.isPWAInstalled = function() {
+      return window.matchMedia('(display-mode: standalone)').matches;
+    };
   </script>
 </head>
 <body>

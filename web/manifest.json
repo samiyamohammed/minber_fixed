@@ -1,14 +1,27 @@
 {
+    "id": "com.minbertv.minber",
     "name": "Minber TV",
     "short_name": "Minber",
-    "start_url": ".",
+    "start_url": "/",
+    "scope": "/",
     "display": "standalone",
-    "background_color": "#1B7FD1",
+    "background_color": "#ffffff",
     "theme_color": "#1B7FD1",
     "description": "Islamic content streaming and prayer times platform",
     "orientation": "portrait-primary",
     "prefer_related_applications": false,
-    "categories": ["entertainment", "lifestyle", "religion"]
+    "categories": ["entertainment", "lifestyle", "religion"],
+    "lang": "en",
+    "dir": "ltr",
+    "screenshots": [
+        {
+            "src": "icons/Icon-512.png",
+            "sizes": "512x512",
+            "type": "image/png",
+            "form_factor": "narrow",
+            "label": "Minber TV Home Screen"
+        }
+    ],
     "icons": [
         {
             "src": "icons/Icon-192.png",

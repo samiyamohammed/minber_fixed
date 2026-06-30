@@ -1,10 +1,12 @@
 // lib/widgets/app_drawer.dart (Final Fixed Version - Robust Logout)
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:logger/logger.dart';
 import 'package:provider/provider.dart';
 import 'package:minber/providers/notification_provider.dart';
-import 'package:minber/services/notification_service.dart'; // ✅ Added for Global Navigator Key
+import 'package:minber/services/notification_service.dart';
+import 'package:minber/services/pwa_install_service.dart';
 
 import '../core/theme_notifier.dart';
 import '../core/app_colors.dart';
@@ -126,6 +128,26 @@ class AppDrawer extends StatelessWidget {
             },
           ),
           const Divider(indent: 16, endIndent: 16),
+
+          // Install App button - only shows on web when installable
+          if (kIsWeb && PWAInstallService.canInstall() && !PWAInstallService.isInstalled())
+            ListTile(
+              leading: const Icon(Icons.install_mobile_outlined,
+                  color: AppColors.primaryBlue),
+              title: const Text('Install App',
+                  style: TextStyle(
+                      color: AppColors.primaryBlue,
+                      fontWeight: FontWeight.w600)),
+              subtitle: const Text('Add to your home screen'),
+              onTap: () {
+                Navigator.pop(context);
+                PWAInstallService.promptInstall();
+              },
+              shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(8)),
+              contentPadding:
+                  const EdgeInsets.symmetric(horizontal: 24.0),
+            ),
 
           // Dark Mode Switch
           ValueListenableBuilder<ThemeMode>(

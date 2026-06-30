@@ -1,13 +1,8 @@
-// Web-specific API configuration with CORS proxy
+// Web-specific API configuration with HTTPS backend
 class ApiConfig {
-  // Use CORS proxy for web demo
-  static const String corsProxy = 'https://corsproxy.io/?';
-  static const String originalBaseUrl = 'http://msa.merkuz.com:3636';
-  static const String originalStreamUrl = 'http://msa.merkuz.com:8888';
-  
-  // Proxied URLs for web
-  static const String baseUrl = '${corsProxy}${originalBaseUrl}';
-  static const String streamUrl = '${corsProxy}${originalStreamUrl}/live/stream1/index.m3u8';
+  // Backend now supports HTTPS!
+  static const String baseUrl = 'https://msa.merkuz.com';
+  static const String streamUrl = 'http://msa.merkuz.com:8888/live/stream1/index.m3u8';
   
   // API endpoints
   static String get trendingUrl => '$baseUrl/trending';
