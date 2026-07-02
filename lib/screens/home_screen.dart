@@ -9,6 +9,7 @@ import 'package:flutter/material.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:http/http.dart' as http;
 import 'package:intl/intl.dart';
+import 'package:url_launcher/url_launcher.dart';
 import 'package:minber/main.dart';
 import 'package:minber/services/notification_service.dart';
 import 'package:minber/services/pwa_install_service.dart';
@@ -589,7 +590,10 @@ class _HomeScreenState extends State<HomeScreen>
         _calculatePrayerTimes(position.latitude, position.longitude);
 
         // --- TRIGGER NOTIFICATION SCHEDULING NOW THAT WE HAVE DATA ---
-        NotificationService.scheduleDailyAndWeeklyNotifications();
+        // Only schedule notifications on mobile, not web
+        if (!kIsWeb) {
+          NotificationService.scheduleDailyAndWeeklyNotifications();
+        }
       }
     } catch (e) {
       // Handle error

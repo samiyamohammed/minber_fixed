@@ -1,8 +1,10 @@
 // lib/screens/live_screen.dart (Final Version - No Overflow Menu)
 
 import 'package:better_player_plus/better_player_plus.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import '../core/app_colors.dart';
 
 class LiveStreamPage extends StatefulWidget {
   const LiveStreamPage({super.key});

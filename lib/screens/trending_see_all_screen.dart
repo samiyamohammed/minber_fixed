@@ -1,7 +1,9 @@
 // lib/screens/trending_see_all_screen.dart
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:url_launcher/url_launcher.dart';
 import 'package:youtube_player_flutter/youtube_player_flutter.dart';
-import '../models/video_model.dart'; // Import the Video model
+import '../models/video_model.dart';
 import './video_player_screen.dart';
 
 class TrendingSeeAllScreen extends StatefulWidget {
