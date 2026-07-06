@@ -28,7 +28,7 @@ class _SignUpPageState extends State<SignUpPage> {
   final Logger _logger = Logger();
 
   // Using your production backend URL
-  final String registerUrl = "http://msa.merkuz.com:3636/users/register";
+  final String registerUrl = "https://msa.merkuz.com/users/register";
 
   @override
   void dispose() {

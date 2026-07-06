@@ -149,7 +149,7 @@ class _ChatBotPageState extends State<ChatBotPage> {
     // If not in cache, proceed with API call
     try {
       final response = await http.post(
-        Uri.parse("http://msa.merkuz.com:3636/gemini/chat"),
+        Uri.parse("https://msa.merkuz.com/gemini/chat"),
         headers: {"Content-Type": "application/json"},
         body: jsonEncode({"prompt": trimmedMessage}),
       );

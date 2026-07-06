@@ -1,6 +1,8 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
+import '../services/web_prayer_notification_service.dart';
 
 class NotificationSettingsProvider with ChangeNotifier {
   // --- State variables ---
@@ -80,5 +82,15 @@ class NotificationSettingsProvider with ChangeNotifier {
 
     // Notify all listening widgets that the state has changed
     notifyListeners();
+
+    if (kIsWeb &&
+        ['fajr', 'dhuhr', 'asr', 'maghrib', 'isha', 'khemis'].contains(key)) {
+      final lat = prefs.getDouble('last_known_lat') ?? 9.03;
+      final lng = prefs.getDouble('last_known_lng') ?? 38.74;
+      await WebPrayerNotificationService.scheduleDailyAndWeeklyNotifications(
+        latitude: lat,
+        longitude: lng,
+      );
+    }
   }
 }

@@ -26,7 +26,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
 
     try {
       final response = await http.post(
-        Uri.parse("http://msa.merkuz.com:3636/users/forgot-password"),
+        Uri.parse("https://msa.merkuz.com/users/forgot-password"),
         headers: {"Content-Type": "application/json"},
         body: jsonEncode({"email": _emailController.text.trim()}),
       );

@@ -85,7 +85,7 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
 
     try {
       final response = await http.post(
-        Uri.parse("http://msa.merkuz.com:3636/users/reset-password"),
+        Uri.parse("https://msa.merkuz.com/users/reset-password"),
         headers: {"Content-Type": "application/json"},
         // ✅ 2. SEND THE CORRECT BODY (without email)
         body: jsonEncode(requestBody),

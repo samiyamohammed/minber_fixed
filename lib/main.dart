@@ -3,6 +3,7 @@
 import 'dart:io';
 import 'dart:ui';
 import 'dart:async';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_background_service/flutter_background_service.dart';
 import 'package:logger/logger.dart';
@@ -30,6 +31,7 @@ import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:workmanager/workmanager.dart';
 import 'package:provider/provider.dart';
 import 'services/notification_service.dart';
+import 'services/web_prayer_notification_service.dart';
 import 'services/firebase-notification.dart';
 import 'widgets/in_app_notification_banner.dart';
 import 'providers/user_provider.dart';
@@ -127,9 +129,10 @@ Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  // SINGLE SOURCE OF TRUTH: Init only through NotificationService to prevent channel poisoning
-  await NotificationService.init();
-  await FirebaseNotificationService.init();
+  if (!kIsWeb) {
+    await NotificationService.init();
+    await FirebaseNotificationService.init();
+  }
 
   final savedThemeMode = await loadThemePreference();
   themeNotifier = ValueNotifier<ThemeMode>(savedThemeMode);
@@ -137,30 +140,41 @@ Future<void> main() async {
   try {
     await Firebase.initializeApp(
         options: DefaultFirebaseOptions.currentPlatform);
-    FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
+    if (!kIsWeb) {
+      FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
+    }
   } catch (e) {
     debugPrint("🔥 Firebase Init failed: $e");
   }
 
-  // Workmanager Init (Set isInDebugMode to false for production)
-  await Workmanager().initialize(callbackDispatcher, isInDebugMode: false);
-  await Workmanager().registerPeriodicTask(
-    "prayer_notification_scheduler",
-    "schedulePrayerNotifications",
-    frequency: const Duration(hours: 12),
-    initialDelay: const Duration(minutes: 5),
-    constraints: Constraints(networkType: NetworkType.notRequired),
-  );
-
-  // Immediate scheduling on app launch
-  NotificationService.scheduleDailyAndWeeklyNotifications();
-
-  setupFirebasePushNotifications();
+  if (!kIsWeb) {
+    await Workmanager().initialize(callbackDispatcher, isInDebugMode: false);
+    await Workmanager().registerPeriodicTask(
+      "prayer_notification_scheduler",
+      "schedulePrayerNotifications",
+      frequency: const Duration(hours: 12),
+      initialDelay: const Duration(minutes: 5),
+      constraints: Constraints(networkType: NetworkType.notRequired),
+    );
+    NotificationService.scheduleDailyAndWeeklyNotifications();
+    setupFirebasePushNotifications();
+  }
 
   final prefs = await SharedPreferences.getInstance();
   final isLoggedIn = prefs.getBool('isLoggedIn') ?? false;
   final isGuest = prefs.getBool('isGuest') ?? false;
   final seenOnboarding = prefs.getBool('onboarding_complete') ?? false;
+
+  if (kIsWeb) {
+    final lat = prefs.getDouble('last_known_lat');
+    final lng = prefs.getDouble('last_known_lng');
+    if (lat != null && lng != null) {
+      WebPrayerNotificationService.scheduleDailyAndWeeklyNotifications(
+        latitude: lat,
+        longitude: lng,
+      );
+    }
+  }
 
   String initialRoute = '/onboarding';
   if (isLoggedIn || isGuest) {

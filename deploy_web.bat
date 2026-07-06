@@ -3,6 +3,10 @@ echo Building Minber TV Web App...
 call flutter build web --release
 
 echo.
+echo Patching service worker for PWA prayer notifications...
+node tools/patch_service_worker.js
+
+echo.
 echo Build complete! 
 echo.
 echo To deploy to Firebase Hosting:

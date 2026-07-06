@@ -1,9 +1,13 @@
 import 'dart:math' as math;
+
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_compass_v2/flutter_compass_v2.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:geocoding/geocoding.dart';
+
 import '../core/app_colors.dart';
+import '../services/compass_heading_service.dart';
 
 class QiblaCompassPage extends StatefulWidget {
   const QiblaCompassPage({super.key});
@@ -15,6 +19,7 @@ class QiblaCompassPage extends StatefulWidget {
 class _QiblaCompassPageState extends State<QiblaCompassPage> {
   int _selectedIndex = 2;
   String? _locationName;
+  Stream<double>? _headingStream;
 
   void _onItemTapped(int index) {
     if (_selectedIndex == index) return;
@@ -43,6 +48,18 @@ class _QiblaCompassPageState extends State<QiblaCompassPage> {
   void initState() {
     super.initState();
     _checkLocationPermission();
+    _headingStream = CompassHeadingService.headingStream;
+    if (kIsWeb) {
+      CompassHeadingService.ensureStarted();
+    }
+  }
+
+  @override
+  void dispose() {
+    if (kIsWeb) {
+      CompassHeadingService.stop();
+    }
+    super.dispose();
   }
 
   Future<void> _checkLocationPermission() async {
@@ -106,100 +123,97 @@ class _QiblaCompassPageState extends State<QiblaCompassPage> {
           ),
         ),
       ),
-      body: StreamBuilder<CompassEvent>(
-        stream: FlutterCompass.events,
-        builder: (context, snapshot) {
-          if (snapshot.connectionState == ConnectionState.waiting) {
-            return const Center(child: CircularProgressIndicator());
-          }
-
-          if (!snapshot.hasData || snapshot.data?.heading == null) {
-            return Center(
-              child: Text(
-                "Your device does not support Compass",
-                style: theme.textTheme.bodyMedium,
-              ),
-            );
-          }
-
-          double direction = snapshot.data!.heading!; // get heading in degrees
-
-          return Center(
-            child: Stack(
-              alignment: Alignment.center,
-              children: [
-                // Compass background
-                Container(
-                  width: size.width * 0.8,
-                  height: size.width * 0.8,
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    gradient: RadialGradient(
-                      colors: [
-                        theme.cardColor,
-                        theme.dividerColor.withOpacity(0.3),
-                      ],
-                      center: Alignment.center,
-                      radius: 0.9,
-                    ),
-                    boxShadow: [
-                      BoxShadow(
-                        color: theme.shadowColor.withOpacity(0.2),
-                        blurRadius: 15,
-                        spreadRadius: 2,
-                      ),
-                    ],
-                  ),
-                  child: CustomPaint(painter: _CompassPainter(theme: theme)),
+      body: Listener(
+        onPointerDown: (_) => CompassHeadingService.ensureStarted(),
+        child: StreamBuilder<double>(
+          stream: _headingStream,
+          builder: (context, snapshot) {
+            if (!snapshot.hasData) {
+              if (snapshot.connectionState == ConnectionState.waiting) {
+                return const Center(child: CircularProgressIndicator());
+              }
+              return Center(
+                child: Text(
+                  "Your device does not support Compass",
+                  style: theme.textTheme.bodyMedium,
                 ),
+              );
+            }
 
-                // Rotating North arrow
-                Transform.rotate(
-                  angle: (-direction) * (math.pi / 180),
-                  child: Container(
-                    width: size.width * 0.7,
-                    height: size.width * 0.7,
-                    alignment: Alignment.topCenter,
-                    child: Icon(
-                      Icons.navigation,
-                      size: size.width * 0.35,
-                      color: theme.colorScheme.primary,
-                      shadows: [
-                        Shadow(
-                          blurRadius: 12,
-                          color: theme.colorScheme.primary.withOpacity(0.6),
-                          offset: const Offset(0, 2),
+            double direction = snapshot.data!;
+
+            return Center(
+              child: Stack(
+                alignment: Alignment.center,
+                children: [
+                  Container(
+                    width: size.width * 0.8,
+                    height: size.width * 0.8,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      gradient: RadialGradient(
+                        colors: [
+                          theme.cardColor,
+                          theme.dividerColor.withOpacity(0.3),
+                        ],
+                        center: Alignment.center,
+                        radius: 0.9,
+                      ),
+                      boxShadow: [
+                        BoxShadow(
+                          color: theme.shadowColor.withOpacity(0.2),
+                          blurRadius: 15,
+                          spreadRadius: 2,
+                        ),
+                      ],
+                    ),
+                    child: CustomPaint(painter: _CompassPainter(theme: theme)),
+                  ),
+                  Transform.rotate(
+                    angle: (-direction) * (math.pi / 180),
+                    child: Container(
+                      width: size.width * 0.7,
+                      height: size.width * 0.7,
+                      alignment: Alignment.topCenter,
+                      child: Icon(
+                        Icons.navigation,
+                        size: size.width * 0.35,
+                        color: theme.colorScheme.primary,
+                        shadows: [
+                          Shadow(
+                            blurRadius: 12,
+                            color: theme.colorScheme.primary.withOpacity(0.6),
+                            offset: const Offset(0, 2),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                  Container(
+                    width: size.width * 0.1,
+                    height: size.width * 0.1,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      gradient: RadialGradient(
+                        colors: [
+                          AppColors.primaryBlue,
+                          theme.colorScheme.primary.withOpacity(0.8),
+                        ],
+                      ),
+                      boxShadow: [
+                        BoxShadow(
+                          color: theme.colorScheme.primary.withOpacity(0.5),
+                          blurRadius: 15,
+                          spreadRadius: 2,
                         ),
                       ],
                     ),
                   ),
-                ),
-
-                // Center glowing dot
-                Container(
-                  width: size.width * 0.1,
-                  height: size.width * 0.1,
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    gradient: RadialGradient(
-                      colors: [
-                        AppColors.primaryBlue,
-                        theme.colorScheme.primary.withOpacity(0.8),
-                      ],
-                    ),
-                    boxShadow: [
-                      BoxShadow(
-                        color: theme.colorScheme.primary.withOpacity(0.5),
-                        blurRadius: 15,
-                        spreadRadius: 2,
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-          );
-        },
+                ],
+              ),
+            );
+          },
+        ),
       ),
       bottomNavigationBar: BottomNavigationBar(
         currentIndex: _selectedIndex,
@@ -222,7 +236,6 @@ class _QiblaCompassPageState extends State<QiblaCompassPage> {
   }
 }
 
-/// Compass painter that adapts to theme
 class _CompassPainter extends CustomPainter {
   final ThemeData theme;
   _CompassPainter({required this.theme});
@@ -242,7 +255,6 @@ class _CompassPainter extends CustomPainter {
 
     final textPainter = TextPainter(textDirection: TextDirection.ltr);
 
-    // Draw tick marks every 15°
     for (int i = 0; i < 360; i += 15) {
       final angle = i * math.pi / 180;
       final isBold = i % 90 == 0;
@@ -259,7 +271,6 @@ class _CompassPainter extends CustomPainter {
       );
       canvas.drawLine(p1, p2, paint);
 
-      // Add N/E/S/W labels
       if (isBold) {
         String label = '';
         if (i == 0) label = 'E';

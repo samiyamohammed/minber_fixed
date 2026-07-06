@@ -14,6 +14,15 @@
     ],
     "headers": [
       {
+        "source": "**",
+        "headers": [
+          {
+            "key": "Permissions-Policy",
+            "value": "accelerometer=*, gyroscope=*, magnetometer=*"
+          }
+        ]
+      },
+      {
         "source": "**/*.@(js|css|png|jpg|jpeg|gif|ico|svg|woff|woff2|ttf|eot)",
         "headers": [
           {

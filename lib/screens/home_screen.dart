@@ -12,7 +12,7 @@ import 'package:intl/intl.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:minber/main.dart';
 import 'package:minber/services/notification_service.dart';
-import 'package:minber/services/pwa_install_service.dart';
+import 'package:minber/services/web_prayer_notification_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:shimmer/shimmer.dart';
 import 'package:youtube_player_flutter/youtube_player_flutter.dart';
@@ -589,9 +589,13 @@ class _HomeScreenState extends State<HomeScreen>
 
         _calculatePrayerTimes(position.latitude, position.longitude);
 
-        // --- TRIGGER NOTIFICATION SCHEDULING NOW THAT WE HAVE DATA ---
-        // Only schedule notifications on mobile, not web
-        if (!kIsWeb) {
+        // Schedule prayer notifications once we have location + times
+        if (kIsWeb) {
+          WebPrayerNotificationService.scheduleDailyAndWeeklyNotifications(
+            latitude: position.latitude,
+            longitude: position.longitude,
+          );
+        } else {
           NotificationService.scheduleDailyAndWeeklyNotifications();
         }
       }
