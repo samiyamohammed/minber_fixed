@@ -149,12 +149,20 @@
   <script>
     // Capture the install prompt event before Flutter loads
     let deferredPrompt;
+    let installAvailable = false;
+    
     window.addEventListener('beforeinstallprompt', (e) => {
       e.preventDefault();
       deferredPrompt = e;
+      installAvailable = true;
       console.log('✅ PWA install prompt captured');
-      // Notify Flutter that install is available
       window.dispatchEvent(new CustomEvent('pwa-installable'));
+    });
+
+    window.addEventListener('appinstalled', () => {
+      deferredPrompt = null;
+      installAvailable = false;
+      console.log('✅ PWA installed successfully');
     });
 
     // Function Flutter calls to trigger install
@@ -164,15 +172,23 @@
         deferredPrompt.userChoice.then((choiceResult) => {
           if (choiceResult.outcome === 'accepted') {
             console.log('✅ PWA installed');
+            installAvailable = false;
           }
           deferredPrompt = null;
         });
+        return true;
       }
+      return false;
     };
 
     // Check if already installed
     window.isPWAInstalled = function() {
       return window.matchMedia('(display-mode: standalone)').matches;
+    };
+    
+    // Check if install is available
+    window.isPWAInstallAvailable = function() {
+      return installAvailable && deferredPrompt != null;
     };
   </script>
 </head>

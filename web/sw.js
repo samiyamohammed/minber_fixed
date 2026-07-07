@@ -70,3 +70,49 @@ self.addEventListener('push', (event) => {
     })
   );
 });
+
+let prayerSchedule = [];
+let prayerSettings = {};
+let scheduleTimers = [];
+
+function clearScheduleTimers() {
+  scheduleTimers.forEach((timerId) => clearTimeout(timerId));
+  scheduleTimers = [];
+}
+
+function schedulePrayerNotification(item, settings) {
+  const settingKey = item.settingKey || item.key;
+  if (settings && settings[settingKey] === false) return;
+
+  const delay = new Date(item.iso).getTime() - Date.now();
+  const maxDelay = 7 * 24 * 60 * 60 * 1000;
+  if (delay <= 0 || delay > maxDelay) return;
+
+  const timerId = setTimeout(() => {
+    self.registration.showNotification(item.title, {
+      body: item.body,
+      icon: '/icons/Icon-192.png',
+      badge: '/icons/Icon-192.png',
+      tag: 'minber-' + item.key + '-' + item.iso,
+      renotify: true,
+      data: { url: '/', type: item.type || 'prayer' },
+    });
+  }, delay);
+
+  scheduleTimers.push(timerId);
+}
+
+self.addEventListener('message', (event) => {
+  const data = event.data || {};
+  if (data.type === 'SCHEDULE_PRAYERS') {
+    clearScheduleTimers();
+    prayerSchedule = data.schedule || [];
+    prayerSettings = data.settings || {};
+    prayerSchedule.forEach((item) => schedulePrayerNotification(item, prayerSettings));
+    console.log('[Minber] Prayer schedule received in service worker:', prayerSchedule.length);
+  } else if (data.type === 'CLEAR_PRAYERS') {
+    clearScheduleTimers();
+    prayerSchedule = [];
+    console.log('[Minber] Prayer schedule cleared in service worker');
+  }
+});

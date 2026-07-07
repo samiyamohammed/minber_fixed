@@ -1,0 +1,10 @@
+RewriteEngine On
+
+# Fix Flutter web asset paths (assets/assets/ -> assets/)
+RewriteRule ^assets/assets/images/(.*)$ /assets/$1 [L]
+RewriteRule ^assets/assets/sounds/(.*)$ /assets/$1 [L]
+
+# Flutter web SPA routing - redirect all routes to index.html
+RewriteCond %{REQUEST_FILENAME} !-f
+RewriteCond %{REQUEST_FILENAME} !-d
+RewriteRule ^ /index.html [L]

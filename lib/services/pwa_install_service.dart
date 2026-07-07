@@ -7,8 +7,7 @@ class PWAInstallService {
   static bool canInstall() {
     if (!kIsWeb) return false;
     try {
-      final deferredPrompt = js.context['deferredPrompt'];
-      return deferredPrompt != null;
+      return js.context.callMethod('isPWAInstallAvailable', []) as bool;
     } catch (e) {
       return false;
     }

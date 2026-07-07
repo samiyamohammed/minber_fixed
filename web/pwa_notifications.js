@@ -7,14 +7,26 @@
     mainThreadTimers = [];
   }
 
-  async function getRegistration() {
+  async function waitForActiveWorker(attempts) {
+    const maxAttempts = attempts || 30;
     if (!('serviceWorker' in navigator)) return null;
-    try {
-      return await navigator.serviceWorker.ready;
-    } catch (e) {
-      console.warn('[Minber] Service worker not ready:', e);
-      return null;
+
+    for (let i = 0; i < maxAttempts; i++) {
+      try {
+        let registration = await navigator.serviceWorker.getRegistration('/sw.js');
+        if (!registration) {
+          registration = await navigator.serviceWorker.register('/sw.js');
+        }
+        if (registration?.active) return registration;
+      } catch (e) {
+        console.warn('[Minber] Waiting for service worker...', e);
+      }
+
+      await new Promise(function (resolve) {
+        setTimeout(resolve, 500);
+      });
     }
+    return null;
   }
 
   function scheduleOnMainThread(schedule, settings) {
@@ -22,7 +34,7 @@
     const now = Date.now();
     const maxDelay = 7 * 24 * 60 * 60 * 1000;
 
-    getRegistration().then((registration) => {
+    waitForActiveWorker(10).then(function (registration) {
       if (!registration) return;
 
       for (const item of schedule) {
@@ -32,7 +44,7 @@
         const delay = new Date(item.iso).getTime() - now;
         if (delay <= 0 || delay > maxDelay) continue;
 
-        const timerId = setTimeout(() => {
+        const timerId = setTimeout(function () {
           registration.showNotification(item.title, {
             body: item.body,
             icon: '/icons/Icon-192.png',
@@ -76,23 +88,25 @@
       return false;
     }
 
-    const registration = await getRegistration();
+    const registration = await waitForActiveWorker(30);
     if (registration && registration.active) {
       registration.active.postMessage({
         type: 'SCHEDULE_PRAYERS',
         schedule: schedule,
         settings: settings,
       });
+      console.log('[Minber] Prayer schedule sent to service worker');
+    } else {
+      console.warn('[Minber] Service worker not active, using main-thread fallback');
     }
 
-    // Fallback while app is open (also helps during local dev before SW patch)
     scheduleOnMainThread(schedule, settings);
     return true;
   };
 
   window.clearPrayerNotifications = async function () {
     clearMainThreadTimers();
-    const registration = await getRegistration();
+    const registration = await waitForActiveWorker(5);
     registration?.active?.postMessage({ type: 'CLEAR_PRAYERS' });
   };
 })();

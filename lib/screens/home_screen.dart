@@ -19,6 +19,7 @@ import 'package:youtube_player_flutter/youtube_player_flutter.dart';
 import 'package:video_player/video_player.dart';
 import 'package:chewie/chewie.dart';
 
+import '../widgets/pwa_install_button.dart';
 import '../core/app_colors.dart';
 import '../models/video_model.dart';
 import '../widgets/animated_list_item.dart';
@@ -56,6 +57,7 @@ class _HomeScreenState extends State<HomeScreen>
   String _nextPrayerCountdown = "--:--:--";
   Map<String, DateTime> _prayerTimes = {};
   bool _isLoadingPrayerTimes = true;
+  bool _webNotifPermissionRequested = false;
   List<dynamic>? _trendingVideos;
   List<dynamic>? _newsArticles;
   String? _trendingError;
@@ -192,7 +194,9 @@ class _HomeScreenState extends State<HomeScreen>
     final screenWidth = MediaQuery.of(context).size.width;
     final bannerHeight = screenWidth / _bannerAspectRatio;
 
-    return GestureDetector(
+    return Listener(
+      onPointerDown: (_) => _ensureWebNotificationPermission(),
+      child: GestureDetector(
       onHorizontalDragEnd: (details) {
         if ((details.primaryVelocity ?? 0).abs() > 400.0) {
           _scaffoldKey.currentState?.openDrawer();
@@ -295,11 +299,31 @@ class _HomeScreenState extends State<HomeScreen>
                 ),
               ),
             ),
+            // PWA Install Button - only shows on web
+            const PWAInstallButton(),
           ],
         ),
         bottomNavigationBar: _buildBottomNavigationBar(theme),
       ),
+    ),
     );
+  }
+
+  Future<void> _ensureWebNotificationPermission() async {
+    if (!kIsWeb || _webNotifPermissionRequested) return;
+    _webNotifPermissionRequested = true;
+
+    await WebPrayerNotificationService.requestPermission();
+
+    final prefs = await SharedPreferences.getInstance();
+    final lat = prefs.getDouble('last_known_lat');
+    final lng = prefs.getDouble('last_known_lng');
+    if (lat != null && lng != null) {
+      await WebPrayerNotificationService.scheduleDailyAndWeeklyNotifications(
+        latitude: lat,
+        longitude: lng,
+      );
+    }
   }
 
   Widget _buildVideoBanner(BuildContext context, double bannerHeight) {
@@ -646,6 +670,9 @@ class _HomeScreenState extends State<HomeScreen>
                 Navigator.of(context).pop();
                 final prefs = await SharedPreferences.getInstance();
                 await prefs.setBool('location_disclosure_accepted', true);
+                if (kIsWeb) {
+                  await WebPrayerNotificationService.requestPermission();
+                }
                 _getLocationAndPrayerTimes();
               },
               style: ElevatedButton.styleFrom(

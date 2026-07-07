@@ -61,6 +61,7 @@ import 'screens/forgot_password_screen.dart';
 import 'screens/reset_password_screen.dart';
 import 'services/api_service.dart';
 import 'firebase_options.dart';
+import 'config/fcm_web_config.dart';
 import 'providers/notification_settings_provider.dart';
 import 'screens/permission_screen.dart';
 
@@ -157,8 +158,9 @@ Future<void> main() async {
       constraints: Constraints(networkType: NetworkType.notRequired),
     );
     NotificationService.scheduleDailyAndWeeklyNotifications();
-    setupFirebasePushNotifications();
   }
+
+  setupFirebasePushNotifications();
 
   final prefs = await SharedPreferences.getInstance();
   final isLoggedIn = prefs.getBool('isLoggedIn') ?? false;
@@ -193,11 +195,29 @@ Future<void> setupFirebasePushNotifications() async {
     await messaging.requestPermission();
     await messaging.subscribeToTopic('all');
 
+    if (kIsWeb && FcmWebConfig.isConfigured) {
+      final webToken = await messaging.getToken(
+        vapidKey: FcmWebConfig.vapidKey,
+      );
+      if (webToken != null) {
+        debugPrint('✅ Web FCM token obtained');
+        final prefs = await SharedPreferences.getInstance();
+        final accessToken = prefs.getString('accessToken');
+        if (accessToken != null) {
+          await ApiService.updateFcmToken(webToken, accessToken);
+        } else {
+          await ApiService.registerGuestFcmToken(webToken);
+        }
+      }
+    }
+
     FirebaseMessaging.instance.onTokenRefresh.listen((newFcmToken) async {
       final prefs = await SharedPreferences.getInstance();
       final accessToken = prefs.getString('accessToken');
       if (accessToken != null) {
         await ApiService.updateFcmToken(newFcmToken, accessToken);
+      } else if (kIsWeb) {
+        await ApiService.registerGuestFcmToken(newFcmToken);
       }
     });
 
